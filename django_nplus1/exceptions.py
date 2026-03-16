@@ -1,0 +1,2 @@
+class NPlusOneError(Exception):
+    pass

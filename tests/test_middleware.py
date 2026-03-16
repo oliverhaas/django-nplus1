@@ -1,0 +1,116 @@
+from unittest import mock
+
+import pytest
+from django.conf import settings
+from django.http.request import HttpRequest
+from django.http.response import HttpResponse
+
+from django_nplus1.middleware import NPlusOneMiddleware
+
+
+@pytest.fixture
+def logger(monkeypatch):
+    mock_logger = mock.Mock()
+    monkeypatch.setattr(settings, "NPLUS1_LOGGER", mock_logger)
+    return mock_logger
+
+
+@pytest.mark.django_db
+class TestIntegration:
+    def test_one_to_one(self, objects, client, logger):
+        client.get("/one_to_one/")
+        assert len(logger.log.call_args_list) == 1
+        args = logger.log.call_args[0]
+        assert "Occupation.user" in args[1]
+
+    def test_one_to_one_first(self, objects, client, logger):
+        client.get("/one_to_one_first/")
+        assert not logger.log.called
+
+    def test_one_to_many(self, objects, client, logger):
+        client.get("/one_to_many/")
+        assert not logger.log.called
+
+    def test_many_to_many(self, objects, client, logger):
+        client.get("/many_to_many/")
+        assert len(logger.log.call_args_list) == 1
+        args = logger.log.call_args[0]
+        assert "User.hobbies" in args[1]
+
+    def test_many_to_many_get(self, objects, client, logger):
+        client.get("/many_to_many_get/")
+        assert len(logger.log.call_args_list) == 0
+
+    def test_prefetch_one_to_one(self, objects, client, logger):
+        client.get("/prefetch_one_to_one/")
+        assert not logger.log.called
+
+    def test_prefetch_many_to_many(self, objects, client, logger):
+        client.get("/prefetch_many_to_many/")
+        assert not logger.log.called
+
+    def test_many_to_many_impossible(self, objects, client, logger):
+        client.get("/many_to_many_impossible/")
+        assert not logger.log.called
+
+    def test_many_to_many_impossible_one(self, objects, client, logger):
+        client.get("/many_to_many_impossible_one/")
+        assert not logger.log.called
+
+    def test_prefetch_many_to_many_render(self, objects, client, logger):
+        client.get("/prefetch_many_to_many_render/")
+        assert not logger.log.called
+
+    def test_prefetch_many_to_many_empty(self, objects, client, logger):
+        from testapp.models import User
+
+        User.objects.all().delete()
+        client.get("/prefetch_many_to_many/")
+        assert not logger.log.called
+
+    def test_prefetch_many_to_many_render_empty(self, objects, client, logger):
+        from testapp.models import User
+
+        User.objects.all().delete()
+        client.get("/prefetch_many_to_many_render/")
+        assert not logger.log.called
+
+    def test_prefetch_many_to_many_single(self, objects, client, logger):
+        client.get("/prefetch_many_to_many_single/")
+        assert not logger.log.called
+
+    def test_prefetch_many_to_many_no_related_name(self, objects, client, logger):
+        client.get("/prefetch_many_to_many_no_related/")
+        assert not logger.log.called
+
+    def test_select_one_to_one(self, objects, client, logger):
+        client.get("/select_one_to_one/")
+        assert not logger.log.called
+
+    def test_select_many_to_one(self, objects, client, logger):
+        client.get("/select_many_to_one/")
+        assert not logger.log.called
+
+    def test_select_many_to_one_empty(self, objects, client, logger):
+        from testapp.models import Pet
+
+        Pet.objects.all().delete()
+        client.get("/select_many_to_one/")
+        assert not logger.log.called
+
+    def test_many_to_many_whitelist(self, objects, client, logger, monkeypatch):
+        monkeypatch.setattr(settings, "NPLUS1_WHITELIST", [{"model": "testapp.User"}])
+        client.get("/many_to_many/")
+        assert not logger.log.called
+
+    def test_many_to_many_whitelist_wildcard(self, objects, client, logger, monkeypatch):
+        monkeypatch.setattr(settings, "NPLUS1_WHITELIST", [{"model": "testapp.*"}])
+        client.get("/many_to_many/")
+        assert not logger.log.called
+
+
+def test_middleware_no_process_request():
+    middleware = NPlusOneMiddleware(lambda r: HttpResponse())
+    req = HttpRequest()
+    resp = middleware(req)
+    assert resp.status_code == 200

@@ -1,0 +1,169 @@
+[project]
+name = "django-nplus1"
+version = "0.1.0"
+description = "N+1 query detection for Django"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+keywords = ["django", "n+1", "query", "detection", "performance", "orm"]
+authors = [{ name = "Oliver Haas", email = "ohaas@e1plus.de" }]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Web Environment",
+  "Framework :: Django",
+  "Framework :: Django :: 5.2",
+  "Framework :: Django :: 6.0",
+  "Framework :: Pytest",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Internet :: WWW/HTTP",
+  "Topic :: Software Development :: Libraries",
+  "Topic :: Software Development :: Testing",
+  "Typing :: Typed",
+]
+dependencies = ["Django>=5.2,<7"]
+
+[project.entry-points.pytest11]
+nplus1 = "django_nplus1.pytest_plugin"
+
+[project.urls]
+Homepage = "https://github.com/oliverhaas/django-nplus1"
+Documentation = "https://oliverhaas.github.io/django-nplus1/"
+Repository = "https://github.com/oliverhaas/django-nplus1.git"
+Changelog = "https://oliverhaas.github.io/django-nplus1/reference/changelog/"
+
+[dependency-groups]
+dev = [
+  "django-stubs==5.2.9",
+  "mypy==1.19.1",
+  "pre-commit==4.5.1",
+  "pytest-cov==7.0.0",
+  "pytest-django==4.12.0",
+  "pytest-mock==3.15.1",
+  "pytest==9.0.2",
+  "ruff==0.15.5",
+  "ty==0.0.21",
+]
+docs = ["mkdocs==1.6.1", "mkdocs-material==9.7.3", "mike==2.1.3"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["django_nplus1"]
+
+[tool.hatch.build.targets.sdist]
+include = ["django_nplus1", "LICENSE", "README.md"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+fix = true
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+  "ANN401",  # Any type is acceptable for generic ORM internals
+  "ARG001",  # Unused function args required by parser callback interface (args, kwargs, context, ret)
+  "ARG002",  # Unused method args required by signal callback interface
+  "COM812",  # Conflicts with ruff-format
+  "D",       # Docstrings - will add incrementally
+  "E501",    # Line length handled by config
+  "EM",      # Exception strings inline are fine
+  "FBT",     # Boolean params acceptable for config flags
+  "PERF203", # try/except in loop is fine for signal dispatch
+  "PLC0415", # Dynamic imports needed to avoid circular imports (detect.py -> signals.py)
+  "PLR0913", # Many args needed for signal parsers
+  "PLR2004", # Magic values like slice indices are acceptable
+  "PYI034",  # __enter__ returning Self vs concrete type is preference
+  "SIM105",  # try/except/pass is clearer than contextlib.suppress for single-line
+  "SLF001",  # Private member access needed for ORM monkeypatching
+  "TRY003",  # Long exception messages are helpful for debugging
+]
+
+[tool.ruff.lint.flake8-annotations]
+allow-star-arg-any = true
+suppress-none-returning = true
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+  "ANN",    # Type annotations not required in tests
+  "ARG",    # Unused arguments common in fixtures
+  "B018",   # Useless expressions are how we trigger lazy loads in tests
+  "DJ008",  # Test models don't need __str__
+  "E402",   # Import order in settings files
+  "F841",   # Unused variables okay in tests
+  "PT006",  # Parametrize tuple style is preference
+  "PT011",  # Broad pytest.raises okay in some tests
+  "PT012",  # Multi-statement pytest.raises needed for N+1 trigger patterns
+  "PT013",  # pytest import style is preference
+  "PT018",  # Compound assertions okay in tests
+  "RUF043", # Regex metacharacters in match= are intentional (dot in model.field)
+  "S101",   # assert in tests
+  "S105",   # Hardcoded passwords in test settings
+  "T201",   # print in test views is intentional
+]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["mypy_django_plugin.main"]
+pretty = true
+show_error_codes = true
+show_error_context = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unreachable = false
+
+[tool.django-stubs]
+django_settings_module = "tests.settings.base"
+
+[[tool.mypy.overrides]]
+module = "testapp.*"
+ignore_missing_imports = true
+
+[tool.ty.rules]
+invalid-method-override = "ignore"
+
+[tool.ty.environment]
+python-version = "3.13"
+
+[tool.ty.analysis]
+respect-type-ignore-comments = false
+
+[[tool.ty.overrides]]
+include = ["django_nplus1/patch.py", "django_nplus1/middleware.py"]
+
+[tool.ty.overrides.rules]
+# patch.py monkeypatches Django internals; middleware.py accesses _meta on type
+unresolved-attribute = "ignore"
+invalid-assignment = "ignore"
+
+[[tool.ty.overrides]]
+include = ["tests/**"]
+
+[tool.ty.overrides.rules]
+unresolved-attribute = "ignore"
+invalid-argument-type = "ignore"
+invalid-assignment = "ignore"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "settings.base"
+addopts = "--cov=django_nplus1 --cov-report=term-missing --cov-report=xml --no-cov-on-fail"
+pythonpath = ["tests"]
+testpaths = ["tests"]
+xfail_strict = true
+
+[tool.coverage.run]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+precision = 2
+skip_covered = true

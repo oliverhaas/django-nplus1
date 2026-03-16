@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        run: uv python install 3.14
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Run ruff check
+        run: uv run ruff check
+
+      - name: Run ruff format check
+        run: uv run ruff format --check
+
+      - name: Run mypy check
+        run: uv run mypy django_nplus1/
+
+      - name: Run ty check
+        run: uv run ty check django_nplus1/
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.12"
+          - "3.13"
+          - "3.14"
+        django-version:
+          - "5.2"
+          - "6.0"
+
+        include:
+          # Pre-release Django
+          - python-version: "3.14"
+            django-version: "main"
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Install Django ${{ matrix.django-version }}
+        run: |
+          if [ "${{ matrix.django-version }}" = "main" ]; then
+            uv pip install "Django @ git+https://github.com/django/django.git@main"
+          else
+            uv pip install "Django~=${{ matrix.django-version }}.0"
+          fi
+
+      - name: Run tests
+        run: uv run pytest
+
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.13' && matrix.django-version == '5.2'
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
