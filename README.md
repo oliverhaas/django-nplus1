@@ -1,10 +1,12 @@
 # django-nplus1
 
+> **Exploratory / alpha** — this package is under active development and the API may change.
+
 N+1 query detection for Django.
 
-Detects N+1 queries (lazy loading related objects in a loop) and unused eager loads (`select_related`/`prefetch_related` that are never accessed) in your Django application.
+Built on the excellent [nplusone](https://github.com/jmcarp/nplusone) by [Joshua Carp](https://github.com/jmcarp), which pioneered automatic N+1 detection for Python ORMs. `nplusone` remains a proven, battle-tested library — if you need broad ORM support (SQLAlchemy, Peewee, etc.) it is still the best choice.
 
-Modernized fork of [nplusone](https://github.com/jmcarp/nplusone), stripped down to Django-only support with Python 3.12+ / Django 5.2+.
+`django-nplus1` is a modernized, Django-only fork that drops legacy compatibility in favour of Python 3.12+ / Django 5.2+, replaces blinker with Django's native signal dispatch, and adds unused eager-load detection.
 
 ## Features
 
