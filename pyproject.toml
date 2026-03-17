@@ -59,9 +59,11 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["django_nplus1"]
+exclude = ["django_nplus1/mypy_settings.py"]
 
 [tool.hatch.build.targets.sdist]
 include = ["django_nplus1", "LICENSE", "README.md"]
+exclude = ["django_nplus1/mypy_settings.py"]
 
 [tool.ruff]
 target-version = "py313"
@@ -94,6 +96,7 @@ allow-star-arg-any = true
 suppress-none-returning = true
 
 [tool.ruff.lint.per-file-ignores]
+"django_nplus1/mypy_settings.py" = ["S105"]
 "tests/**" = [
   "ANN",    # Type annotations not required in tests
   "ARG",    # Unused arguments common in fixtures
@@ -123,11 +126,7 @@ warn_unused_ignores = true
 warn_unreachable = false
 
 [tool.django-stubs]
-django_settings_module = "tests.settings.base"
-
-[[tool.mypy.overrides]]
-module = "testapp.*"
-ignore_missing_imports = true
+django_settings_module = "django_nplus1.mypy_settings"
 
 [tool.ty.rules]
 invalid-method-override = "ignore"

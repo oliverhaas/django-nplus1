@@ -60,7 +60,7 @@ repos:
       - id: mypy
         name: mypy
         language: system
-        entry: env PYTHONPATH=tests uv run mypy django_nplus1/
+        entry: uv run mypy django_nplus1/
         pass_filenames: false
         always_run: true
         stages: [pre-push]

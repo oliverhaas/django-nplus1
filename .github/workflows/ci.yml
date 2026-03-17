@@ -28,7 +28,7 @@ jobs:
         run: uv run ruff format --check
 
       - name: Run mypy check
-        run: PYTHONPATH=tests uv run mypy django_nplus1/
+        run: uv run mypy django_nplus1/
 
       - name: Run ty check
         run: uv run ty check django_nplus1/
