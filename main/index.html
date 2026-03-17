@@ -830,13 +830,13 @@
 <p><code>django-nplus1</code> is a modernized, Django-only fork that drops legacy compatibility in favour of Python 3.12+ / Django 5.2+, replaces blinker with Django's native signal dispatch, and adds <strong>unused eager-load detection</strong>.</p>
 <h2 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>N+1 detection</strong> — Warns when a related object is lazily loaded on an instance that was part of a bulk query</li>
-<li><strong>Unused eager load detection</strong> — Warns when <code>select_related</code> or <code>prefetch_related</code> results are never accessed</li>
-<li><strong>Middleware</strong> — Automatically monitors all requests</li>
-<li><strong>pytest plugin</strong> — <code>nplus1</code> fixture and <code>@pytest.mark.nplus1</code> marker for test-time detection</li>
-<li><strong>Profiler</strong> — Context manager for manual use in scripts or tests</li>
-<li><strong>Whitelisting</strong> — Ignore specific model/field combinations with wildcard support</li>
-<li><strong>Zero runtime dependencies</strong> — Only requires Django</li>
+<li><strong>N+1 detection</strong>: Warns when a related object is lazily loaded on an instance that was part of a bulk query</li>
+<li><strong>Unused eager load detection</strong>: Warns when <code>select_related</code> or <code>prefetch_related</code> results are never accessed</li>
+<li><strong>Middleware</strong>: Automatically monitors all requests</li>
+<li><strong>pytest plugin</strong>: <code>nplus1</code> fixture and <code>@pytest.mark.nplus1</code> marker for test-time detection</li>
+<li><strong>Profiler</strong>: Context manager for manual use in scripts or tests</li>
+<li><strong>Whitelisting</strong>: Ignore specific model/field combinations with wildcard support</li>
+<li><strong>Zero runtime dependencies</strong>: Only requires Django</li>
 </ul>
 <h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span>django-nplus1
