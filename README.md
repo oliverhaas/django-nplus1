@@ -1,6 +1,6 @@
 # django-nplus1
 
-> **Exploratory / alpha** — this package is under active development and the API may change.
+> **Exploratory / alpha**: this package is under active development and the API may change.
 
 N+1 query detection for Django.
 

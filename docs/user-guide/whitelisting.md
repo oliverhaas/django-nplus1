@@ -26,9 +26,9 @@ Each whitelist entry is a dictionary with optional keys:
 
 The `model` field supports `fnmatch` wildcards:
 
-- `"myapp.*"` — matches all models in `myapp`
-- `"*.User"` — matches `User` in any app
-- `"*"` — matches everything (not recommended)
+- `"myapp.*"`:matches all models in `myapp`
+- `"*.User"`:matches `User` in any app
+- `"*"`:matches everything (not recommended)
 
 ## Profiler Whitelisting
 

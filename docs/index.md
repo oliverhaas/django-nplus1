@@ -11,13 +11,13 @@ Based on [nplusone](https://github.com/jmcarp/nplusone) by [Joshua Carp](https:/
 
 ## Features
 
-- **N+1 detection** — Warns when a related object is lazily loaded on an instance that was part of a bulk query
-- **Unused eager load detection** — Warns when `select_related` or `prefetch_related` results are never accessed
-- **Middleware** — Automatically monitors all requests
-- **pytest plugin** — `nplus1` fixture and `@pytest.mark.nplus1` marker for test-time detection
-- **Profiler** — Context manager for manual use in scripts or tests
-- **Whitelisting** — Ignore specific model/field combinations with wildcard support
-- **Zero runtime dependencies** — Only requires Django
+- **N+1 detection**: Warns when a related object is lazily loaded on an instance that was part of a bulk query
+- **Unused eager load detection**: Warns when `select_related` or `prefetch_related` results are never accessed
+- **Middleware**: Automatically monitors all requests
+- **pytest plugin**: `nplus1` fixture and `@pytest.mark.nplus1` marker for test-time detection
+- **Profiler**: Context manager for manual use in scripts or tests
+- **Whitelisting**: Ignore specific model/field combinations with wildcard support
+- **Zero runtime dependencies**: Only requires Django
 
 ## Quick Start
 

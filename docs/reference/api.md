@@ -44,9 +44,9 @@ from django_nplus1.exceptions import NPlusOneError
 
 ### Fixtures
 
-- `nplus1` — Yields a `Profiler` instance. Test fails on N+1 detection.
+- `nplus1`:Yields a `Profiler` instance. Test fails on N+1 detection.
 
 ### Markers
 
-- `@pytest.mark.nplus1` — Auto-detect N+1 in the marked test.
-- `@pytest.mark.nplus1(whitelist=[...])` — With whitelisting.
+- `@pytest.mark.nplus1`:Auto-detect N+1 in the marked test.
+- `@pytest.mark.nplus1(whitelist=[...])`:With whitelisting.
