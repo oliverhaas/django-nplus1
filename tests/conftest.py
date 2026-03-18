@@ -1,6 +1,7 @@
 from unittest import mock
 
 import pytest
+from django.conf import settings
 
 from django_nplus1 import signals
 from django_nplus1.detect import LazyListener
@@ -43,3 +44,10 @@ def lazy_listener():
         yield listener
     finally:
         listener.teardown()
+
+
+@pytest.fixture
+def logger(monkeypatch):
+    mock_logger = mock.Mock()
+    monkeypatch.setattr(settings, "NPLUS1_LOGGER", mock_logger)
+    return mock_logger

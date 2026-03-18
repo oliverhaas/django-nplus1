@@ -29,7 +29,7 @@ def disconnect(signal_name: str, callback: Callable[..., Any], *, sender: str | 
 
 
 def send(signal_name: str, *, sender: str | None = None, **kwargs: Any) -> None:
-    for callback in _listeners[_key(signal_name, sender)]:
+    for callback in _listeners[_key(signal_name, sender)][:]:
         callback(**kwargs)
 
 
@@ -40,7 +40,10 @@ def _key(signal_name: str, sender: str | None) -> str:
 
 
 def signalify(
-    signal_name: str, func: Callable[..., Any], *, parser: Callable[..., Any] | None = None
+    signal_name: str,
+    func: Callable[..., Any],
+    *,
+    parser: Callable[..., Any] | None = None,
 ) -> Callable[..., Any]:
     @functools.wraps(func)
     def wrapped(*args: Any, **kwargs: Any) -> Any:

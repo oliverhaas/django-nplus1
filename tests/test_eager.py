@@ -1,14 +1,7 @@
-from unittest import mock
-
 import pytest
-from django.conf import settings
 
-
-@pytest.fixture
-def logger(monkeypatch):
-    mock_logger = mock.Mock()
-    monkeypatch.setattr(settings, "NPLUS1_LOGGER", mock_logger)
-    return mock_logger
+from django_nplus1 import signals
+from django_nplus1.detect import EagerListener
 
 
 @pytest.mark.django_db
@@ -61,3 +54,31 @@ class TestPrefetchRelated:
         calls = [call[0] for call in logger.log.call_args_list]
         assert any("Pet.user" in call[1] for call in calls)
         assert any("User.occupation" in call[1] for call in calls)
+
+
+class TestEagerListenerCleanup:
+    def test_nested_unused_not_duplicated(self, objects, client, logger):
+        """Multiple eager loads in one request should report each unused field exactly once."""
+        client.get("/select_nested_unused/")
+        messages = [call[0][1] for call in logger.log.call_args_list]
+        assert sum(1 for m in messages if "Pet.user" in m) == 1
+        assert sum(1 for m in messages if "User.occupation" in m) == 1
+
+    def test_no_stale_handlers_after_teardown(self):
+        """After teardown, all signal handlers registered by EagerListener must be removed."""
+
+        class FakeParent:
+            def notify(self, msg):
+                pass
+
+        worker = signals.get_worker()
+        key = signals._key(signals.TOUCH, worker)
+        before = len(signals._listeners[key])
+
+        listener = EagerListener(FakeParent())
+        listener.setup()
+        for _ in range(3):
+            listener.handle_eager(parser=lambda a, k, c: (object, "field", ["inst"], 1))
+        listener.teardown()
+
+        assert len(signals._listeners[key]) == before

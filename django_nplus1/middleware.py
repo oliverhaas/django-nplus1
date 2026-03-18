@@ -35,8 +35,7 @@ class NPlusOneMiddleware:
         self._whitelist: list[DjangoRule] = []
 
     def _load_config(self) -> None:
-        config = dict(vars(settings._wrapped))  # type: ignore[misc]
-        self._notifiers = notifiers.init(config)
+        self._notifiers = notifiers.init(settings)
         self._whitelist = [DjangoRule(**item) for item in getattr(settings, "NPLUS1_WHITELIST", [])]
 
     def __call__(self, request: HttpRequest) -> HttpResponse:

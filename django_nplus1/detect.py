@@ -137,6 +137,7 @@ class EagerListener(Listener):
         self.tracker = EagerTracker()
         self.touched = []
         signals.connect(signals.EAGER_LOAD, self.handle_eager, sender=signals.get_worker())
+        signals.connect(signals.TOUCH, self.handle_touch, sender=signals.get_worker())
 
     def teardown(self) -> None:
         from django_nplus1 import signals
@@ -153,10 +154,7 @@ class EagerListener(Listener):
         ret: Any = None,
         parser: Any = None,
     ) -> None:
-        from django_nplus1 import signals
-
         self.tracker.track(*parser(args, kwargs, context))
-        signals.connect(signals.TOUCH, self.handle_touch, sender=signals.get_worker())
 
     def handle_touch(
         self,

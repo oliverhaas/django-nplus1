@@ -1,18 +1,10 @@
-from unittest import mock
-
 import pytest
 from django.conf import settings
 from django.http.request import HttpRequest
 from django.http.response import HttpResponse
 
+from django_nplus1.exceptions import NPlusOneError
 from django_nplus1.middleware import NPlusOneMiddleware
-
-
-@pytest.fixture
-def logger(monkeypatch):
-    mock_logger = mock.Mock()
-    monkeypatch.setattr(settings, "NPLUS1_LOGGER", mock_logger)
-    return mock_logger
 
 
 @pytest.mark.django_db
@@ -107,6 +99,43 @@ class TestIntegration:
         monkeypatch.setattr(settings, "NPLUS1_WHITELIST", [{"model": "testapp.*"}])
         client.get("/many_to_many/")
         assert not logger.log.called
+
+
+@pytest.mark.django_db
+class TestConfig:
+    def test_raise_on_detection(self, objects, client):
+        """NPLUS1_RAISE=True causes NPlusOneError instead of logging."""
+        settings.NPLUS1_RAISE = True
+        try:
+            with pytest.raises(NPlusOneError, match="User.hobbies"):
+                client.get("/many_to_many/")
+        finally:
+            del settings.NPLUS1_RAISE
+
+    def test_log_disabled(self, objects, client, logger):
+        """NPLUS1_LOG=False suppresses log output entirely."""
+        original = settings.NPLUS1_LOG
+        settings.NPLUS1_LOG = False
+        try:
+            client.get("/many_to_many/")
+            assert not logger.log.called
+        finally:
+            settings.NPLUS1_LOG = original
+
+    def test_custom_error_class(self, objects, client):
+        """NPLUS1_ERROR is used as the exception type when raising."""
+
+        class CustomError(Exception):
+            pass
+
+        settings.NPLUS1_RAISE = True
+        settings.NPLUS1_ERROR = CustomError
+        try:
+            with pytest.raises(CustomError):
+                client.get("/many_to_many/")
+        finally:
+            del settings.NPLUS1_RAISE
+            del settings.NPLUS1_ERROR
 
 
 def test_middleware_no_process_request():
