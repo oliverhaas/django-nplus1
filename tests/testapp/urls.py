@@ -24,4 +24,8 @@ urlpatterns = [
     path("prefetch_nested_unused/", views.prefetch_nested_unused),
     path("select_nested/", views.select_nested),
     path("select_nested_unused/", views.select_nested_unused),
+    path("prefetch_related_objects_loop/", views.prefetch_related_objects_loop),
+    path("prefetch_related_objects_bulk/", views.prefetch_related_objects_bulk),
+    path("prefetch_related_objects_get/", views.prefetch_related_objects_get),
+    path("prefetch_related_objects_first/", views.prefetch_related_objects_first),
 ]

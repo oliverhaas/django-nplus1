@@ -124,3 +124,36 @@ def select_nested(request):
 def select_nested_unused(request):
     pets = list(models.Pet.objects.all().select_related("user__occupation"))
     return HttpResponse(pets[0])
+
+
+def prefetch_related_objects_loop(request):
+    from django.db.models import prefetch_related_objects
+
+    users = list(models.User.objects.all())
+    for user in users:
+        prefetch_related_objects([user], "hobbies")
+    return HttpResponse([user.hobbies.all() for user in users])
+
+
+def prefetch_related_objects_bulk(request):
+    from django.db.models import prefetch_related_objects
+
+    users = list(models.User.objects.all())
+    prefetch_related_objects(users, "hobbies")
+    return HttpResponse([user.hobbies.all() for user in users])
+
+
+def prefetch_related_objects_get(request):
+    from django.db.models import prefetch_related_objects
+
+    user = models.User.objects.get(pk=1)
+    prefetch_related_objects([user], "hobbies")
+    return HttpResponse(user.hobbies.all())
+
+
+def prefetch_related_objects_first(request):
+    from django.db.models import prefetch_related_objects
+
+    user = models.User.objects.first()
+    prefetch_related_objects([user], "hobbies")
+    return HttpResponse(user.hobbies.all())

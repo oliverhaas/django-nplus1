@@ -34,6 +34,25 @@ class TestProfiler:
             occupations = list(Occupation.objects.all())
             occupations[0].user
 
+    def test_profiler_detects_prefetch_related_objects_loop(self, objects):
+        from django.db.models import prefetch_related_objects
+        from testapp.models import User
+
+        with pytest.raises(NPlusOneError, match="n\\+1 query.*User.hobbies"), Profiler():
+            users = list(User.objects.all())
+            for user in users:
+                prefetch_related_objects([user], "hobbies")
+
+    def test_profiler_no_false_positive_prefetch_related_objects_bulk(self, objects):
+        from django.db.models import prefetch_related_objects
+        from testapp.models import User
+
+        with Profiler():
+            users = list(User.objects.all())
+            prefetch_related_objects(users, "hobbies")
+            for user in users:
+                list(user.hobbies.all())
+
     def test_profiler_detects_unused_eager(self, objects):
         from testapp.models import User
 

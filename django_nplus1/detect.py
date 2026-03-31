@@ -83,6 +83,7 @@ class LazyListener(Listener):
         signals.connect(signals.LOAD, self.handle_load, sender=signals.get_worker())
         signals.connect(signals.IGNORE_LOAD, self.handle_ignore, sender=signals.get_worker())
         signals.connect(signals.LAZY_LOAD, self.handle_lazy, sender=signals.get_worker())
+        signals.connect(signals.EAGER_LOAD, self.handle_eager, sender=signals.get_worker())
 
     def teardown(self) -> None:
         from django_nplus1 import signals
@@ -90,6 +91,7 @@ class LazyListener(Listener):
         signals.disconnect(signals.LOAD, self.handle_load, sender=signals.get_worker())
         signals.disconnect(signals.IGNORE_LOAD, self.handle_ignore, sender=signals.get_worker())
         signals.disconnect(signals.LAZY_LOAD, self.handle_lazy, sender=signals.get_worker())
+        signals.disconnect(signals.EAGER_LOAD, self.handle_eager, sender=signals.get_worker())
 
     def handle_load(
         self,
@@ -123,6 +125,19 @@ class LazyListener(Listener):
     ) -> None:
         model, instance, field = parser(args, kwargs, context)
         if instance in self.loaded and instance not in self.ignore:
+            message = LazyLoadMessage(model, field)
+            self.parent.notify(message)
+
+    def handle_eager(
+        self,
+        args: tuple[Any, ...] | None = None,
+        kwargs: dict[str, Any] | None = None,
+        context: dict[str, Any] | None = None,
+        ret: Any = None,
+        parser: Any = None,
+    ) -> None:
+        model, field, keys, _key = parser(args, kwargs, context)
+        if len(keys) == 1 and keys[0] in self.loaded and keys[0] not in self.ignore:
             message = LazyLoadMessage(model, field)
             self.parent.notify(message)
 

@@ -138,6 +138,33 @@ class TestConfig:
             del settings.NPLUS1_ERROR
 
 
+@pytest.mark.django_db
+class TestPrefetchRelatedObjects:
+    def test_loop_detected(self, objects, client, logger):
+        """prefetch_related_objects([obj], 'field') in a loop is N+1."""
+        client.get("/prefetch_related_objects_loop/")
+        messages = [call[0][1] for call in logger.log.call_args_list]
+        assert any("n+1 query" in m.lower() and "User.hobbies" in m for m in messages)
+
+    def test_bulk_not_detected(self, objects, client, logger):
+        """prefetch_related_objects(all_objs, 'field') is legitimate."""
+        client.get("/prefetch_related_objects_bulk/")
+        messages = [call[0][1] for call in logger.log.call_args_list]
+        assert not any("n+1" in m.lower() for m in messages)
+
+    def test_get_not_detected(self, objects, client, logger):
+        """prefetch_related_objects on a .get() result is not N+1."""
+        client.get("/prefetch_related_objects_get/")
+        messages = [call[0][1] for call in logger.log.call_args_list]
+        assert not any("n+1" in m.lower() for m in messages)
+
+    def test_first_not_detected(self, objects, client, logger):
+        """prefetch_related_objects on a .first() result is not N+1."""
+        client.get("/prefetch_related_objects_first/")
+        messages = [call[0][1] for call in logger.log.call_args_list]
+        assert not any("n+1" in m.lower() for m in messages)
+
+
 def test_middleware_no_process_request():
     middleware = NPlusOneMiddleware(lambda r: HttpResponse())
     req = HttpRequest()
