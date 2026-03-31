@@ -8,7 +8,4 @@ try:
 except PackageNotFoundError:
     __version__ = "0.0.0+unknown"
 
-# Backwards compatibility
-NPlusOneMiddleware = NPlus1Middleware
-
-__all__ = ["NPlus1Middleware", "NPlusOneMiddleware", "Profiler", "__version__"]
+__all__ = ["NPlus1Middleware", "Profiler", "__version__"]

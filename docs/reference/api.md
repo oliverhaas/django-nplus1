@@ -13,9 +13,6 @@ MIDDLEWARE = [
 ]
 ```
 
-!!! note "Backwards compatibility"
-    `NPlusOneMiddleware` is still available as an alias for `NPlus1Middleware`.
-
 ## Profiler
 
 ### `Profiler`
@@ -42,9 +39,6 @@ Raised when an N+1 query or unused eager load is detected (when `NPLUS1_RAISE=Tr
 ```python
 from django_nplus1.exceptions import NPlus1Error
 ```
-
-!!! note "Backwards compatibility"
-    `NPlusOneError` is still available as an alias for `NPlus1Error`.
 
 ## pytest Plugin
 
