@@ -679,10 +679,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#nplusonemiddleware" class="md-nav__link">
+  <a href="#nplus1middleware" class="md-nav__link">
     <span class="md-ellipsis">
       
-        NPlusOneMiddleware
+        NPlus1Middleware
       
     </span>
   </a>
@@ -735,10 +735,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#nplusoneerror" class="md-nav__link">
+  <a href="#nplus1error" class="md-nav__link">
     <span class="md-ellipsis">
       
-        NPlusOneError
+        NPlus1Error
       
     </span>
   </a>
@@ -872,10 +872,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#nplusonemiddleware" class="md-nav__link">
+  <a href="#nplus1middleware" class="md-nav__link">
     <span class="md-ellipsis">
       
-        NPlusOneMiddleware
+        NPlus1Middleware
       
     </span>
   </a>
@@ -928,10 +928,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#nplusoneerror" class="md-nav__link">
+  <a href="#nplus1error" class="md-nav__link">
     <span class="md-ellipsis">
       
-        NPlusOneError
+        NPlus1Error
       
     </span>
   </a>
@@ -1004,30 +1004,38 @@
 
 <h1 id="api-reference">API Reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h1>
 <h2 id="middleware">Middleware<a class="headerlink" href="#middleware" title="Permanent link">&para;</a></h2>
-<h3 id="nplusonemiddleware"><code>NPlusOneMiddleware</code><a class="headerlink" href="#nplusonemiddleware" title="Permanent link">&para;</a></h3>
+<h3 id="nplus1middleware"><code>NPlus1Middleware</code><a class="headerlink" href="#nplus1middleware" title="Permanent link">&para;</a></h3>
 <p>Django middleware that detects N+1 queries and unused eager loads during request processing.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">MIDDLEWARE</span> <span class="o">=</span> <span class="p">[</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">...</span><span class="p">,</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="s2">&quot;django_nplus1.NPlusOneMiddleware&quot;</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="s2">&quot;django_nplus1.NPlus1Middleware&quot;</span><span class="p">,</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="p">]</span>
 </span></code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Backwards compatibility</p>
+<p><code>NPlusOneMiddleware</code> is still available as an alias for <code>NPlus1Middleware</code>.</p>
+</div>
 <h2 id="profiler">Profiler<a class="headerlink" href="#profiler" title="Permanent link">&para;</a></h2>
 <h3 id="profiler_1"><code>Profiler</code><a class="headerlink" href="#profiler_1" title="Permanent link">&para;</a></h3>
 <p>Context manager for manual N+1 detection.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1</span><span class="w"> </span><span class="kn">import</span> <span class="n">Profiler</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="k">with</span> <span class="n">Profiler</span><span class="p">(</span><span class="n">whitelist</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="k">as</span> <span class="n">p</span><span class="p">:</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="o">...</span>  <span class="c1"># Any N+1 queries here raise NPlusOneError</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="o">...</span>  <span class="c1"># Any N+1 queries here raise NPlus1Error</span>
 </span></code></pre></div>
 <p><strong>Parameters:</strong></p>
 <ul>
 <li><code>whitelist</code> (optional): List of dicts with <code>model</code>, <code>field</code>, and/or <code>label</code> keys.</li>
 </ul>
 <h2 id="exceptions">Exceptions<a class="headerlink" href="#exceptions" title="Permanent link">&para;</a></h2>
-<h3 id="nplusoneerror"><code>NPlusOneError</code><a class="headerlink" href="#nplusoneerror" title="Permanent link">&para;</a></h3>
+<h3 id="nplus1error"><code>NPlus1Error</code><a class="headerlink" href="#nplus1error" title="Permanent link">&para;</a></h3>
 <p>Raised when an N+1 query or unused eager load is detected (when <code>NPLUS1_RAISE=True</code> or using <code>Profiler</code>).</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">NPlusOneError</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">NPlus1Error</span>
 </span></code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Backwards compatibility</p>
+<p><code>NPlusOneError</code> is still available as an alias for <code>NPlus1Error</code>.</p>
+</div>
 <h2 id="pytest-plugin">pytest Plugin<a class="headerlink" href="#pytest-plugin" title="Permanent link">&para;</a></h2>
 <h3 id="fixtures">Fixtures<a class="headerlink" href="#fixtures" title="Permanent link">&para;</a></h3>
 <ul>

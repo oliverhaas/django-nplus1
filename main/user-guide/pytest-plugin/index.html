@@ -894,7 +894,7 @@
 <p>django-nplus1 includes a pytest plugin that is automatically discovered via entry points.</p>
 <h2 id="fixtures">Fixtures<a class="headerlink" href="#fixtures" title="Permanent link">&para;</a></h2>
 <h3 id="nplus1"><code>nplus1</code><a class="headerlink" href="#nplus1" title="Permanent link">&para;</a></h3>
-<p>A fixture that provides a <code>Profiler</code> context. Any N+1 queries detected within the test will raise <code>NPlusOneError</code>.</p>
+<p>A fixture that provides a <code>Profiler</code> context. Any N+1 queries detected within the test will raise <code>NPlus1Error</code>.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_my_view</span><span class="p">(</span><span class="n">nplus1</span><span class="p">,</span> <span class="n">client</span><span class="p">):</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/my-view/&quot;</span><span class="p">)</span>  <span class="c1"># Raises if N+1 detected</span>
 </span></code></pre></div>
