@@ -3,8 +3,8 @@ from django.conf import settings
 from django.http.request import HttpRequest
 from django.http.response import HttpResponse
 
-from django_nplus1.exceptions import NPlusOneError
-from django_nplus1.middleware import NPlusOneMiddleware
+from django_nplus1.exceptions import NPlus1Error
+from django_nplus1.middleware import NPlus1Middleware
 
 
 @pytest.mark.django_db
@@ -104,10 +104,10 @@ class TestIntegration:
 @pytest.mark.django_db
 class TestConfig:
     def test_raise_on_detection(self, objects, client):
-        """NPLUS1_RAISE=True causes NPlusOneError instead of logging."""
+        """NPLUS1_RAISE=True causes NPlus1Error instead of logging."""
         settings.NPLUS1_RAISE = True
         try:
-            with pytest.raises(NPlusOneError, match="User.hobbies"):
+            with pytest.raises(NPlus1Error, match="User.hobbies"):
                 client.get("/many_to_many/")
         finally:
             del settings.NPLUS1_RAISE
@@ -166,7 +166,7 @@ class TestPrefetchRelatedObjects:
 
 
 def test_middleware_no_process_request():
-    middleware = NPlusOneMiddleware(lambda r: HttpResponse())
+    middleware = NPlus1Middleware(lambda r: HttpResponse())
     req = HttpRequest()
     resp = middleware(req)
     assert resp.status_code == 200

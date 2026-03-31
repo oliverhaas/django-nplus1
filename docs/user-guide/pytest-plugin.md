@@ -6,7 +6,7 @@ django-nplus1 includes a pytest plugin that is automatically discovered via entr
 
 ### `nplus1`
 
-A fixture that provides a `Profiler` context. Any N+1 queries detected within the test will raise `NPlusOneError`.
+A fixture that provides a `Profiler` context. Any N+1 queries detected within the test will raise `NPlus1Error`.
 
 ```python
 def test_my_view(nplus1, client):

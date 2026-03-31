@@ -30,7 +30,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     ...,
-    "django_nplus1.NPlusOneMiddleware",  # should be last
+    "django_nplus1.NPlus1Middleware",  # should be last
 ]
 ```
 

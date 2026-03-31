@@ -2,16 +2,19 @@
 
 ## Middleware
 
-### `NPlusOneMiddleware`
+### `NPlus1Middleware`
 
 Django middleware that detects N+1 queries and unused eager loads during request processing.
 
 ```python
 MIDDLEWARE = [
     ...,
-    "django_nplus1.NPlusOneMiddleware",
+    "django_nplus1.NPlus1Middleware",
 ]
 ```
+
+!!! note "Backwards compatibility"
+    `NPlusOneMiddleware` is still available as an alias for `NPlus1Middleware`.
 
 ## Profiler
 
@@ -23,7 +26,7 @@ Context manager for manual N+1 detection.
 from django_nplus1 import Profiler
 
 with Profiler(whitelist=None) as p:
-    ...  # Any N+1 queries here raise NPlusOneError
+    ...  # Any N+1 queries here raise NPlus1Error
 ```
 
 **Parameters:**
@@ -32,13 +35,16 @@ with Profiler(whitelist=None) as p:
 
 ## Exceptions
 
-### `NPlusOneError`
+### `NPlus1Error`
 
 Raised when an N+1 query or unused eager load is detected (when `NPLUS1_RAISE=True` or using `Profiler`).
 
 ```python
-from django_nplus1.exceptions import NPlusOneError
+from django_nplus1.exceptions import NPlus1Error
 ```
+
+!!! note "Backwards compatibility"
+    `NPlusOneError` is still available as an alias for `NPlus1Error`.
 
 ## pytest Plugin
 

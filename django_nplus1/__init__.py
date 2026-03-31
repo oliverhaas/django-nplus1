@@ -1,6 +1,6 @@
 from importlib.metadata import PackageNotFoundError, version
 
-from django_nplus1.middleware import NPlusOneMiddleware
+from django_nplus1.middleware import NPlus1Middleware
 from django_nplus1.profiler import Profiler
 
 try:
@@ -8,4 +8,7 @@ try:
 except PackageNotFoundError:
     __version__ = "0.0.0+unknown"
 
-__all__ = ["NPlusOneMiddleware", "Profiler", "__version__"]
+# Backwards compatibility
+NPlusOneMiddleware = NPlus1Middleware
+
+__all__ = ["NPlus1Middleware", "NPlusOneMiddleware", "Profiler", "__version__"]

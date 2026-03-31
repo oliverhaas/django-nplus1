@@ -26,7 +26,7 @@ for user in users:
 
 ```python
 # settings/test.py
-NPLUS1_RAISE = True  # Raise NPlusOneError instead of logging
+NPLUS1_RAISE = True  # Raise NPlus1Error instead of logging
 ```
 
 ## Using the pytest Plugin
@@ -40,7 +40,7 @@ def test_my_view(client):
 # Manual detection with fixture
 def test_manual(nplus1):
     users = list(User.objects.all())
-    users[0].profile  # Raises NPlusOneError
+    users[0].profile  # Raises NPlus1Error
 ```
 
 ## Using the Profiler
@@ -50,5 +50,5 @@ from django_nplus1 import Profiler
 
 with Profiler():
     users = list(User.objects.all())
-    users[0].profile  # Raises NPlusOneError
+    users[0].profile  # Raises NPlus1Error
 ```

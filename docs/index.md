@@ -33,7 +33,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     ...,
-    "django_nplus1.NPlusOneMiddleware",
+    "django_nplus1.NPlus1Middleware",
 ]
 ```
 

@@ -27,7 +27,7 @@ class DjangoRule(Rule):
         return False
 
 
-class NPlusOneMiddleware:
+class NPlus1Middleware:
     def __init__(self, get_response: Any) -> None:
         self.get_response = get_response
         self._listeners: weakref.WeakKeyDictionary[HttpRequest, dict[str, Listener]] = weakref.WeakKeyDictionary()

@@ -32,7 +32,7 @@ NPLUS1_LOGGER = logging.getLogger("my_app.nplus1")
 
 ### `NPLUS1_RAISE`
 
-Raise `NPlusOneError` on detection instead of (or in addition to) logging. Default: `False`.
+Raise `NPlus1Error` on detection instead of (or in addition to) logging. Default: `False`.
 
 ```python
 NPLUS1_RAISE = True  # Recommended for test settings
@@ -40,7 +40,7 @@ NPLUS1_RAISE = True  # Recommended for test settings
 
 ### `NPLUS1_ERROR`
 
-Custom exception class to raise. Default: `NPlusOneError`.
+Custom exception class to raise. Default: `NPlus1Error`.
 
 ```python
 NPLUS1_ERROR = MyCustomError

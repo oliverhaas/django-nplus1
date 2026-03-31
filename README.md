@@ -4,7 +4,7 @@
 
 N+1 query detection for Django.
 
-Based on [nplusone](https://github.com/jmcarp/nplusone) by [Joshua Carp](https://github.com/jmcarp), a well-established library for automatic N+1 detection across Python ORMs. If you need broad ORM support (SQLAlchemy, Peewee, etc.), `nplusone` is still the best choice.
+Based on [nplusone](https://github.com/jmcarp/nplusone) by [Joshua Carp](https://github.com/jmcarp), a well-established library for automatic N+1 detection across Python ORMs. If you need broad ORM support (SQLAlchemy, Peewee, etc.), `nplusone` is still the best choice. I would actually prefer if `nplusone` will in the near future accept some of my PRs which I've tested basically in this package, but I also do not want to wait for it.
 
 `django-nplus1` is a modernized, Django-only fork that drops legacy compatibility in favour of Python 3.12+ / Django 5.2+, replaces blinker with Django's native signal dispatch, and adds unused eager-load detection.
 
@@ -33,7 +33,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     ...,
-    "django_nplus1.NPlusOneMiddleware",
+    "django_nplus1.NPlus1Middleware",
 ]
 
 # Optional

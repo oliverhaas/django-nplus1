@@ -1,6 +1,6 @@
 import pytest
 
-from django_nplus1.exceptions import NPlusOneError
+from django_nplus1.exceptions import NPlus1Error
 from django_nplus1.profiler import Profiler
 
 
@@ -9,7 +9,7 @@ class TestProfiler:
     def test_profiler_detects_nplus1(self, objects):
         from testapp.models import Occupation
 
-        with pytest.raises(NPlusOneError, match="Occupation.user"), Profiler():
+        with pytest.raises(NPlus1Error, match="Occupation.user"), Profiler():
             occupations = list(Occupation.objects.all())
             occupations[0].user
 
@@ -38,7 +38,7 @@ class TestProfiler:
         from django.db.models import prefetch_related_objects
         from testapp.models import User
 
-        with pytest.raises(NPlusOneError, match="n\\+1 query.*User.hobbies"), Profiler():
+        with pytest.raises(NPlus1Error, match="n\\+1 query.*User.hobbies"), Profiler():
             users = list(User.objects.all())
             for user in users:
                 prefetch_related_objects([user], "hobbies")
@@ -56,7 +56,7 @@ class TestProfiler:
     def test_profiler_detects_unused_eager(self, objects):
         from testapp.models import User
 
-        with pytest.raises(NPlusOneError, match="User.occupation"), Profiler():
+        with pytest.raises(NPlus1Error, match="User.occupation"), Profiler():
             users = list(User.objects.all().select_related("occupation"))
             str(users[0])
 
@@ -66,7 +66,7 @@ class TestNplus1Fixture:
     def test_nplus1_fixture_detects(self, objects, nplus1):
         from testapp.models import Occupation
 
-        with pytest.raises(NPlusOneError, match="Occupation.user"):
+        with pytest.raises(NPlus1Error, match="Occupation.user"):
             occupations = list(Occupation.objects.all())
             occupations[0].user
 

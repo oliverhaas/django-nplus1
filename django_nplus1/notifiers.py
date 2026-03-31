@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from django_nplus1.exceptions import NPlusOneError
+from django_nplus1.exceptions import NPlus1Error
 
 if TYPE_CHECKING:
     from django_nplus1.detect import Message
@@ -45,7 +45,7 @@ class ErrorNotifier(Notifier):
     ENABLED_DEFAULT = False
 
     def __init__(self, config: Any) -> None:
-        self.error: type[Exception] = getattr(config, "NPLUS1_ERROR", NPlusOneError)
+        self.error: type[Exception] = getattr(config, "NPLUS1_ERROR", NPlus1Error)
 
     def notify(self, message: Message) -> None:
         raise self.error(message.message)

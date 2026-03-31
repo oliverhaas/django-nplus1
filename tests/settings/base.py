@@ -20,7 +20,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
-    "django_nplus1.NPlusOneMiddleware",
+    "django_nplus1.NPlus1Middleware",
 ]
 
 ROOT_URLCONF = "settings.urls"
