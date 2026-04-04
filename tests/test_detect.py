@@ -4,6 +4,7 @@ import pytest
 from testapp import models
 
 from django_nplus1.detect import LazyListener, LazyLoadMessage
+from django_nplus1.signals import setup_context, teardown_context
 
 
 @pytest.mark.django_db
@@ -146,6 +147,7 @@ class TestCallerInfo:
 class TestThreshold:
     def test_threshold_suppresses_first_occurrence(self, objects):
         """With threshold=2, first lazy access does not trigger."""
+        token = setup_context()
         mock_parent = mock.Mock()
         listener = LazyListener(mock_parent)
         listener.setup()
@@ -158,9 +160,11 @@ class TestThreshold:
             mock_parent.notify.assert_called_once()
         finally:
             listener.teardown()
+            teardown_context(token)
 
     def test_high_threshold_suppresses_entirely(self, objects):
         """A high threshold suppresses detection entirely."""
+        token = setup_context()
         mock_parent = mock.Mock()
         listener = LazyListener(mock_parent)
         listener.setup()
@@ -172,6 +176,7 @@ class TestThreshold:
             mock_parent.notify.assert_not_called()
         finally:
             listener.teardown()
+            teardown_context(token)
 
 
 @pytest.mark.django_db

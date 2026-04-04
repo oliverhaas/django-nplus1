@@ -22,22 +22,13 @@ _listeners: ContextVar[defaultdict[str, list[Callable[..., Any]]]] = ContextVar(
 )
 
 
-def _get_listeners() -> defaultdict[str, list[Callable[..., Any]]]:
-    try:
-        return _listeners.get()
-    except LookupError:
-        registry: defaultdict[str, list[Callable[..., Any]]] = defaultdict(list)
-        _listeners.set(registry)
-        return registry
-
-
 def connect(signal_name: str, callback: Callable[..., Any]) -> None:
-    _get_listeners()[signal_name].append(callback)
+    _listeners.get()[signal_name].append(callback)
 
 
 def disconnect(signal_name: str, callback: Callable[..., Any]) -> None:
     try:
-        _get_listeners()[signal_name].remove(callback)
+        _listeners.get()[signal_name].remove(callback)
     except (ValueError, LookupError):
         pass
 
