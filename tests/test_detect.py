@@ -113,6 +113,7 @@ class TestCallerInfo:
         assert "test_lazy_load_message_includes_caller" in message.message
         assert ".py:" in message.message
 
+
 class TestThreshold:
     def test_threshold_suppresses_first_occurrence(self, objects):
         """With threshold=2, first lazy access does not trigger."""

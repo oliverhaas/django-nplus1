@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import contextlib
 import functools
-import threading
 from collections import defaultdict
+from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
 from django.dispatch import Signal
@@ -15,34 +15,39 @@ if TYPE_CHECKING:
 # Receivers get ``sender`` (the notifying object) and ``message`` (a Message instance).
 nplus1_detected = Signal()
 
-_listeners: defaultdict[str, list[Callable[..., Any]]] = defaultdict(list)
+# Per-context listener registry
+_listeners: ContextVar[defaultdict[str, list[Callable[..., Any]]]] = ContextVar(
+    "nplus1_listeners",
+)
 
 
-def get_worker() -> str:
-    return str(threading.current_thread().ident)
-
-
-def connect(signal_name: str, callback: Callable[..., Any], *, sender: str | None = None) -> None:
-    _listeners[_key(signal_name, sender)].append(callback)
-
-
-def disconnect(signal_name: str, callback: Callable[..., Any], *, sender: str | None = None) -> None:
-    key = _key(signal_name, sender)
+def _get_listeners() -> defaultdict[str, list[Callable[..., Any]]]:
     try:
-        _listeners[key].remove(callback)
-    except ValueError:
+        return _listeners.get()
+    except LookupError:
+        registry: defaultdict[str, list[Callable[..., Any]]] = defaultdict(list)
+        _listeners.set(registry)
+        return registry
+
+
+def connect(signal_name: str, callback: Callable[..., Any]) -> None:
+    _get_listeners()[signal_name].append(callback)
+
+
+def disconnect(signal_name: str, callback: Callable[..., Any]) -> None:
+    try:
+        _get_listeners()[signal_name].remove(callback)
+    except (ValueError, LookupError):
         pass
 
 
-def send(signal_name: str, *, sender: str | None = None, **kwargs: Any) -> None:
-    for callback in _listeners[_key(signal_name, sender)][:]:
+def send(signal_name: str, **kwargs: Any) -> None:
+    try:
+        listeners = _listeners.get()
+    except LookupError:
+        return  # No active context — detection not enabled
+    for callback in listeners[signal_name][:]:
         callback(**kwargs)
-
-
-def _key(signal_name: str, sender: str | None) -> str:
-    if sender is None:
-        return signal_name
-    return f"{signal_name}:{sender}"
 
 
 def signalify(
@@ -56,7 +61,6 @@ def signalify(
         ret = func(*args, **kwargs)
         send(
             signal_name,
-            sender=get_worker(),
             args=args,
             kwargs=kwargs,
             ret=ret,
@@ -78,15 +82,18 @@ def designalify(signal_name: str, func: Callable[..., Any]) -> Callable[..., Any
 
 
 @contextlib.contextmanager
-def suppress(signal_name: str, sender: str | None = None) -> Generator[None]:
-    sender = sender or get_worker()
-    key = _key(signal_name, sender)
-    saved = _listeners[key][:]
-    _listeners[key].clear()
+def suppress(signal_name: str) -> Generator[None]:
+    try:
+        registry = _listeners.get()
+    except LookupError:
+        yield
+        return
+    saved = registry[signal_name][:]
+    registry[signal_name].clear()
     try:
         yield
     finally:
-        _listeners[key] = saved
+        registry[signal_name] = saved
 
 
 # Signal names as constants

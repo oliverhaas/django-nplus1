@@ -1,3 +1,4 @@
+from collections import defaultdict
 from unittest import mock
 
 import pytest
@@ -5,6 +6,7 @@ from django.conf import settings
 
 from django_nplus1 import signals
 from django_nplus1.detect import LazyListener
+from django_nplus1.signals import _listeners
 
 
 @pytest.fixture
@@ -25,18 +27,21 @@ def objects(db):
 
 @pytest.fixture
 def calls():
+    token = _listeners.set(defaultdict(list))
     calls = []
 
     def subscriber(args=None, kwargs=None, context=None, ret=None, parser=None):
         calls.append(parser(args, kwargs, context))
 
-    signals.connect(signals.LAZY_LOAD, subscriber, sender=signals.get_worker())
+    signals.connect(signals.LAZY_LOAD, subscriber)
     yield calls
-    signals.disconnect(signals.LAZY_LOAD, subscriber, sender=signals.get_worker())
+    signals.disconnect(signals.LAZY_LOAD, subscriber)
+    _listeners.reset(token)
 
 
 @pytest.fixture
 def lazy_listener():
+    token = _listeners.set(defaultdict(list))
     mock_parent = mock.Mock()
     listener = LazyListener(mock_parent)
     listener.setup()
@@ -44,6 +49,7 @@ def lazy_listener():
         yield listener
     finally:
         listener.teardown()
+        _listeners.reset(token)
 
 
 @pytest.fixture

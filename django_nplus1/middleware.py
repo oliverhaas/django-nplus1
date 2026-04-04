@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import fnmatch
 import weakref
+from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
 from django.apps import apps
@@ -10,7 +11,7 @@ from django.conf import settings
 from django_nplus1 import notifiers
 from django_nplus1.detect import LISTENERS, Message, Rule
 from django_nplus1.exceptions import NPlus1Error
-from django_nplus1.signals import nplus1_detected
+from django_nplus1.signals import _listeners, nplus1_detected
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -79,7 +80,9 @@ class DjangoRule(Rule):
 class NPlus1Middleware:
     def __init__(self, get_response: Any) -> None:
         self.get_response = get_response
-        self._listeners: weakref.WeakKeyDictionary[HttpRequest, dict[str, Listener]] = weakref.WeakKeyDictionary()
+        self._request_listeners: weakref.WeakKeyDictionary[HttpRequest, dict[str, Listener]] = (
+            weakref.WeakKeyDictionary()
+        )
         self._notifiers: list[notifiers.Notifier] = []
         self._whitelist: list[DjangoRule] = []
 
@@ -90,18 +93,20 @@ class NPlus1Middleware:
         self._whitelist = [DjangoRule(**item) for item in whitelist_data]
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
+        token = _listeners.set(defaultdict(list))
         self._load_config()
-        self._listeners[request] = {}
+        self._request_listeners[request] = {}
         for name, listener_type in LISTENERS.items():
-            self._listeners[request][name] = listener_type(self)
-            self._listeners[request][name].setup()
+            self._request_listeners[request][name] = listener_type(self)
+            self._request_listeners[request][name].setup()
         try:
             response = self.get_response(request)
         finally:
             for name in list(LISTENERS.keys()):
-                listener = self._listeners.get(request, {}).pop(name, None)
+                listener = self._request_listeners.get(request, {}).pop(name, None)
                 if listener:
                     listener.teardown()
+            _listeners.reset(token)
         return response
 
     def notify(self, message: Message) -> None:
