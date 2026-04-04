@@ -3,7 +3,7 @@ from unittest import mock
 import pytest
 from testapp import models
 
-from django_nplus1.detect import LazyListener
+from django_nplus1.detect import LazyListener, LazyLoadMessage
 
 
 @pytest.mark.django_db
@@ -171,6 +171,45 @@ class TestThreshold:
             mock_parent.notify.assert_not_called()
         finally:
             listener.teardown()
+
+
+@pytest.mark.django_db
+class TestShowAllCallers:
+    def test_message_with_callers(self):
+        """Message with callers formats CALL 1:, CALL 2: sections."""
+        callers = [
+            [("/app/views.py", 10, "my_view"), ("/app/urls.py", 5, "urlconf")],
+            [("/app/views.py", 12, "my_view"), ("/app/urls.py", 5, "urlconf")],
+        ]
+        msg = LazyLoadMessage(models.User, "hobbies", callers=callers)
+        text = msg.message
+        assert "CALL 1:" in text
+        assert "CALL 2:" in text
+        assert "/app/views.py:10 in my_view" in text
+        assert "/app/views.py:12 in my_view" in text
+        assert "with calls:" in text
+
+    def test_message_without_callers(self):
+        """Message without callers uses single caller format."""
+        msg = LazyLoadMessage(
+            models.User,
+            "hobbies",
+            caller=("/app/views.py", 10, "my_view"),
+        )
+        text = msg.message
+        assert "CALL 1:" not in text
+        assert "at /app/views.py:10 in my_view" in text
+
+    def test_lazy_listener_show_all_callers(self, objects, lazy_listener):
+        """LazyListener captures full stacks when NPLUS1_SHOW_ALL_CALLERS is enabled."""
+        lazy_listener.show_all_callers = True
+        users = list(models.User.objects.all())
+        list(users[0].hobbies.all())
+        assert lazy_listener.parent.notify.called
+        message = lazy_listener.parent.notify.call_args[0][0]
+        assert message.callers is not None
+        assert len(message.callers) >= 1
+        assert "CALL 1:" in message.message
 
 
 @pytest.mark.django_db
