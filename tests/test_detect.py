@@ -1,5 +1,9 @@
+from unittest import mock
+
 import pytest
 from testapp import models
+
+from django_nplus1.detect import LazyListener
 
 
 @pytest.mark.django_db
@@ -95,6 +99,50 @@ class TestManyToMany:
         assert len(calls) == 1
         call = calls[0]
         assert call == (models.Pet, f"Pet:{pet.pk}", "allergy_set")
+
+
+@pytest.mark.django_db
+class TestCallerInfo:
+    def test_lazy_load_message_includes_caller(self, objects, lazy_listener):
+        """LazyLoadMessage includes filename, line, and function."""
+        users = list(models.User.objects.all())
+        list(users[0].hobbies.all())  # triggers lazy load
+        assert lazy_listener.parent.notify.called
+        message = lazy_listener.parent.notify.call_args[0][0]
+        # The message should contain caller info
+        assert "test_lazy_load_message_includes_caller" in message.message
+        assert ".py:" in message.message
+
+
+class TestThreshold:
+    def test_threshold_suppresses_first_occurrence(self, objects):
+        """With threshold=2, first lazy access does not trigger."""
+        mock_parent = mock.Mock()
+        listener = LazyListener(mock_parent)
+        listener.setup()
+        listener.threshold = 2
+        try:
+            users = list(models.User.objects.all())
+            list(users[0].hobbies.all())  # count=1, below threshold
+            mock_parent.notify.assert_not_called()
+            list(users[1].hobbies.all())  # count=2, meets threshold
+            mock_parent.notify.assert_called_once()
+        finally:
+            listener.teardown()
+
+    def test_high_threshold_suppresses_entirely(self, objects):
+        """A high threshold suppresses detection entirely."""
+        mock_parent = mock.Mock()
+        listener = LazyListener(mock_parent)
+        listener.setup()
+        listener.threshold = 10
+        try:
+            users = list(models.User.objects.all())
+            list(users[0].hobbies.all())
+            list(users[1].hobbies.all())
+            mock_parent.notify.assert_not_called()
+        finally:
+            listener.teardown()
 
 
 @pytest.mark.django_db

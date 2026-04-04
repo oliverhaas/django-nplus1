@@ -53,6 +53,13 @@ class TestProfiler:
             for user in users:
                 list(user.hobbies.all())
 
+    def test_profiler_error_includes_caller(self, objects):
+        from testapp.models import Occupation
+
+        with pytest.raises(NPlus1Error, match=r"at .+\.py:\d+ in"), Profiler():
+            occupations = list(Occupation.objects.all())
+            occupations[0].user
+
     def test_profiler_detects_unused_eager(self, objects):
         from testapp.models import User
 

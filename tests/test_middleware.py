@@ -165,6 +165,68 @@ class TestPrefetchRelatedObjects:
         assert not any("n+1" in m.lower() for m in messages)
 
 
+@pytest.mark.django_db
+class TestWhitelistValidation:
+    def test_invalid_model_raises(self, client, monkeypatch):
+        """Typo in model name raises NPlus1Error."""
+        monkeypatch.setattr(
+            settings,
+            "NPLUS1_WHITELIST",
+            [{"model": "testapp.NonExistent"}],
+        )
+        with pytest.raises(NPlus1Error, match="not found"):
+            client.get("/many_to_many/")
+
+    def test_invalid_field_raises(self, objects, client, monkeypatch):
+        """Typo in field name raises NPlus1Error."""
+        monkeypatch.setattr(
+            settings,
+            "NPLUS1_WHITELIST",
+            [{"model": "testapp.User", "field": "nonexistent_field"}],
+        )
+        with pytest.raises(NPlus1Error, match="not found"):
+            client.get("/many_to_many/")
+
+    def test_wildcard_model_skips_validation(self, objects, client, logger, monkeypatch):
+        """Wildcard patterns are not validated against registry."""
+        monkeypatch.setattr(
+            settings,
+            "NPLUS1_WHITELIST",
+            [{"model": "testapp.*"}],
+        )
+        client.get("/many_to_many/")
+        assert not logger.log.called
+
+    def test_valid_whitelist_passes(self, objects, client, logger, monkeypatch):
+        """Valid model/field combo passes validation and suppresses detection."""
+        monkeypatch.setattr(
+            settings,
+            "NPLUS1_WHITELIST",
+            [{"model": "testapp.User", "field": "hobbies"}],
+        )
+        client.get("/many_to_many/")
+        assert not logger.log.called
+
+
+@pytest.mark.django_db
+class TestCallerInfo:
+    def test_log_includes_caller_info(self, objects, client, logger):
+        """Log message includes the file and function that caused the N+1."""
+        client.get("/many_to_many/")
+        args = logger.log.call_args[0]
+        message = args[1]
+        assert "views.py:" in message
+        assert "in many_to_many" in message
+
+
+class TestThreshold:
+    def test_threshold_setting(self, objects, client, logger, monkeypatch):
+        """NPLUS1_THRESHOLD controls how many accesses trigger detection."""
+        monkeypatch.setattr(settings, "NPLUS1_THRESHOLD", 10)
+        client.get("/many_to_many/")  # accesses hobbies on 1 instance
+        assert not logger.log.called
+
+
 def test_middleware_no_process_request():
     middleware = NPlus1Middleware(lambda r: HttpResponse())
     req = HttpRequest()

@@ -6,8 +6,14 @@ from collections import defaultdict
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
+from django.dispatch import Signal
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
+
+# Django signal emitted on every N+1 or unused eager load detection.
+# Receivers get ``sender`` (the notifying object) and ``message`` (a Message instance).
+nplus1_detected = Signal()
 
 # Per-context listener registry
 _listeners: ContextVar[defaultdict[str, list[Callable[..., Any]]]] = ContextVar(

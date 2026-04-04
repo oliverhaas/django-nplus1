@@ -34,17 +34,27 @@ class Message:
     label: str = ""
     formatter: str = ""
 
-    def __init__(self, model: type, field: str) -> None:
+    def __init__(
+        self,
+        model: type,
+        field: str,
+        caller: tuple[str, int, str] | None = None,
+    ) -> None:
         self.model = model
         self.field = field
+        self.caller = caller
 
     @property
     def message(self) -> str:
-        return self.formatter.format(
+        base = self.formatter.format(
             label=self.label,
             model=self.model.__name__,
             field=self.field,
         )
+        if self.caller:
+            filename, lineno, funcname = self.caller
+            return f"{base} at {filename}:{lineno} in {funcname}"
+        return base
 
     def match(self, rules: Sequence[Rule]) -> bool:
         return any(rule.compare(self.label, self.model, self.field) for rule in rules)
@@ -74,12 +84,17 @@ class Listener:
 class LazyListener(Listener):
     loaded: set[str]
     ignore: set[str]
+    counts: defaultdict[tuple[type, str], int]
 
     def setup(self) -> None:
+        from django.conf import settings
+
         from django_nplus1 import signals
 
         self.loaded = set()
         self.ignore = set()
+        self.counts = defaultdict(int)
+        self.threshold = getattr(settings, "NPLUS1_THRESHOLD", 2)
         signals.connect(signals.LOAD, self.handle_load)
         signals.connect(signals.IGNORE_LOAD, self.handle_ignore)
         signals.connect(signals.LAZY_LOAD, self.handle_lazy)
@@ -125,8 +140,14 @@ class LazyListener(Listener):
     ) -> None:
         model, instance, field = parser(args, kwargs, context)
         if instance in self.loaded and instance not in self.ignore:
-            message = LazyLoadMessage(model, field)
-            self.parent.notify(message)
+            key = (model, field)
+            self.counts[key] += 1
+            if self.counts[key] >= self.threshold:
+                from django_nplus1.util import get_caller
+
+                caller = get_caller()
+                message = LazyLoadMessage(model, field, caller=caller)
+                self.parent.notify(message)
 
     def handle_eager(
         self,
@@ -138,8 +159,14 @@ class LazyListener(Listener):
     ) -> None:
         model, field, keys, _key = parser(args, kwargs, context)
         if len(keys) == 1 and keys[0] in self.loaded and keys[0] not in self.ignore:
-            message = LazyLoadMessage(model, field)
-            self.parent.notify(message)
+            key = (model, field)
+            self.counts[key] += 1
+            if self.counts[key] >= self.threshold:
+                from django_nplus1.util import get_caller
+
+                caller = get_caller()
+                message = LazyLoadMessage(model, field, caller=caller)
+                self.parent.notify(message)
 
 
 class EagerListener(Listener):
