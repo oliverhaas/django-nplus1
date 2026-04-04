@@ -400,7 +400,6 @@ def _check_parent_chain(self: Any, instance: Any) -> Any:
         # Field is not loaded - Django will fetch it from DB
         signals.send(
             signals.LAZY_LOAD,
-            sender=get_worker(),
             args=(self, instance),
             kwargs={},
             ret=ret,
