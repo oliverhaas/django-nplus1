@@ -84,12 +84,17 @@ class Listener:
 class LazyListener(Listener):
     loaded: set[str]
     ignore: set[str]
+    counts: defaultdict[tuple[type, str], int]
 
     def setup(self) -> None:
+        from django.conf import settings
+
         from django_nplus1 import signals
 
         self.loaded = set()
         self.ignore = set()
+        self.counts = defaultdict(int)
+        self.threshold = getattr(settings, "NPLUS1_THRESHOLD", 2)
         signals.connect(signals.LOAD, self.handle_load, sender=signals.get_worker())
         signals.connect(signals.IGNORE_LOAD, self.handle_ignore, sender=signals.get_worker())
         signals.connect(signals.LAZY_LOAD, self.handle_lazy, sender=signals.get_worker())
@@ -135,11 +140,14 @@ class LazyListener(Listener):
     ) -> None:
         model, instance, field = parser(args, kwargs, context)
         if instance in self.loaded and instance not in self.ignore:
-            from django_nplus1.util import get_caller
+            key = (model, field)
+            self.counts[key] += 1
+            if self.counts[key] >= self.threshold:
+                from django_nplus1.util import get_caller
 
-            caller = get_caller()
-            message = LazyLoadMessage(model, field, caller=caller)
-            self.parent.notify(message)
+                caller = get_caller()
+                message = LazyLoadMessage(model, field, caller=caller)
+                self.parent.notify(message)
 
     def handle_eager(
         self,
@@ -151,11 +159,14 @@ class LazyListener(Listener):
     ) -> None:
         model, field, keys, _key = parser(args, kwargs, context)
         if len(keys) == 1 and keys[0] in self.loaded and keys[0] not in self.ignore:
-            from django_nplus1.util import get_caller
+            key = (model, field)
+            self.counts[key] += 1
+            if self.counts[key] >= self.threshold:
+                from django_nplus1.util import get_caller
 
-            caller = get_caller()
-            message = LazyLoadMessage(model, field, caller=caller)
-            self.parent.notify(message)
+                caller = get_caller()
+                message = LazyLoadMessage(model, field, caller=caller)
+                self.parent.notify(message)
 
 
 class EagerListener(Listener):
