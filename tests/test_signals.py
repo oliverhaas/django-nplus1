@@ -1,5 +1,3 @@
-from collections import defaultdict
-
 import pytest
 from django.conf import settings
 
@@ -8,13 +6,13 @@ from django_nplus1.detect import LazyLoadMessage
 from django_nplus1.exceptions import NPlus1Error
 from django_nplus1.middleware import NPlus1Middleware
 from django_nplus1.profiler import Profiler
-from django_nplus1.signals import _listeners, nplus1_detected
+from django_nplus1.signals import nplus1_detected, setup_context, teardown_context
 
 
 class TestSendIterationSafety:
     def test_all_callbacks_fire_when_one_disconnects_itself(self):
         """Callbacks that disconnect during send must not cause others to be skipped."""
-        token = _listeners.set(defaultdict(list))
+        token = setup_context()
         calls = []
         signal = "test_iter_safety"
 
@@ -33,7 +31,7 @@ class TestSendIterationSafety:
         finally:
             signals.disconnect(signal, self_removing)
             signals.disconnect(signal, observer)
-            _listeners.reset(token)
+            teardown_context(token)
 
 
 @pytest.mark.django_db

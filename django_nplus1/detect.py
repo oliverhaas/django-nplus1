@@ -164,7 +164,7 @@ class LazyListener(Listener):
                 from django_nplus1.util import get_stack
 
                 self.call_stacks[key].append(get_stack())
-            if self.counts[key] >= self.threshold:
+            if self.counts[key] == self.threshold:
                 if self.show_all_callers:
                     message = LazyLoadMessage(model, field, callers=self.call_stacks[key])
                 else:
@@ -190,7 +190,7 @@ class LazyListener(Listener):
                 from django_nplus1.util import get_stack
 
                 self.call_stacks[key].append(get_stack())
-            if self.counts[key] >= self.threshold:
+            if self.counts[key] == self.threshold:
                 if self.show_all_callers:
                     message = LazyLoadMessage(model, field, callers=self.call_stacks[key])
                 else:
@@ -298,7 +298,7 @@ class GetLoopListener(Listener):
         model, caller = parser(args, kwargs, context, ret)
         key = (model, *caller)
         self.counts[key] += 1
-        if self.counts[key] >= self.threshold:
+        if self.counts[key] == self.threshold:
             message = GetLoopMessage(model, "get()", caller=caller)
             self.parent.notify(message)
 

@@ -1,3 +1,5 @@
+import logging
+
 SECRET_KEY = "django-nplus1-test-secret-key"
 
 DEBUG = True
@@ -51,8 +53,6 @@ DATABASES = {
 USE_TZ = False
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
-import logging
 
 NPLUS1_LOG = True
 NPLUS1_LOG_LEVEL = logging.WARNING
