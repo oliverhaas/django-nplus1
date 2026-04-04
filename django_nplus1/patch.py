@@ -147,9 +147,9 @@ def parse_foreign_related_queryset(
 
 
 # Suppress lazy_load signals during prefetch_one_level
-query.prefetch_one_level = signals.designalify(
+query.prefetch_one_level = signals.designalify(  # type: ignore[attr-defined]
     signals.LAZY_LOAD,
-    query.prefetch_one_level,
+    query.prefetch_one_level,  # type: ignore[attr-defined]
 )
 
 
@@ -378,7 +378,7 @@ query.QuerySet._fetch_all = _fetch_all  # type: ignore[method-assign]
 
 
 # Patch RelatedPopulator.__init__ to capture args for eager load parsing
-_original_related_populator_init = query.RelatedPopulator.__init__
+_original_related_populator_init = query.RelatedPopulator.__init__  # type: ignore[attr-defined]
 
 
 def _related_populator_init(self: Any, *args: Any, **kwargs: Any) -> None:
@@ -386,7 +386,7 @@ def _related_populator_init(self: Any, *args: Any, **kwargs: Any) -> None:
     self.__nplus1__ = {"args": args, "kwargs": kwargs}
 
 
-query.RelatedPopulator.__init__ = _related_populator_init  # type: ignore[method-assign]
+query.RelatedPopulator.__init__ = _related_populator_init  # type: ignore[attr-defined]
 
 
 def parse_eager_select(
@@ -404,9 +404,9 @@ def parse_eager_select(
 
 
 # Emit eager_load on populating from select_related
-query.RelatedPopulator.populate = signals.signalify(  # type: ignore[method-assign]
+query.RelatedPopulator.populate = signals.signalify(  # type: ignore[attr-defined]
     signals.EAGER_LOAD,
-    query.RelatedPopulator.populate,
+    query.RelatedPopulator.populate,  # type: ignore[attr-defined]
     parser=parse_eager_select,
 )
 
@@ -424,9 +424,9 @@ def parse_eager_join(
 
 
 # Emit eager_load on populating from prefetch_related
-query.prefetch_one_level = signals.signalify(
+query.prefetch_one_level = signals.signalify(  # type: ignore[attr-defined]
     signals.EAGER_LOAD,
-    query.prefetch_one_level,
+    query.prefetch_one_level,  # type: ignore[attr-defined]
     parser=parse_eager_join,
 )
 
