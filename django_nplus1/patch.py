@@ -178,27 +178,27 @@ _original_get = query.QuerySet.get
 
 
 def _is_descriptor_call() -> bool:
-    """Check if .get() was called from Django's related descriptor machinery."""
+    """Check if .get() was called from Django's related descriptor machinery.
+
+    Walk from the caller of _get upward. If we reach a Django descriptor
+    frame before hitting user code, this is an internal .get() call.
+    """
     import sys
 
     from django_nplus1.util import _is_internal_frame
 
-    # Walk from the caller of _get upward. If we reach a Django descriptor
-    # frame before hitting user code, this is an internal .get() call.
-    current = sys._getframe(2)  # frame(0)=here, frame(1)=_get, frame(2)=caller of _get
-    fn = current.f_code.co_filename
-    if not _is_internal_frame(fn):
-        return False
-    if "related_descriptors" in fn or "related.py" in fn:
-        return True
-    current = current.f_back
-    while current is not None:
-        fn = current.f_code.co_filename
+    # frame(0)=here, frame(1)=_get, frame(2)=caller of _get
+    # Start from f_back so we get Optional[FrameType] from the start.
+    start = sys._getframe(1)  # _get
+    frame = start.f_back  # caller of _get
+    del start
+    while frame is not None:
+        fn = frame.f_code.co_filename
         if not _is_internal_frame(fn):
             return False
         if "related_descriptors" in fn or "related.py" in fn:
             return True
-        current = current.f_back
+        frame = frame.f_back
     return False
 
 
