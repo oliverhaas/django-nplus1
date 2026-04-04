@@ -183,17 +183,22 @@ def _is_descriptor_call() -> bool:
 
     from django_nplus1.util import _is_internal_frame
 
-    frame = sys._getframe(2)  # Skip _get and _is_descriptor_call
-    try:
-        while frame is not None:
-            fn = frame.f_code.co_filename
-            if not _is_internal_frame(fn):
-                return False
-            if "related_descriptors" in fn or "related.py" in fn:
-                return True
-            frame = frame.f_back
-    finally:
-        del frame
+    # Walk from the caller of _get upward. If we reach a Django descriptor
+    # frame before hitting user code, this is an internal .get() call.
+    current = sys._getframe(2)  # frame(0)=here, frame(1)=_get, frame(2)=caller of _get
+    fn = current.f_code.co_filename
+    if not _is_internal_frame(fn):
+        return False
+    if "related_descriptors" in fn or "related.py" in fn:
+        return True
+    current = current.f_back
+    while current is not None:
+        fn = current.f_code.co_filename
+        if not _is_internal_frame(fn):
+            return False
+        if "related_descriptors" in fn or "related.py" in fn:
+            return True
+        current = current.f_back
     return False
 
 
