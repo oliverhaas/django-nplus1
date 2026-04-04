@@ -32,10 +32,14 @@ class Profiler:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        for name in list(LISTENERS.keys()):
-            self._detection_listeners.pop(name).teardown()
-        if self._token is not None:
-            teardown_context(self._token)
+        try:
+            for name in list(LISTENERS.keys()):
+                listener = self._detection_listeners.pop(name, None)
+                if listener:
+                    listener.teardown()
+        finally:
+            if self._token is not None:
+                teardown_context(self._token)
 
     def notify(self, message: Message) -> None:
         if not message.match(self.whitelist):

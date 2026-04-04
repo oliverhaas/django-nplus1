@@ -80,7 +80,7 @@ class EagerLoadMessage(Message):
 
 
 class GetLoopMessage(Message):
-    label = "n_plus_one"
+    label = "get_in_loop"
     formatter = "Potential n+1 query detected on `{model}.{field}`"
 
 

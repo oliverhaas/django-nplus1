@@ -58,7 +58,15 @@ class WarningNotifier(Notifier):
                 lineno=lineno,
             )
         else:
-            warnings.warn(message.message, UserWarning, stacklevel=2)
+            # No caller info available (e.g. EagerLoadMessage at teardown).
+            # Use warn_explicit with our own package as source rather than
+            # a misleading stacklevel that points to internal dispatch code.
+            warnings.warn_explicit(
+                message.message,
+                UserWarning,
+                filename="django_nplus1",
+                lineno=0,
+            )
 
 
 class ErrorNotifier(Notifier):

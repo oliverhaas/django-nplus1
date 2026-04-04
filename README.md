@@ -47,7 +47,8 @@ MIDDLEWARE = [
 # Optional
 NPLUS1_RAISE = True           # Raise exceptions instead of logging (recommended for tests)
 NPLUS1_WARN = True            # Emit warnings via warnings.warn_explicit()
-NPLUS1_THRESHOLD = 2          # Number of repeated accesses before detection fires (default: 2)
+NPLUS1_THRESHOLD = 2            # Number of repeated lazy accesses before detection fires (default: 2)
+NPLUS1_GET_THRESHOLD = 2        # Number of repeated .get() calls from same call-site before detection fires (default: 2)
 NPLUS1_SHOW_ALL_CALLERS = True  # Include full stack traces in messages
 ```
 
