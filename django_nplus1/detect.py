@@ -34,17 +34,27 @@ class Message:
     label: str = ""
     formatter: str = ""
 
-    def __init__(self, model: type, field: str) -> None:
+    def __init__(
+        self,
+        model: type,
+        field: str,
+        caller: tuple[str, int, str] | None = None,
+    ) -> None:
         self.model = model
         self.field = field
+        self.caller = caller
 
     @property
     def message(self) -> str:
-        return self.formatter.format(
+        base = self.formatter.format(
             label=self.label,
             model=self.model.__name__,
             field=self.field,
         )
+        if self.caller:
+            filename, lineno, funcname = self.caller
+            return f"{base} at {filename}:{lineno} in {funcname}"
+        return base
 
     def match(self, rules: Sequence[Rule]) -> bool:
         return any(rule.compare(self.label, self.model, self.field) for rule in rules)
@@ -125,7 +135,10 @@ class LazyListener(Listener):
     ) -> None:
         model, instance, field = parser(args, kwargs, context)
         if instance in self.loaded and instance not in self.ignore:
-            message = LazyLoadMessage(model, field)
+            from django_nplus1.util import get_caller
+
+            caller = get_caller()
+            message = LazyLoadMessage(model, field, caller=caller)
             self.parent.notify(message)
 
     def handle_eager(
@@ -138,7 +151,10 @@ class LazyListener(Listener):
     ) -> None:
         model, field, keys, _key = parser(args, kwargs, context)
         if len(keys) == 1 and keys[0] in self.loaded and keys[0] not in self.ignore:
-            message = LazyLoadMessage(model, field)
+            from django_nplus1.util import get_caller
+
+            caller = get_caller()
+            message = LazyLoadMessage(model, field, caller=caller)
             self.parent.notify(message)
 
 
