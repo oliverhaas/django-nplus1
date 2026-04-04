@@ -59,3 +59,4 @@ NPLUS1_LOG_LEVEL = logging.WARNING
 NPLUS1_LOGGER = logging.getLogger("django_nplus1")
 NPLUS1_WHITELIST: list[dict[str, str]] = []
 NPLUS1_THRESHOLD = 1
+NPLUS1_SHOW_ALL_CALLERS = False

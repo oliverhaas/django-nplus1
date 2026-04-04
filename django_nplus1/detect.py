@@ -39,10 +39,12 @@ class Message:
         model: type,
         field: str,
         caller: tuple[str, int, str] | None = None,
+        callers: list[list[tuple[str, int, str]]] | None = None,
     ) -> None:
         self.model = model
         self.field = field
         self.caller = caller
+        self.callers = callers
 
     @property
     def message(self) -> str:
@@ -51,6 +53,13 @@ class Message:
             model=self.model.__name__,
             field=self.field,
         )
+        if self.callers:
+            parts = [base, " with calls:"]
+            for i, stack in enumerate(self.callers, 1):
+                parts.append(f"\nCALL {i}:")
+                for fn, lineno, funcname in stack:
+                    parts.append(f"\n  {fn}:{lineno} in {funcname}")
+            return "".join(parts)
         if self.caller:
             filename, lineno, funcname = self.caller
             return f"{base} at {filename}:{lineno} in {funcname}"
@@ -85,6 +94,8 @@ class LazyListener(Listener):
     loaded: set[str]
     ignore: set[str]
     counts: defaultdict[tuple[type, str], int]
+    show_all_callers: bool
+    call_stacks: defaultdict[tuple[type, str], list[list[tuple[str, int, str]]]]
 
     def setup(self) -> None:
         from django.conf import settings
@@ -95,6 +106,8 @@ class LazyListener(Listener):
         self.ignore = set()
         self.counts = defaultdict(int)
         self.threshold = getattr(settings, "NPLUS1_THRESHOLD", 2)
+        self.show_all_callers = getattr(settings, "NPLUS1_SHOW_ALL_CALLERS", False)
+        self.call_stacks = defaultdict(list)
         signals.connect(signals.LOAD, self.handle_load)
         signals.connect(signals.IGNORE_LOAD, self.handle_ignore)
         signals.connect(signals.LAZY_LOAD, self.handle_lazy)
@@ -142,11 +155,18 @@ class LazyListener(Listener):
         if instance in self.loaded and instance not in self.ignore:
             key = (model, field)
             self.counts[key] += 1
-            if self.counts[key] >= self.threshold:
-                from django_nplus1.util import get_caller
+            if self.show_all_callers:
+                from django_nplus1.util import get_stack
 
-                caller = get_caller()
-                message = LazyLoadMessage(model, field, caller=caller)
+                self.call_stacks[key].append(get_stack())
+            if self.counts[key] >= self.threshold:
+                if self.show_all_callers:
+                    message = LazyLoadMessage(model, field, callers=self.call_stacks[key])
+                else:
+                    from django_nplus1.util import get_caller
+
+                    caller = get_caller()
+                    message = LazyLoadMessage(model, field, caller=caller)
                 self.parent.notify(message)
 
     def handle_eager(
@@ -161,11 +181,18 @@ class LazyListener(Listener):
         if len(keys) == 1 and keys[0] in self.loaded and keys[0] not in self.ignore:
             key = (model, field)
             self.counts[key] += 1
-            if self.counts[key] >= self.threshold:
-                from django_nplus1.util import get_caller
+            if self.show_all_callers:
+                from django_nplus1.util import get_stack
 
-                caller = get_caller()
-                message = LazyLoadMessage(model, field, caller=caller)
+                self.call_stacks[key].append(get_stack())
+            if self.counts[key] >= self.threshold:
+                if self.show_all_callers:
+                    message = LazyLoadMessage(model, field, callers=self.call_stacks[key])
+                else:
+                    from django_nplus1.util import get_caller
+
+                    caller = get_caller()
+                    message = LazyLoadMessage(model, field, caller=caller)
                 self.parent.notify(message)
 
 

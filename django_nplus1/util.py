@@ -30,3 +30,21 @@ def get_caller() -> tuple[str, int, str]:
     finally:
         del frame
     return ("<unknown>", 0, "<unknown>")
+
+
+def get_stack() -> list[tuple[str, int, str]]:
+    """
+    Return the current call stack as (filename, lineno, funcname) tuples,
+    excluding site-packages and django_nplus1 internals.
+    """
+    result: list[tuple[str, int, str]] = []
+    frame: types.FrameType | None = sys._getframe(1)
+    try:
+        while frame is not None:
+            fn = frame.f_code.co_filename
+            if not _is_internal_frame(fn):
+                result.append((fn, frame.f_lineno, frame.f_code.co_name))
+            frame = frame.f_back
+    finally:
+        del frame
+    return result
