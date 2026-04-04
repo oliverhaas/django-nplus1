@@ -137,6 +137,25 @@ class TestConfig:
             del settings.NPLUS1_RAISE
             del settings.NPLUS1_ERROR
 
+    def test_warn_on_detection(self, objects, client):
+        """NPLUS1_WARN=True emits UserWarning."""
+        settings.NPLUS1_WARN = True
+        try:
+            with pytest.warns(UserWarning, match="User.hobbies"):
+                client.get("/many_to_many/")
+        finally:
+            del settings.NPLUS1_WARN
+
+    def test_warn_includes_location(self, objects, client):
+        """Warning points to the actual view file location."""
+        settings.NPLUS1_WARN = True
+        try:
+            with pytest.warns(UserWarning, match="User.hobbies") as record:
+                client.get("/many_to_many/")
+            assert "views.py" in record[0].filename
+        finally:
+            del settings.NPLUS1_WARN
+
 
 @pytest.mark.django_db
 class TestPrefetchRelatedObjects:

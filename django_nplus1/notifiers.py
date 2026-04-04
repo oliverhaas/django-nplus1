@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import warnings
 from typing import TYPE_CHECKING, Any
 
 from django_nplus1.exceptions import NPlus1Error
@@ -40,6 +41,26 @@ class LogNotifier(Notifier):
         self.logger.log(self.level, message.message)
 
 
+class WarningNotifier(Notifier):
+    CONFIG_KEY = "NPLUS1_WARN"
+    ENABLED_DEFAULT = False
+
+    def __init__(self, config: Any) -> None:
+        pass
+
+    def notify(self, message: Message) -> None:
+        if message.caller:
+            filename, lineno, _ = message.caller
+            warnings.warn_explicit(
+                message.message,
+                UserWarning,
+                filename=filename,
+                lineno=lineno,
+            )
+        else:
+            warnings.warn(message.message, UserWarning, stacklevel=2)
+
+
 class ErrorNotifier(Notifier):
     CONFIG_KEY = "NPLUS1_RAISE"
     ENABLED_DEFAULT = False
@@ -52,4 +73,8 @@ class ErrorNotifier(Notifier):
 
 
 def init(config: Any) -> list[Notifier]:
-    return [notifier_cls(config) for notifier_cls in (LogNotifier, ErrorNotifier) if notifier_cls.is_enabled(config)]
+    return [
+        notifier_cls(config)
+        for notifier_cls in (LogNotifier, WarningNotifier, ErrorNotifier)
+        if notifier_cls.is_enabled(config)
+    ]
