@@ -74,6 +74,13 @@ class TestProfiler:
             users = list(User.objects.all().select_related("occupation"))
             str(users[0])
 
+    def test_profiler_detects_get_in_loop(self, objects):
+        from testapp.models import User
+
+        with pytest.raises(NPlus1Error, match=r"get\(\)"), Profiler():
+            for user in User.objects.all():
+                User.objects.get(pk=user.pk)
+
 
 @pytest.mark.django_db
 class TestNplus1Fixture:
