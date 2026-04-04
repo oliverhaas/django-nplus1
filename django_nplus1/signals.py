@@ -10,6 +10,7 @@ from django.dispatch import Signal
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
+    from contextvars import Token
 
 # Django signal emitted on every N+1 or unused eager load detection.
 # Receivers get ``sender`` (the notifying object) and ``message`` (a Message instance).
@@ -94,6 +95,16 @@ def suppress(signal_name: str) -> Generator[None]:
         yield
     finally:
         registry[signal_name] = saved
+
+
+def setup_context() -> Token[defaultdict[str, list[Callable[..., Any]]]]:
+    """Create a fresh listener registry for the current context. Returns a token for teardown."""
+    return _listeners.set(defaultdict(list))
+
+
+def teardown_context(token: Token[defaultdict[str, list[Callable[..., Any]]]]) -> None:
+    """Reset the listener registry to the state before setup_context."""
+    _listeners.reset(token)
 
 
 # Signal names as constants

@@ -142,6 +142,7 @@ class TestCallerInfo:
         assert ".py:" in message.message
 
 
+@pytest.mark.django_db
 class TestThreshold:
     def test_threshold_suppresses_first_occurrence(self, objects):
         """With threshold=2, first lazy access does not trigger."""

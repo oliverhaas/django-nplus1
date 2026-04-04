@@ -66,11 +66,9 @@ class TestEagerListenerCleanup:
 
     def test_no_stale_handlers_after_teardown(self):
         """After teardown, all signal handlers registered by EagerListener must be removed."""
-        from collections import defaultdict
+        from django_nplus1.signals import _listeners, setup_context, teardown_context
 
-        from django_nplus1.signals import _listeners
-
-        token = _listeners.set(defaultdict(list))
+        token = setup_context()
 
         class FakeParent:
             def notify(self, msg):
@@ -86,4 +84,4 @@ class TestEagerListenerCleanup:
         listener.teardown()
 
         assert len(registry[signals.TOUCH]) == before
-        _listeners.reset(token)
+        teardown_context(token)

@@ -306,7 +306,8 @@ class TestShowAllCallers:
         assert "with calls:" in message
 
 
-def test_middleware_no_process_request():
+def test_middleware_basic_passthrough():
+    """Middleware passes through requests without error when no detection triggers."""
     middleware = NPlus1Middleware(lambda r: HttpResponse())
     req = HttpRequest()
     resp = middleware(req)

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import fnmatch
-from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
 from asgiref.sync import iscoroutinefunction
@@ -12,7 +11,7 @@ from django.utils.decorators import sync_and_async_middleware
 from django_nplus1 import notifiers
 from django_nplus1.detect import LISTENERS, Message, Rule
 from django_nplus1.exceptions import NPlus1Error
-from django_nplus1.signals import _listeners, nplus1_detected
+from django_nplus1.signals import nplus1_detected, setup_context, teardown_context
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -34,7 +33,7 @@ def _validate_whitelist(whitelist: list[dict[str, Any]]) -> None:
         key = f"{model._meta.app_label}.{model.__name__}"
         fields = {f.name for f in model._meta.get_fields(include_hidden=True)}
         # Include reverse relation accessor names
-        fields |= {rel.get_accessor_name() for rel in model._meta.related_objects}
+        fields |= {name for rel in model._meta.related_objects if (name := rel.get_accessor_name()) is not None}
         registry[key] = fields
 
     for entry in whitelist:
@@ -78,11 +77,17 @@ class DjangoRule(Rule):
         return False
 
 
+_last_validated_whitelist_id: int | None = None
+
+
 def _load_config() -> tuple[list[notifiers.Notifier], list[DjangoRule]]:
     """Load notifiers and whitelist from settings."""
+    global _last_validated_whitelist_id  # noqa: PLW0603
     nots = notifiers.init(settings)
     whitelist_data = getattr(settings, "NPLUS1_WHITELIST", [])
-    _validate_whitelist(whitelist_data)
+    if id(whitelist_data) != _last_validated_whitelist_id:
+        _validate_whitelist(whitelist_data)
+        _last_validated_whitelist_id = id(whitelist_data)
     whitelist = [DjangoRule(**item) for item in whitelist_data]
     return nots, whitelist
 
@@ -118,7 +123,7 @@ def NPlus1Middleware(get_response: Any) -> Any:  # noqa: N802
     if iscoroutinefunction(get_response):
 
         async def async_middleware(request: HttpRequest) -> HttpResponse:
-            token = _listeners.set(defaultdict(list))
+            token = setup_context()
             nots, whitelist = _load_config()
             ctx = _DetectionContext(nots, whitelist)
             ctx.setup()
@@ -126,13 +131,13 @@ def NPlus1Middleware(get_response: Any) -> Any:  # noqa: N802
                 response = await get_response(request)
             finally:
                 ctx.teardown()
-                _listeners.reset(token)
+                teardown_context(token)
             return response
 
         return async_middleware
 
     def sync_middleware(request: HttpRequest) -> HttpResponse:
-        token = _listeners.set(defaultdict(list))
+        token = setup_context()
         nots, whitelist = _load_config()
         ctx = _DetectionContext(nots, whitelist)
         ctx.setup()
@@ -140,7 +145,7 @@ def NPlus1Middleware(get_response: Any) -> Any:  # noqa: N802
             response = get_response(request)
         finally:
             ctx.teardown()
-            _listeners.reset(token)
+            teardown_context(token)
         return response
 
     return sync_middleware

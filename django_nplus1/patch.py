@@ -147,9 +147,9 @@ def parse_foreign_related_queryset(
 
 
 # Suppress lazy_load signals during prefetch_one_level
-query.prefetch_one_level = signals.designalify(  # type: ignore[attr-defined]
+query.prefetch_one_level = signals.designalify(
     signals.LAZY_LOAD,
-    query.prefetch_one_level,  # type: ignore[attr-defined]
+    query.prefetch_one_level,
 )
 
 
@@ -188,21 +188,27 @@ def _is_descriptor_call() -> bool:
     from django_nplus1.util import _is_internal_frame
 
     # frame(0)=here, frame(1)=_get, frame(2)=caller of _get
-    # Start from f_back so we get Optional[FrameType] from the start.
-    start = sys._getframe(1)  # _get
-    frame = start.f_back  # caller of _get
-    del start
-    while frame is not None:
-        fn = frame.f_code.co_filename
-        if not _is_internal_frame(fn):
-            return False
-        if "related_descriptors" in fn or "related.py" in fn:
-            return True
-        frame = frame.f_back
+    frame = sys._getframe(1).f_back  # caller of _get
+    try:
+        while frame is not None:
+            fn = frame.f_code.co_filename
+            if not _is_internal_frame(fn):
+                return False
+            if "related_descriptors" in fn or "related.py" in fn:
+                return True
+            frame = frame.f_back
+    finally:
+        del frame
     return False
 
 
 def _get(self: Any, *args: Any, **kwargs: Any) -> Any:
+    # Short-circuit when no detection context is active (zero overhead in production)
+    try:
+        signals._listeners.get()
+    except LookupError:
+        return _original_get(self, *args, **kwargs)
+
     from django_nplus1.util import get_caller
 
     direct_call = not _is_descriptor_call()
@@ -372,7 +378,7 @@ query.QuerySet._fetch_all = _fetch_all  # type: ignore[method-assign]
 
 
 # Patch RelatedPopulator.__init__ to capture args for eager load parsing
-_original_related_populator_init = query.RelatedPopulator.__init__  # type: ignore[attr-defined]
+_original_related_populator_init = query.RelatedPopulator.__init__
 
 
 def _related_populator_init(self: Any, *args: Any, **kwargs: Any) -> None:
@@ -380,7 +386,7 @@ def _related_populator_init(self: Any, *args: Any, **kwargs: Any) -> None:
     self.__nplus1__ = {"args": args, "kwargs": kwargs}
 
 
-query.RelatedPopulator.__init__ = _related_populator_init  # type: ignore[attr-defined]
+query.RelatedPopulator.__init__ = _related_populator_init  # type: ignore[method-assign]
 
 
 def parse_eager_select(
@@ -398,9 +404,9 @@ def parse_eager_select(
 
 
 # Emit eager_load on populating from select_related
-query.RelatedPopulator.populate = signals.signalify(  # type: ignore[attr-defined]
+query.RelatedPopulator.populate = signals.signalify(  # type: ignore[method-assign]
     signals.EAGER_LOAD,
-    query.RelatedPopulator.populate,  # type: ignore[attr-defined]
+    query.RelatedPopulator.populate,
     parser=parse_eager_select,
 )
 
@@ -418,9 +424,9 @@ def parse_eager_join(
 
 
 # Emit eager_load on populating from prefetch_related
-query.prefetch_one_level = signals.signalify(  # type: ignore[attr-defined]
+query.prefetch_one_level = signals.signalify(
     signals.EAGER_LOAD,
-    query.prefetch_one_level,  # type: ignore[attr-defined]
+    query.prefetch_one_level,
     parser=parse_eager_join,
 )
 
