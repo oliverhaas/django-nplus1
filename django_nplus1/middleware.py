@@ -10,6 +10,7 @@ from django.conf import settings
 from django_nplus1 import notifiers
 from django_nplus1.detect import LISTENERS, Message, Rule
 from django_nplus1.exceptions import NPlus1Error
+from django_nplus1.signals import nplus1_detected
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -105,5 +106,6 @@ class NPlus1Middleware:
 
     def notify(self, message: Message) -> None:
         if not message.match(self._whitelist):
+            nplus1_detected.send(sender=self.__class__, message=message)
             for notifier in self._notifiers:
                 notifier.notify(message)
