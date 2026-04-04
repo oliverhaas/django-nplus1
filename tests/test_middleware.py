@@ -208,6 +208,17 @@ class TestWhitelistValidation:
         assert not logger.log.called
 
 
+@pytest.mark.django_db
+class TestCallerInfo:
+    def test_log_includes_caller_info(self, objects, client, logger):
+        """Log message includes the file and function that caused the N+1."""
+        client.get("/many_to_many/")
+        args = logger.log.call_args[0]
+        message = args[1]
+        assert "views.py:" in message
+        assert "in many_to_many" in message
+
+
 def test_middleware_no_process_request():
     middleware = NPlus1Middleware(lambda r: HttpResponse())
     req = HttpRequest()

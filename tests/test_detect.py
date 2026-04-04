@@ -98,5 +98,18 @@ class TestManyToMany:
 
 
 @pytest.mark.django_db
+class TestCallerInfo:
+    def test_lazy_load_message_includes_caller(self, objects, lazy_listener):
+        """LazyLoadMessage includes filename, line, and function."""
+        users = list(models.User.objects.all())
+        list(users[0].hobbies.all())  # triggers lazy load
+        assert lazy_listener.parent.notify.called
+        message = lazy_listener.parent.notify.call_args[0][0]
+        # The message should contain caller info
+        assert "test_lazy_load_message_includes_caller" in message.message
+        assert ".py:" in message.message
+
+
+@pytest.mark.django_db
 def test_values(objects, lazy_listener):
     list(models.User.objects.values("id"))
