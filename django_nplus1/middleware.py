@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import fnmatch
-import weakref
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
+from asgiref.sync import iscoroutinefunction
 from django.apps import apps
 from django.conf import settings
+from django.utils.decorators import sync_and_async_middleware
 
 from django_nplus1 import notifiers
 from django_nplus1.detect import LISTENERS, Message, Rule
@@ -77,40 +78,69 @@ class DjangoRule(Rule):
         return False
 
 
-class NPlus1Middleware:
-    def __init__(self, get_response: Any) -> None:
-        self.get_response = get_response
-        self._request_listeners: weakref.WeakKeyDictionary[HttpRequest, dict[str, Listener]] = (
-            weakref.WeakKeyDictionary()
-        )
-        self._notifiers: list[notifiers.Notifier] = []
-        self._whitelist: list[DjangoRule] = []
+def _load_config() -> tuple[list[notifiers.Notifier], list[DjangoRule]]:
+    """Load notifiers and whitelist from settings."""
+    nots = notifiers.init(settings)
+    whitelist_data = getattr(settings, "NPLUS1_WHITELIST", [])
+    _validate_whitelist(whitelist_data)
+    whitelist = [DjangoRule(**item) for item in whitelist_data]
+    return nots, whitelist
 
-    def _load_config(self) -> None:
-        self._notifiers = notifiers.init(settings)
-        whitelist_data = getattr(settings, "NPLUS1_WHITELIST", [])
-        _validate_whitelist(whitelist_data)
-        self._whitelist = [DjangoRule(**item) for item in whitelist_data]
 
-    def __call__(self, request: HttpRequest) -> HttpResponse:
-        token = _listeners.set(defaultdict(list))
-        self._load_config()
-        self._request_listeners[request] = {}
+class _DetectionContext:
+    """Manages listener setup/teardown for a single request scope."""
+
+    def __init__(self, nots: list[notifiers.Notifier], whitelist: list[DjangoRule]) -> None:
+        self.nots = nots
+        self.whitelist = whitelist
+        self.listeners: dict[str, Listener] = {}
+
+    def setup(self) -> None:
         for name, listener_type in LISTENERS.items():
-            self._request_listeners[request][name] = listener_type(self)
-            self._request_listeners[request][name].setup()
+            self.listeners[name] = listener_type(self)
+            self.listeners[name].setup()
+
+    def teardown(self) -> None:
+        for name in list(LISTENERS.keys()):
+            listener = self.listeners.pop(name, None)
+            if listener:
+                listener.teardown()
+
+    def notify(self, message: Message) -> None:
+        if not message.match(self.whitelist):
+            nplus1_detected.send(sender=NPlus1Middleware, message=message)
+            for notifier in self.nots:
+                notifier.notify(message)
+
+
+@sync_and_async_middleware
+def NPlus1Middleware(get_response: Any) -> Any:  # noqa: N802
+    if iscoroutinefunction(get_response):
+
+        async def async_middleware(request: HttpRequest) -> HttpResponse:
+            token = _listeners.set(defaultdict(list))
+            nots, whitelist = _load_config()
+            ctx = _DetectionContext(nots, whitelist)
+            ctx.setup()
+            try:
+                response = await get_response(request)
+            finally:
+                ctx.teardown()
+                _listeners.reset(token)
+            return response
+
+        return async_middleware
+
+    def sync_middleware(request: HttpRequest) -> HttpResponse:
+        token = _listeners.set(defaultdict(list))
+        nots, whitelist = _load_config()
+        ctx = _DetectionContext(nots, whitelist)
+        ctx.setup()
         try:
-            response = self.get_response(request)
+            response = get_response(request)
         finally:
-            for name in list(LISTENERS.keys()):
-                listener = self._request_listeners.get(request, {}).pop(name, None)
-                if listener:
-                    listener.teardown()
+            ctx.teardown()
             _listeners.reset(token)
         return response
 
-    def notify(self, message: Message) -> None:
-        if not message.match(self._whitelist):
-            nplus1_detected.send(sender=self.__class__, message=message)
-            for notifier in self._notifiers:
-                notifier.notify(message)
+    return sync_middleware
