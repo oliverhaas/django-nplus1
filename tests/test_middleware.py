@@ -218,6 +218,13 @@ class TestCallerInfo:
         assert "views.py:" in message
         assert "in many_to_many" in message
 
+class TestThreshold:
+    def test_threshold_setting(self, objects, client, logger, monkeypatch):
+        """NPLUS1_THRESHOLD controls how many accesses trigger detection."""
+        monkeypatch.setattr(settings, "NPLUS1_THRESHOLD", 10)
+        client.get("/many_to_many/")  # accesses hobbies on 1 instance
+        assert not logger.log.called
+
 
 def test_middleware_no_process_request():
     middleware = NPlus1Middleware(lambda r: HttpResponse())
