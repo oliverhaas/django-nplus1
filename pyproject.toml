@@ -109,6 +109,7 @@ suppress-none-returning = true
   "PT012",  # Multi-statement pytest.raises needed for N+1 trigger patterns
   "PT013",  # pytest import style is preference
   "PT018",  # Compound assertions okay in tests
+  "RUF012", # Django migrations use mutable class attributes by design
   "RUF043", # Regex metacharacters in match= are intentional (dot in model.field)
   "S101",   # assert in tests
   "S105",   # Hardcoded passwords in test settings

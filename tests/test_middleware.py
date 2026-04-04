@@ -209,6 +209,19 @@ class TestWhitelistValidation:
 
 
 @pytest.mark.django_db
+class TestDeferred:
+    def test_deferred_field_detected(self, objects, client, logger):
+        client.get("/deferred_field/")
+        assert len(logger.log.call_args_list) == 1
+        args = logger.log.call_args[0]
+        assert "User.name" in args[1]
+
+    def test_deferred_field_first_not_detected(self, objects, client, logger):
+        client.get("/deferred_field_first/")
+        assert not logger.log.called
+
+
+@pytest.mark.django_db
 class TestCallerInfo:
     def test_log_includes_caller_info(self, objects, client, logger):
         """Log message includes the file and function that caused the N+1."""
