@@ -130,8 +130,10 @@ def NPlus1Middleware(get_response: Any) -> Any:  # noqa: N802
             try:
                 response = await get_response(request)
             finally:
-                ctx.teardown()
-                teardown_context(token)
+                try:
+                    ctx.teardown()
+                finally:
+                    teardown_context(token)
             return response
 
         return async_middleware
@@ -144,8 +146,10 @@ def NPlus1Middleware(get_response: Any) -> Any:  # noqa: N802
         try:
             response = get_response(request)
         finally:
-            ctx.teardown()
-            teardown_context(token)
+            try:
+                ctx.teardown()
+            finally:
+                teardown_context(token)
         return response
 
     return sync_middleware
