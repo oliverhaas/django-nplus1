@@ -80,18 +80,18 @@ class LazyListener(Listener):
 
         self.loaded = set()
         self.ignore = set()
-        signals.connect(signals.LOAD, self.handle_load, sender=signals.get_worker())
-        signals.connect(signals.IGNORE_LOAD, self.handle_ignore, sender=signals.get_worker())
-        signals.connect(signals.LAZY_LOAD, self.handle_lazy, sender=signals.get_worker())
-        signals.connect(signals.EAGER_LOAD, self.handle_eager, sender=signals.get_worker())
+        signals.connect(signals.LOAD, self.handle_load)
+        signals.connect(signals.IGNORE_LOAD, self.handle_ignore)
+        signals.connect(signals.LAZY_LOAD, self.handle_lazy)
+        signals.connect(signals.EAGER_LOAD, self.handle_eager)
 
     def teardown(self) -> None:
         from django_nplus1 import signals
 
-        signals.disconnect(signals.LOAD, self.handle_load, sender=signals.get_worker())
-        signals.disconnect(signals.IGNORE_LOAD, self.handle_ignore, sender=signals.get_worker())
-        signals.disconnect(signals.LAZY_LOAD, self.handle_lazy, sender=signals.get_worker())
-        signals.disconnect(signals.EAGER_LOAD, self.handle_eager, sender=signals.get_worker())
+        signals.disconnect(signals.LOAD, self.handle_load)
+        signals.disconnect(signals.IGNORE_LOAD, self.handle_ignore)
+        signals.disconnect(signals.LAZY_LOAD, self.handle_lazy)
+        signals.disconnect(signals.EAGER_LOAD, self.handle_eager)
 
     def handle_load(
         self,
@@ -151,15 +151,15 @@ class EagerListener(Listener):
 
         self.tracker = EagerTracker()
         self.touched = []
-        signals.connect(signals.EAGER_LOAD, self.handle_eager, sender=signals.get_worker())
-        signals.connect(signals.TOUCH, self.handle_touch, sender=signals.get_worker())
+        signals.connect(signals.EAGER_LOAD, self.handle_eager)
+        signals.connect(signals.TOUCH, self.handle_touch)
 
     def teardown(self) -> None:
         from django_nplus1 import signals
 
         self.log_eager()
-        signals.disconnect(signals.EAGER_LOAD, self.handle_eager, sender=signals.get_worker())
-        signals.disconnect(signals.TOUCH, self.handle_touch, sender=signals.get_worker())
+        signals.disconnect(signals.EAGER_LOAD, self.handle_eager)
+        signals.disconnect(signals.TOUCH, self.handle_touch)
 
     def handle_eager(
         self,

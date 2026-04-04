@@ -3,7 +3,6 @@ from __future__ import annotations
 import copy
 import functools
 import importlib
-import threading
 from typing import Any
 
 from django.db.models import Model, query
@@ -15,10 +14,6 @@ from django.db.models.fields.related_descriptors import (
 )
 
 from django_nplus1 import signals
-
-
-def get_worker() -> str:
-    return str(threading.current_thread().ident)
 
 
 def to_key(instance: Model) -> str:
@@ -57,7 +52,6 @@ def signalify_fetch_all(queryset: Any, parser: Any = None, **context: Any) -> An
         if queryset._result_cache is None:
             signals.send(
                 signals.LAZY_LOAD,
-                sender=get_worker(),
                 args=args,
                 kwargs=kwargs,
                 ret=None,
@@ -92,7 +86,9 @@ def parse_related(context: dict[str, Any]) -> tuple[type[Model], str]:
 
 
 def parse_related_parts(
-    model: type[Model], related_name: str | None, related_model: type[Model]
+    model: type[Model],
+    related_name: str | None,
+    related_model: type[Model],
 ) -> tuple[type[Model], str]:
     return (
         model,
@@ -297,7 +293,6 @@ def _fetch_all(self: Any) -> None:
     if self._prefetch_done:
         signals.send(
             signals.TOUCH,
-            sender=get_worker(),
             args=(self,),
             parser=parse_fetch_all,
         )
@@ -305,7 +300,6 @@ def _fetch_all(self: Any) -> None:
     signal = signals.IGNORE_LOAD if is_single(self.query.low_mark, self.query.high_mark) else signals.LOAD
     signals.send(
         signal,
-        sender=get_worker(),
         args=(self,),
         ret=self._result_cache,
         parser=parse_load,
@@ -376,7 +370,6 @@ def _getitem_queryset(self: Any, index: Any) -> Any:
     if self._prefetch_done:
         signals.send(
             signals.TOUCH,
-            sender=get_worker(),
             args=(self,),
             parser=parse_fetch_all,
         )
