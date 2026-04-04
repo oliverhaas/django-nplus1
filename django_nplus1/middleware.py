@@ -117,7 +117,7 @@ class _DetectionContext:
 def NPlus1Middleware(get_response: Any) -> Any:  # noqa: N802
     if iscoroutinefunction(get_response):
 
-        async def middleware(request: HttpRequest) -> HttpResponse:
+        async def async_middleware(request: HttpRequest) -> HttpResponse:
             token = _listeners.set(defaultdict(list))
             nots, whitelist = _load_config()
             ctx = _DetectionContext(nots, whitelist)
@@ -129,9 +129,9 @@ def NPlus1Middleware(get_response: Any) -> Any:  # noqa: N802
                 _listeners.reset(token)
             return response
 
-        return middleware
+        return async_middleware
 
-    def middleware(request: HttpRequest) -> HttpResponse:
+    def sync_middleware(request: HttpRequest) -> HttpResponse:
         token = _listeners.set(defaultdict(list))
         nots, whitelist = _load_config()
         ctx = _DetectionContext(nots, whitelist)
@@ -143,4 +143,4 @@ def NPlus1Middleware(get_response: Any) -> Any:  # noqa: N802
             _listeners.reset(token)
         return response
 
-    return middleware
+    return sync_middleware
