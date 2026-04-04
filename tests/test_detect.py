@@ -102,6 +102,34 @@ class TestManyToMany:
 
 
 @pytest.mark.django_db
+class TestDeferred:
+    def test_only_triggers_lazy_load(self, objects, calls):
+        """Accessing a deferred field on a bulk-loaded instance emits LAZY_LOAD."""
+        users = list(models.User.objects.only("id"))
+        users[0].name  # deferred field access
+        assert len(calls) == 1
+        assert calls[0] == (models.User, f"User:{users[0].pk}", "name")
+
+    def test_only_no_signal_for_loaded_field(self, objects, calls):
+        """Accessing a loaded field does NOT emit LAZY_LOAD."""
+        users = list(models.User.objects.only("id", "name"))
+        users[0].name
+        assert len(calls) == 0
+
+    def test_defer_triggers_lazy_load(self, objects, calls):
+        """Accessing a deferred field via .defer() emits LAZY_LOAD."""
+        users = list(models.User.objects.defer("name"))
+        users[0].name
+        assert len(calls) == 1
+
+    def test_deferred_single_instance_no_detection(self, objects, lazy_listener):
+        """Deferred field on .first()/.get() should NOT be flagged as N+1."""
+        user = models.User.objects.only("id").first()
+        user.name  # should not raise - single instance
+        lazy_listener.parent.notify.assert_not_called()
+
+
+@pytest.mark.django_db
 class TestCallerInfo:
     def test_lazy_load_message_includes_caller(self, objects, lazy_listener):
         """LazyLoadMessage includes filename, line, and function."""
@@ -112,6 +140,7 @@ class TestCallerInfo:
         # The message should contain caller info
         assert "test_lazy_load_message_includes_caller" in message.message
         assert ".py:" in message.message
+
 
 class TestThreshold:
     def test_threshold_suppresses_first_occurrence(self, objects):

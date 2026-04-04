@@ -13,6 +13,7 @@ from django.db.models.fields.related_descriptors import (
     create_forward_many_to_many_manager,
     create_reverse_many_to_one_manager,
 )
+from django.db.models.query_utils import DeferredAttribute
 
 from django_nplus1 import signals
 
@@ -92,7 +93,9 @@ def parse_related(context: dict[str, Any]) -> tuple[type[Model], str]:
 
 
 def parse_related_parts(
-    model: type[Model], related_name: str | None, related_model: type[Model]
+    model: type[Model],
+    related_name: str | None,
+    related_model: type[Model],
 ) -> tuple[type[Model], str]:
     return (
         model,
@@ -384,3 +387,36 @@ def _getitem_queryset(self: Any, index: Any) -> Any:
 
 
 query.QuerySet.__getitem__ = _getitem_queryset  # type: ignore[method-assign]
+
+
+def parse_deferred_attribute(
+    args: Any,
+    kwargs: Any,
+    context: dict[str, Any],
+) -> tuple[type[Model], str, str]:
+    self_attr = args[0]  # the DeferredAttribute instance
+    instance = args[1]  # the model instance
+    return instance.__class__, to_key(instance), self_attr.field.name
+
+
+# Patch DeferredAttribute._check_parent_chain to emit LAZY_LOAD
+_original_check_parent_chain = DeferredAttribute._check_parent_chain
+
+
+def _check_parent_chain(self: Any, instance: Any) -> Any:
+    ret = _original_check_parent_chain(self, instance)
+    if ret is None:
+        # Field is not loaded - Django will fetch it from DB
+        signals.send(
+            signals.LAZY_LOAD,
+            sender=get_worker(),
+            args=(self, instance),
+            kwargs={},
+            ret=ret,
+            context={},
+            parser=parse_deferred_attribute,
+        )
+    return ret
+
+
+DeferredAttribute._check_parent_chain = _check_parent_chain  # type: ignore[method-assign]

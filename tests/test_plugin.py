@@ -60,6 +60,13 @@ class TestProfiler:
             occupations = list(Occupation.objects.all())
             occupations[0].user
 
+    def test_profiler_detects_deferred_field(self, objects):
+        from testapp.models import User
+
+        with pytest.raises(NPlus1Error, match="User.name"), Profiler():
+            users = list(User.objects.only("id"))
+            users[0].name
+
     def test_profiler_detects_unused_eager(self, objects):
         from testapp.models import User
 

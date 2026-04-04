@@ -2,6 +2,7 @@ from django.db import models
 
 
 class User(models.Model):
+    name = models.CharField(max_length=100, default="")
     hobbies = models.ManyToManyField("Hobby", related_name="users")
 
     class Meta:

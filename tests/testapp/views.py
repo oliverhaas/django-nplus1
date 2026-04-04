@@ -157,3 +157,13 @@ def prefetch_related_objects_first(request):
     user = models.User.objects.first()
     prefetch_related_objects([user], "hobbies")
     return HttpResponse(user.hobbies.all())
+
+
+def deferred_field(request):
+    users = list(models.User.objects.only("id"))
+    return HttpResponse(users[0].name)
+
+
+def deferred_field_first(request):
+    user = models.User.objects.only("id").first()
+    return HttpResponse(user.name)
