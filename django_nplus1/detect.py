@@ -79,6 +79,11 @@ class EagerLoadMessage(Message):
     formatter = "Potential unnecessary eager load detected on `{model}.{field}`"
 
 
+class GetLoopMessage(Message):
+    label = "n_plus_one"
+    formatter = "Potential n+1 query detected on `{model}.{field}`"
+
+
 class Listener:
     def __init__(self, parent: Any) -> None:
         self.parent = parent
@@ -263,7 +268,43 @@ class EagerTracker:
         return [(model, field) for (model, field), group in self.data.items() if group]
 
 
+class GetLoopListener(Listener):
+    """Detects Model.objects.get() called repeatedly from the same call-site."""
+
+    counts: defaultdict[tuple[Any, ...], int]
+
+    def setup(self) -> None:
+        from django.conf import settings
+
+        from django_nplus1 import signals
+
+        self.counts = defaultdict(int)
+        self.threshold = getattr(settings, "NPLUS1_GET_THRESHOLD", 2)
+        signals.connect(signals.GET_CALL, self.handle_get)
+
+    def teardown(self) -> None:
+        from django_nplus1 import signals
+
+        signals.disconnect(signals.GET_CALL, self.handle_get)
+
+    def handle_get(
+        self,
+        args: tuple[Any, ...] | None = None,
+        kwargs: dict[str, Any] | None = None,
+        context: dict[str, Any] | None = None,
+        ret: Any = None,
+        parser: Any = None,
+    ) -> None:
+        model, caller = parser(args, kwargs, context, ret)
+        key = (model, *caller)
+        self.counts[key] += 1
+        if self.counts[key] >= self.threshold:
+            message = GetLoopMessage(model, "get()", caller=caller)
+            self.parent.notify(message)
+
+
 LISTENERS: dict[str, type[Listener]] = {
     "lazy_load": LazyListener,
     "eager_load": EagerListener,
+    "get_loop": GetLoopListener,
 }

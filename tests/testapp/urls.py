@@ -30,4 +30,7 @@ urlpatterns = [
     path("prefetch_related_objects_first/", views.prefetch_related_objects_first),
     path("deferred_field/", views.deferred_field),
     path("deferred_field_first/", views.deferred_field_first),
+    path("get_in_loop/", views.get_in_loop),
+    path("get_single/", views.get_single),
+    path("get_different_lines/", views.get_different_lines),
 ]
