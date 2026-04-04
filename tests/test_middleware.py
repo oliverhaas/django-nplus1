@@ -251,6 +251,23 @@ class TestCallerInfo:
         assert "in many_to_many" in message
 
 
+@pytest.mark.django_db
+class TestGetInLoop:
+    def test_get_in_loop_detected(self, objects, client, logger):
+        client.get("/get_in_loop/")
+        messages = [call[0][1] for call in logger.log.call_args_list]
+        assert any("get()" in m for m in messages)
+
+    def test_get_single_not_detected(self, objects, client, logger):
+        client.get("/get_single/")
+        assert not logger.log.called
+
+    def test_get_different_lines_not_detected(self, objects, client, logger):
+        client.get("/get_different_lines/")
+        messages = [call[0][1] for call in logger.log.call_args_list]
+        assert not any("get()" in m for m in messages)
+
+
 class TestThreshold:
     def test_threshold_setting(self, objects, client, logger, monkeypatch):
         """NPLUS1_THRESHOLD controls how many accesses trigger detection."""

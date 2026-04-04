@@ -167,3 +167,24 @@ def deferred_field(request):
 def deferred_field_first(request):
     user = models.User.objects.only("id").first()
     return HttpResponse(user.name)
+
+
+def get_in_loop(request):
+    """Classic .get() in a loop -- should be detected."""
+    pks = list(models.User.objects.values_list("pk", flat=True))
+    for pk in pks:
+        models.User.objects.get(pk=pk)
+    return HttpResponse("ok")
+
+
+def get_single(request):
+    """Single .get() call -- should NOT be detected."""
+    user = models.User.objects.get(pk=1)
+    return HttpResponse(user.pk)
+
+
+def get_different_lines(request):
+    """Multiple .get() calls on different lines -- should NOT be detected."""
+    user1 = models.User.objects.get(pk=1)
+    user2 = models.User.objects.get(pk=2)
+    return HttpResponse(f"{user1.pk},{user2.pk}")

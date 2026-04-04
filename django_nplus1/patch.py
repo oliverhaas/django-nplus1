@@ -162,12 +162,73 @@ def parse_get(
     return [to_key(ret)] if isinstance(ret, Model) else []
 
 
-# Ignore records loaded during `get`
-query.QuerySet.get = signals.signalify(  # type: ignore[method-assign]
-    signals.IGNORE_LOAD,
-    query.QuerySet.get,
-    parser=parse_get,
-)
+def parse_get_call(
+    args: Any,
+    kwargs: Any,
+    context: dict[str, Any],
+    ret: Any,
+) -> tuple[type[Model], tuple[str, int, str]]:
+    qs = args[0]
+    caller = context["caller"]
+    return qs.model, caller
+
+
+# Emit IGNORE_LOAD (so LazyListener ignores the instance) and GET_CALL (for loop detection)
+_original_get = query.QuerySet.get
+
+
+def _is_descriptor_call() -> bool:
+    """Check if .get() was called from Django's related descriptor machinery.
+
+    Walk from the caller of _get upward. If we reach a Django descriptor
+    frame before hitting user code, this is an internal .get() call.
+    """
+    import sys
+
+    from django_nplus1.util import _is_internal_frame
+
+    # frame(0)=here, frame(1)=_get, frame(2)=caller of _get
+    # Start from f_back so we get Optional[FrameType] from the start.
+    start = sys._getframe(1)  # _get
+    frame = start.f_back  # caller of _get
+    del start
+    while frame is not None:
+        fn = frame.f_code.co_filename
+        if not _is_internal_frame(fn):
+            return False
+        if "related_descriptors" in fn or "related.py" in fn:
+            return True
+        frame = frame.f_back
+    return False
+
+
+def _get(self: Any, *args: Any, **kwargs: Any) -> Any:
+    from django_nplus1.util import get_caller
+
+    direct_call = not _is_descriptor_call()
+    caller = get_caller() if direct_call else None
+    ret = _original_get(self, *args, **kwargs)
+    signals.send(
+        signals.IGNORE_LOAD,
+        args=(self,),
+        kwargs=kwargs,
+        ret=ret,
+        context={},
+        parser=parse_get,
+    )
+    if direct_call and caller is not None:
+        signals.send(
+            signals.GET_CALL,
+            args=(self,),
+            kwargs=kwargs,
+            ret=ret,
+            context={"caller": caller},
+            parser=parse_get_call,
+        )
+    return ret
+
+
+query.QuerySet.get = _get  # type: ignore[method-assign]
 
 # Patch descriptor get_queryset methods
 ReverseOneToOneDescriptor.get_queryset = signalify_queryset(  # type: ignore[method-assign]
