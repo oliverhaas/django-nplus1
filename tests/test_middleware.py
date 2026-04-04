@@ -259,6 +259,36 @@ class TestThreshold:
         assert not logger.log.called
 
 
+@pytest.mark.django_db
+class TestShowAllCallers:
+    def test_show_all_callers(self, objects, client, logger, monkeypatch):
+        """NPLUS1_SHOW_ALL_CALLERS includes all call stacks."""
+        monkeypatch.setattr(settings, "NPLUS1_SHOW_ALL_CALLERS", True)
+        client.get("/one_to_one/")
+        args = logger.log.call_args[0]
+        message = args[1]
+        assert "CALL 1:" in message
+        assert "views.py:" in message
+
+    def test_show_all_callers_disabled(self, objects, client, logger, monkeypatch):
+        """Normal mode still shows single caller without CALL labels."""
+        monkeypatch.setattr(settings, "NPLUS1_SHOW_ALL_CALLERS", False)
+        client.get("/one_to_one/")
+        args = logger.log.call_args[0]
+        message = args[1]
+        assert "CALL 1:" not in message
+        assert "views.py:" in message
+
+    def test_show_all_callers_many_to_many(self, objects, client, logger, monkeypatch):
+        """NPLUS1_SHOW_ALL_CALLERS works with many-to-many lazy loads."""
+        monkeypatch.setattr(settings, "NPLUS1_SHOW_ALL_CALLERS", True)
+        client.get("/many_to_many/")
+        args = logger.log.call_args[0]
+        message = args[1]
+        assert "CALL 1:" in message
+        assert "with calls:" in message
+
+
 def test_middleware_no_process_request():
     middleware = NPlus1Middleware(lambda r: HttpResponse())
     req = HttpRequest()
