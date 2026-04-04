@@ -400,7 +400,7 @@ def parse_deferred_attribute(
 
 
 # Patch DeferredAttribute._check_parent_chain to emit LAZY_LOAD
-_original_check_parent_chain = DeferredAttribute._check_parent_chain
+_original_check_parent_chain = DeferredAttribute._check_parent_chain  # type: ignore[attr-defined]
 
 
 def _check_parent_chain(self: Any, instance: Any) -> Any:
@@ -419,4 +419,4 @@ def _check_parent_chain(self: Any, instance: Any) -> Any:
     return ret
 
 
-DeferredAttribute._check_parent_chain = _check_parent_chain  # type: ignore[method-assign]
+DeferredAttribute._check_parent_chain = _check_parent_chain  # type: ignore[attr-defined]
