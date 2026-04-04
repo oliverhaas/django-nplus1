@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any
 
 from django_nplus1.detect import LISTENERS, Listener, Message, Rule
 from django_nplus1.exceptions import NPlus1Error
+from django_nplus1.signals import nplus1_detected
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -31,4 +32,5 @@ class Profiler:
 
     def notify(self, message: Message) -> None:
         if not message.match(self.whitelist):
+            nplus1_detected.send(sender=self.__class__, message=message)
             raise NPlus1Error(message.message)
