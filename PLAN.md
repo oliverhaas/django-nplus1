@@ -12,48 +12,48 @@ Tooling and project structure copied from [django-cachex](https://github.com/oli
 
 nplusone uses a **signal-based monkeypatch architecture**:
 
-1. **`patch.py`** — At import time, monkeypatches Django ORM internals to emit signals when related objects are accessed:
+1. **`patch.py`** - At import time, monkeypatches Django ORM internals to emit signals when related objects are accessed:
    - `QuerySet._fetch_all` → emits `load` (tracks which instances were loaded in bulk)
    - `QuerySet.get` → emits `ignore_load` (single-object fetches are not N+1)
    - Descriptor `get_queryset` (FK, O2O, M2M) → emits `lazy_load` when fetching related objects
    - `RelatedPopulator.populate` / `prefetch_one_level` → emits `eager_load` for select/prefetch_related
    - Descriptor `__get__` / `QuerySet.__getitem__` → emits `touch` (tracks which eager-loaded relations are actually used)
 
-2. **`signals.py`** — Uses `blinker` library for signal dispatch, with thread-local sender routing.
+2. **`signals.py`** - Uses `blinker` library for signal dispatch, with thread-local sender routing.
 
-3. **`listeners.py`** — Two listeners subscribe to signals:
-   - **`LazyListener`** — Tracks loaded instances. When a `lazy_load` fires for an instance that was part of a bulk load, it's an N+1. Emits `LazyLoadMessage`.
-   - **`EagerListener`** — Tracks eager-loaded relations. At request end, checks which were never `touch`ed. Emits `EagerLoadMessage`.
+3. **`listeners.py`** - Two listeners subscribe to signals:
+   - **`LazyListener`** - Tracks loaded instances. When a `lazy_load` fires for an instance that was part of a bulk load, it's an N+1. Emits `LazyLoadMessage`.
+   - **`EagerListener`** - Tracks eager-loaded relations. At request end, checks which were never `touch`ed. Emits `EagerLoadMessage`.
 
-4. **`middleware.py`** — Django middleware that starts listeners on `process_request` and tears them down on `process_response`. Delegates to notifiers (log or raise).
+4. **`middleware.py`** - Django middleware that starts listeners on `process_request` and tears them down on `process_response`. Delegates to notifiers (log or raise).
 
-5. **`notifiers.py`** — `LogNotifier` (logs warnings) and `ErrorNotifier` (raises `NPlusOneError`).
+5. **`notifiers.py`** - `LogNotifier` (logs warnings) and `ErrorNotifier` (raises `NPlusOneError`).
 
-6. **`profiler.py`** — Context manager for use outside middleware (e.g., in tests). Raises on detection.
+6. **`profiler.py`** - Context manager for use outside middleware (e.g., in tests). Raises on detection.
 
 ---
 
 ## What Needs Modernizing
 
 ### Drop
-- `six` dependency (Python 2 compat) — use native Python 3
-- `blinker` dependency — replace with simple callbacks or Django signals
-- SQLAlchemy, Peewee, Flask, WSGI support — Django only
+- `six` dependency (Python 2 compat) - use native Python 3
+- `blinker` dependency - replace with simple callbacks or Django signals
+- SQLAlchemy, Peewee, Flask, WSGI support - Django only
 - Django < 5.2 compat branches (1.8/1.9/1.10 conditionals)
 - `django.conf.urls.url` → `django.urls.path`
-- `MiddlewareMixin` fallback — modern middleware only
-- `inspect.getcallargs` usage — deprecated
+- `MiddlewareMixin` fallback - modern middleware only
+- `inspect.getcallargs` usage - deprecated
 
 ### Update
 - Django descriptor imports: `related_descriptors` module (stable since Django 1.9, just clean up the import)
-- `RelatedPopulator` API — verify still works on Django 5.2/6.0
-- `prefetch_one_level` — verify signature hasn't changed
-- `create_forward_many_to_many_manager` / `create_reverse_many_to_one_manager` — verify still exist
+- `RelatedPopulator` API - verify still works on Django 5.2/6.0
+- `prefetch_one_level` - verify signature hasn't changed
+- `create_forward_many_to_many_manager` / `create_reverse_many_to_one_manager` - verify still exist
 - Thread safety: `threading.current_thread().ident` approach is fine, just remove blinker indirection
 
 ### Add
-- **pytest plugin** — nplusone had none. Add a proper pytest plugin with `@pytest.mark.nplus1` and auto-detection fixture
-- **Async support** — Django 5.0+ has async views; ensure detection works in async context
+- **pytest plugin** - nplusone had none. Add a proper pytest plugin with `@pytest.mark.nplus1` and auto-detection fixture
+- **Async support** - Django 5.0+ has async views; ensure detection works in async context
 - Type hints throughout
 - Modern packaging (hatchling, ruff, mypy)
 
@@ -127,7 +127,7 @@ django-nplus1/
 
 ### Signal System (replacing blinker)
 
-Replace blinker with a minimal callback registry. No external dependency needed — the signals are purely internal, scoped to the current thread/request.
+Replace blinker with a minimal callback registry. No external dependency needed - the signals are purely internal, scoped to the current thread/request.
 
 ```python
 # signals.py
@@ -166,9 +166,9 @@ def suppress(signal_name: str):
 
 Modernized version of nplusone's `patch.py`. Key changes:
 
-- Remove all Django < 1.9 branches — use `related_descriptors` directly
+- Remove all Django < 1.9 branches - use `related_descriptors` directly
 - Remove `six` usage
-- Remove `inspect.getcallargs` — use explicit argument capture
+- Remove `inspect.getcallargs` - use explicit argument capture
 - Use our callback system instead of blinker signals
 - Keep the same monkeypatching strategy (it's proven and works)
 
@@ -375,20 +375,20 @@ NPLUS1_WHITELIST = [                 # Ignore specific patterns
 
 ### Phase 1: Core Detection + Middleware
 
-1. Project skeleton (pyproject.toml, pre-commit, CI, .gitignore, LICENSE, README) — copy from django-cachex
-2. `signals.py` — minimal callback system replacing blinker
-3. `patch.py` — modernized monkeypatches from nplusone (drop six, old Django branches)
-4. `detect.py` — `LazyLoadDetector` + `EagerLoadDetector` (refactored from nplusone's `listeners.py`)
-5. `middleware.py` — modern Django middleware (no MiddlewareMixin)
-6. `notifiers.py` — log + raise (simplified from nplusone)
-7. `exceptions.py` — `NPlusOneError`
+1. Project skeleton (pyproject.toml, pre-commit, CI, .gitignore, LICENSE, README) - copy from django-cachex
+2. `signals.py` - minimal callback system replacing blinker
+3. `patch.py` - modernized monkeypatches from nplusone (drop six, old Django branches)
+4. `detect.py` - `LazyLoadDetector` + `EagerLoadDetector` (refactored from nplusone's `listeners.py`)
+5. `middleware.py` - modern Django middleware (no MiddlewareMixin)
+6. `notifiers.py` - log + raise (simplified from nplusone)
+7. `exceptions.py` - `NPlusOneError`
 8. Test models + views from nplusone's testapp (modernized)
 9. Full test suite for N+1 detection (one-to-one, many-to-one, many-to-many, nested, whitelisting)
 
 ### Phase 2: pytest Plugin + Profiler
 
-1. `profiler.py` — context manager for non-middleware use
-2. `pytest_plugin.py` — `nplus1` fixture + `@pytest.mark.nplus1` marker
+1. `profiler.py` - context manager for non-middleware use
+2. `pytest_plugin.py` - `nplus1` fixture + `@pytest.mark.nplus1` marker
 3. Entry point registration in pyproject.toml
 4. Tests for the plugin itself
 
