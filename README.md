@@ -6,7 +6,7 @@ N+1 query detection for Django.
 
 Based on [nplusone](https://github.com/jmcarp/nplusone) by [Joshua Carp](https://github.com/jmcarp), a well-established library for automatic N+1 detection across Python ORMs. If you need broad ORM support (SQLAlchemy, Peewee, etc.), `nplusone` is still the best choice. I would actually prefer if `nplusone` will in the near future accept some of my PRs which I've tested basically in this package, but I also do not want to wait for it.
 
-Several features — deferred field detection, call-site tracking in error messages, `.get()`-in-a-loop detection, `ContextVar`-based async safety, and configurable thresholds — were inspired by [django-zeal](https://github.com/taobojlen/django-zeal) by [Tao Bojlen](https://github.com/taobojlen).
+Several features (deferred field detection, call-site tracking in error messages, `.get()`-in-a-loop detection, `ContextVar`-based async safety, and configurable thresholds) were inspired by [django-zeal](https://github.com/taobojlen/django-zeal) by [Tao Bojlen](https://github.com/taobojlen).
 
 `django-nplus1` is a modernized, Django-only fork that drops legacy compatibility in favour of Python 3.12+ / Django 5.2+, uses a lightweight `ContextVar`-based signal system, and adds unused eager-load detection.
 
