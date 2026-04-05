@@ -117,7 +117,7 @@ suppress-none-returning = true
 ]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.13"
 plugins = ["mypy_django_plugin.main"]
 pretty = true
 show_error_codes = true
