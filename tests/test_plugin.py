@@ -172,6 +172,62 @@ class TestNplus1Fixture:
         occupation.user
 
 
+@pytest.mark.django_db
+class TestNPlus1AllowWithFixture:
+    def test_allow_with_nplus1_fixture(self, objects, nplus1):
+        """nplus1_allow works inside the nplus1 fixture."""
+        from testapp.models import Occupation
+
+        with nplus1_allow([{"model": "Occupation"}]):
+            occupations = list(Occupation.objects.all())
+            occupations[0].user
+
+    def test_allow_partial_with_nplus1_fixture(self, objects, nplus1):
+        """nplus1_allow suppresses one model but fixture still catches another."""
+        from testapp.models import User
+
+        with pytest.raises(NPlus1Error, match="User.hobbies"), nplus1_allow([{"model": "Occupation"}]):
+            users = list(User.objects.all())
+            list(users[0].hobbies.all())
+
+
+@pytest.mark.nplus1
+@pytest.mark.django_db
+class TestNPlus1AllowWithMarker:
+    def test_allow_with_marker(self, objects):
+        """nplus1_allow works inside a @pytest.mark.nplus1 test."""
+        from testapp.models import Occupation
+
+        with nplus1_allow([{"model": "Occupation"}]):
+            occupations = list(Occupation.objects.all())
+            occupations[0].user
+
+
+@pytest.mark.django_db
+class TestNPlus1AllowWithProfilerWhitelist:
+    def test_allow_combined_with_profiler_whitelist(self, objects):
+        """nplus1_allow and Profiler whitelist work together."""
+        from testapp.models import Occupation, User
+
+        with Profiler(whitelist=[{"model": "User"}]):
+            # User is whitelisted by Profiler
+            users = list(User.objects.all())
+            list(users[0].hobbies.all())
+
+            # Occupation is allowed by nplus1_allow
+            with nplus1_allow([{"model": "Occupation"}]):
+                occupations = list(Occupation.objects.all())
+                occupations[0].user
+
+    def test_profiler_whitelist_without_allow_still_raises(self, objects):
+        """Profiler whitelist alone does not cover what nplus1_allow would."""
+        from testapp.models import Occupation
+
+        with pytest.raises(NPlus1Error, match="Occupation.user"), Profiler(whitelist=[{"model": "User"}]):
+            occupations = list(Occupation.objects.all())
+            occupations[0].user
+
+
 @pytest.mark.nplus1
 @pytest.mark.django_db
 class TestNplus1Marker:
