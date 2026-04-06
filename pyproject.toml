@@ -69,6 +69,7 @@ exclude = ["django_nplus1/mypy_settings.py"]
 target-version = "py312"
 line-length = 120
 fix = true
+extend-exclude = ["examples"]
 
 [tool.ruff.lint]
 select = ["ALL"]
