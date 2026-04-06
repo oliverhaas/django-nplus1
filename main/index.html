@@ -843,6 +843,7 @@
 <li><strong>Whitelisting</strong>: Ignore specific model/field combinations with wildcard support and typo detection</li>
 <li><strong><code>nplus1_allow()</code></strong>: Context manager to locally suppress detection for specific code blocks</li>
 <li><strong>Multiple notification methods</strong>: Logging, exceptions, <code>warnings.warn_explicit()</code>, and a Django signal</li>
+<li><strong>Duplicate query detection</strong>: Optional SQL-level fallback catches N+1 from raw SQL and <code>.raw()</code></li>
 <li><strong>Configurable threshold</strong>: <code>NPLUS1_THRESHOLD</code> controls detection sensitivity</li>
 <li><strong>Zero dependencies</strong>: Only requires Django</li>
 </ul>

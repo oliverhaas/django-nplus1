@@ -633,6 +633,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#nplus1_detect_duplicate_queries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        NPLUS1_DETECT_DUPLICATE_QUERIES
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#nplus1_duplicate_query_threshold" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        NPLUS1_DUPLICATE_QUERY_THRESHOLD
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#nplus1_whitelist" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -986,6 +1008,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#nplus1_detect_duplicate_queries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        NPLUS1_DETECT_DUPLICATE_QUERIES
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#nplus1_duplicate_query_threshold" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        NPLUS1_DUPLICATE_QUERY_THRESHOLD
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#nplus1_whitelist" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1075,16 +1119,26 @@
 <p>When enabled, messages include labeled <code>CALL 1:</code>, <code>CALL 2:</code> sections with full stack traces.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">NPLUS1_SHOW_ALL_CALLERS</span> <span class="o">=</span> <span class="kc">True</span>
 </span></code></pre></div>
+<h3 id="nplus1_detect_duplicate_queries"><code>NPLUS1_DETECT_DUPLICATE_QUERIES</code><a class="headerlink" href="#nplus1_detect_duplicate_queries" title="Permanent link">&para;</a></h3>
+<p>Enable SQL-level duplicate query detection. Default: <code>False</code>.</p>
+<p>The primary detection works at the ORM descriptor level, which provides exact model/field identification but only catches queries going through the ORM. This setting enables a secondary detector that fingerprints raw SQL queries and flags repeated identical queries from the same call-site.</p>
+<p>This catches N+1 patterns from <code>cursor.execute()</code>, <code>QuerySet.raw()</code>, and any other path that bypasses the ORM descriptors.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">NPLUS1_DETECT_DUPLICATE_QUERIES</span> <span class="o">=</span> <span class="kc">True</span>
+</span></code></pre></div>
+<h3 id="nplus1_duplicate_query_threshold"><code>NPLUS1_DUPLICATE_QUERY_THRESHOLD</code><a class="headerlink" href="#nplus1_duplicate_query_threshold" title="Permanent link">&para;</a></h3>
+<p>Number of repeated identical SQL queries from the same call-site before detection fires. Default: <code>2</code>. Only relevant when <code>NPLUS1_DETECT_DUPLICATE_QUERIES</code> is enabled.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">NPLUS1_DUPLICATE_QUERY_THRESHOLD</span> <span class="o">=</span> <span class="mi">3</span>
+</span></code></pre></div>
 <h3 id="nplus1_whitelist"><code>NPLUS1_WHITELIST</code><a class="headerlink" href="#nplus1_whitelist" title="Permanent link">&para;</a></h3>
 <p>List of patterns to ignore. See <a href="../whitelisting/">Whitelisting</a> for details.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">NPLUS1_WHITELIST</span> <span class="o">=</span> <span class="p">[</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>    <span class="p">{</span><span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;myapp.User&quot;</span><span class="p">,</span> <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="s2">&quot;profile&quot;</span><span class="p">},</span>
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    <span class="p">{</span><span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;auth.*&quot;</span><span class="p">},</span>
-</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="p">]</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">NPLUS1_WHITELIST</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>    <span class="p">{</span><span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;myapp.User&quot;</span><span class="p">,</span> <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="s2">&quot;profile&quot;</span><span class="p">},</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    <span class="p">{</span><span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;auth.*&quot;</span><span class="p">},</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="p">]</span>
 </span></code></pre></div>
 <h2 id="recommended-test-configuration">Recommended Test Configuration<a class="headerlink" href="#recommended-test-configuration" title="Permanent link">&para;</a></h2>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># settings/test.py</span>
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="n">NPLUS1_RAISE</span> <span class="o">=</span> <span class="kc">True</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># settings/test.py</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="n">NPLUS1_RAISE</span> <span class="o">=</span> <span class="kc">True</span>
 </span></code></pre></div>
 <p>With good test coverage, this catches N+1 queries during testing. For existing projects that surface many issues at first, use <code>nplus1_allow()</code> to suppress known problems and fix them incrementally. See <a href="../../reference/api/#nplus1_allow">nplus1_allow</a> for details.</p>
 
