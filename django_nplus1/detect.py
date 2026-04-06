@@ -237,6 +237,10 @@ class LazyListener(Listener):
         ret: Any = None,
         parser: Any = None,
     ) -> None:
+        # When a single bulk-loaded instance triggers an eager load (e.g.
+        # select_related on one item from a queryset), this is semantically
+        # an N+1 pattern, not an unused eager load. We use LazyLoadMessage
+        # with label "n_plus_one" intentionally.
         model, field, keys, _key = parser(args, kwargs, context)
         if len(keys) == 1 and keys[0] in self.loaded and keys[0] not in self.ignore:
             key = (model, field)
@@ -271,9 +275,9 @@ class EagerListener(Listener):
     def teardown(self) -> None:
         from django_nplus1 import signals
 
-        self.log_eager()
         signals.disconnect(signals.EAGER_LOAD, self.handle_eager)
         signals.disconnect(signals.TOUCH, self.handle_touch)
+        self.log_eager()
 
     def handle_eager(
         self,
@@ -363,7 +367,7 @@ class DuplicateQueryMessage(Message):
     formatter = "Potential n+1 query detected: duplicate query `{field}`"
 
 
-_SQL_LITERAL_RE = re.compile(r"'[^']*'|\b\d+\b")
+_SQL_LITERAL_RE = re.compile(r"'(?:[^']|'')*'|\b\d+\b")
 
 
 def _fingerprint_sql(sql: str) -> str:
@@ -380,7 +384,11 @@ class DuplicateQueryListener(Listener):
     .raw(), and any ORM path not covered by the descriptor-level detection.
     """
 
-    counts: defaultdict[tuple[str, str, int, str], int]
+    def __init__(self, parent: Any) -> None:
+        super().__init__(parent)
+        self.enabled = False
+        self.counts: defaultdict[tuple[str, str, int, str], int] = defaultdict(int)
+        self._connection: Any = None
 
     def setup(self) -> None:
         from django.conf import settings
@@ -392,6 +400,10 @@ class DuplicateQueryListener(Listener):
         self.counts = defaultdict(int)
         self.threshold = getattr(settings, "NPLUS1_DUPLICATE_QUERY_THRESHOLD", 2)
         self._connection = connection
+        # Store a unique token so the wrapper can verify it belongs to this context.
+        # This prevents cross-request contamination in async ASGI where
+        # connection.execute_wrappers is shared across coroutines on the same thread.
+        self._context_token = id(self)
         self._connection.execute_wrappers.append(self._wrapper)
 
     def teardown(self) -> None:
@@ -412,7 +424,6 @@ class DuplicateQueryListener(Listener):
             key = (fingerprint, *caller)
             self.counts[key] += 1
             if self.counts[key] == self.threshold:
-                # Use a stub type for model since we don't know the model from raw SQL
                 short_sql = fingerprint[:120] + ("..." if len(fingerprint) > 120 else "")
                 message = DuplicateQueryMessage(type("SQL", (), {"__name__": "SQL"}), short_sql, caller=caller)
                 self.parent.notify(message)

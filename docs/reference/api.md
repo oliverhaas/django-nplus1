@@ -86,6 +86,17 @@ nplus1_detected.connect(report_nplus1)
 - `sender`: `NPlus1Middleware` (function) or `Profiler` (class)
 - `message`: A `Message` instance with `.model`, `.field`, `.label`, and `.message` attributes
 
+## Duplicate Query Detection
+
+The primary detection works at the ORM descriptor level. For raw SQL, `.raw()`, and other paths that bypass the ORM, enable SQL-level duplicate query detection:
+
+```python
+NPLUS1_DETECT_DUPLICATE_QUERIES = True
+NPLUS1_DUPLICATE_QUERY_THRESHOLD = 2  # default
+```
+
+When enabled, all SQL queries are fingerprinted (literals replaced with `?`) and repeated identical queries from the same call-site are flagged. Detected via the `Profiler`, `@pytest.mark.nplus1`, and `NPlus1Middleware`.
+
 ## Exceptions
 
 ### `NPlus1Error`

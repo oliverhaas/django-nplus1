@@ -124,32 +124,32 @@ def NPlus1Middleware(get_response: Any) -> Any:  # noqa: N802
 
         async def async_middleware(request: HttpRequest) -> HttpResponse:
             token = setup_context()
-            nots, whitelist = _load_config()
-            ctx = _DetectionContext(nots, whitelist)
-            ctx.setup()
             try:
-                response = await get_response(request)
-            finally:
+                nots, whitelist = _load_config()
+                ctx = _DetectionContext(nots, whitelist)
+                ctx.setup()
                 try:
-                    ctx.teardown()
+                    response = await get_response(request)
                 finally:
-                    teardown_context(token)
+                    ctx.teardown()
+            finally:
+                teardown_context(token)
             return response
 
         return async_middleware
 
     def sync_middleware(request: HttpRequest) -> HttpResponse:
         token = setup_context()
-        nots, whitelist = _load_config()
-        ctx = _DetectionContext(nots, whitelist)
-        ctx.setup()
         try:
-            response = get_response(request)
-        finally:
+            nots, whitelist = _load_config()
+            ctx = _DetectionContext(nots, whitelist)
+            ctx.setup()
             try:
-                ctx.teardown()
+                response = get_response(request)
             finally:
-                teardown_context(token)
+                ctx.teardown()
+        finally:
+            teardown_context(token)
         return response
 
     return sync_middleware

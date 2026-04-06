@@ -20,7 +20,7 @@ Each whitelist entry is a dictionary with optional keys:
 |-----|-------------|---------|
 | `model` | Model class or `"app_label.ModelName"` pattern | `"myapp.User"`, `"auth.*"` |
 | `field` | Field name pattern | `"profile"`, `"*"` |
-| `label` | Message type: `"n_plus_one"`, `"unused_eager_load"`, or `"get_in_loop"` | `"n_plus_one"` |
+| `label` | Message type: `"n_plus_one"`, `"unused_eager_load"`, `"get_in_loop"`, or `"duplicate_query"` | `"n_plus_one"` |
 
 ### Wildcard Support
 
