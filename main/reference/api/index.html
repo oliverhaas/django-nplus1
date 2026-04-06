@@ -762,6 +762,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#duplicate-query-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Duplicate Query Detection
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#exceptions" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -994,6 +1005,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#duplicate-query-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Duplicate Query Detection
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#exceptions" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1143,10 +1165,16 @@
 <li><code>sender</code>: <code>NPlus1Middleware</code> (function) or <code>Profiler</code> (class)</li>
 <li><code>message</code>: A <code>Message</code> instance with <code>.model</code>, <code>.field</code>, <code>.label</code>, and <code>.message</code> attributes</li>
 </ul>
+<h2 id="duplicate-query-detection">Duplicate Query Detection<a class="headerlink" href="#duplicate-query-detection" title="Permanent link">&para;</a></h2>
+<p>The primary detection works at the ORM descriptor level. For raw SQL, <code>.raw()</code>, and other paths that bypass the ORM, enable SQL-level duplicate query detection:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">NPLUS1_DETECT_DUPLICATE_QUERIES</span> <span class="o">=</span> <span class="kc">True</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">NPLUS1_DUPLICATE_QUERY_THRESHOLD</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># default</span>
+</span></code></pre></div>
+<p>When enabled, all SQL queries are fingerprinted (literals replaced with <code>?</code>) and repeated identical queries from the same call-site are flagged. Detected via the <code>Profiler</code>, <code>@pytest.mark.nplus1</code>, and <code>NPlus1Middleware</code>.</p>
 <h2 id="exceptions">Exceptions<a class="headerlink" href="#exceptions" title="Permanent link">&para;</a></h2>
 <h3 id="nplus1error"><code>NPlus1Error</code><a class="headerlink" href="#nplus1error" title="Permanent link">&para;</a></h3>
 <p>Raised when an N+1 query or unused eager load is detected (when <code>NPLUS1_RAISE=True</code> or using <code>Profiler</code>).</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">NPlus1Error</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">NPlus1Error</span>
 </span></code></pre></div>
 <h2 id="pytest-plugin">pytest Plugin<a class="headerlink" href="#pytest-plugin" title="Permanent link">&para;</a></h2>
 <h3 id="fixtures">Fixtures<a class="headerlink" href="#fixtures" title="Permanent link">&para;</a></h3>
