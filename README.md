@@ -62,13 +62,13 @@ from django_nplus1 import nplus1_allow
 
 def my_view(request):
     users = list(User.objects.all())
-    with nplus1_allow(model="User", field="profile"):
+    with nplus1_allow([{"model": "User", "field": "profile"}]):
         # Known N+1 - TODO: add select_related
         profiles = [u.profile for u in users]
     ...
 ```
 
-`nplus1_allow()` supports several modes:
+`nplus1_allow()` uses the same whitelist format as `Profiler(whitelist=...)` and `@pytest.mark.nplus1(whitelist=...)`:
 
 ```python
 # Suppress all detections in a block
@@ -76,11 +76,15 @@ with nplus1_allow():
     ...
 
 # Suppress a specific model (supports fnmatch wildcards)
-with nplus1_allow(model="User"):
+with nplus1_allow([{"model": "User"}]):
     ...
 
 # Suppress a specific model/field combination
-with nplus1_allow(model="User", field="profile"):
+with nplus1_allow([{"model": "User", "field": "profile"}]):
+    ...
+
+# Suppress multiple patterns
+with nplus1_allow([{"model": "User", "field": "profile"}, {"model": "Post"}]):
     ...
 ```
 

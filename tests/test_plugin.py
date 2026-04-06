@@ -94,18 +94,18 @@ class TestNPlus1Allow:
             occupations[0].user
 
     def test_allow_specific_model(self, objects):
-        """nplus1_allow(model=...) suppresses only that model."""
+        """nplus1_allow with model suppresses only that model."""
         from testapp.models import Occupation
 
-        with Profiler(), nplus1_allow(model="Occupation"):
+        with Profiler(), nplus1_allow([{"model": "Occupation"}]):
             occupations = list(Occupation.objects.all())
             occupations[0].user
 
     def test_allow_specific_model_and_field(self, objects):
-        """nplus1_allow(model=..., field=...) suppresses only that combination."""
+        """nplus1_allow with model+field suppresses only that combination."""
         from testapp.models import User
 
-        with Profiler(), nplus1_allow(model="User", field="hobbies"):
+        with Profiler(), nplus1_allow([{"model": "User", "field": "hobbies"}]):
             users = list(User.objects.all())
             list(users[0].hobbies.all())
 
@@ -113,7 +113,7 @@ class TestNPlus1Allow:
         """nplus1_allow for one model does not suppress another."""
         from testapp.models import Occupation
 
-        with pytest.raises(NPlus1Error, match="Occupation.user"), Profiler(), nplus1_allow(model="User"):
+        with pytest.raises(NPlus1Error, match="Occupation.user"), Profiler(), nplus1_allow([{"model": "User"}]):
             occupations = list(Occupation.objects.all())
             occupations[0].user
 
@@ -121,7 +121,11 @@ class TestNPlus1Allow:
         """nplus1_allow for one field does not suppress another field on same model."""
         from testapp.models import User
 
-        with pytest.raises(NPlus1Error, match="User.hobbies"), Profiler(), nplus1_allow(model="User", field="pet_set"):
+        with (
+            pytest.raises(NPlus1Error, match="User.hobbies"),
+            Profiler(),
+            nplus1_allow([{"model": "User", "field": "pet_set"}]),
+        ):
             users = list(User.objects.all())
             list(users[0].hobbies.all())
 
@@ -130,11 +134,11 @@ class TestNPlus1Allow:
         from testapp.models import Occupation, User
 
         with Profiler():
-            with nplus1_allow(model="User"):
+            with nplus1_allow([{"model": "User"}]):
                 users = list(User.objects.all())
                 list(users[0].hobbies.all())  # allowed
 
-                with nplus1_allow(model="Occupation"):
+                with nplus1_allow([{"model": "Occupation"}]):
                     occupations = list(Occupation.objects.all())
                     occupations[0].user  # allowed
 
@@ -144,10 +148,10 @@ class TestNPlus1Allow:
                 list(users[0].hobbies.all())
 
     def test_allow_wildcard(self, objects):
-        """nplus1_allow(model='*') suppresses all models."""
+        """nplus1_allow with wildcard suppresses all models."""
         from testapp.models import Occupation
 
-        with Profiler(), nplus1_allow(model="*"):
+        with Profiler(), nplus1_allow([{"model": "*"}]):
             occupations = list(Occupation.objects.all())
             occupations[0].user
 
