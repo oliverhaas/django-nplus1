@@ -780,12 +780,21 @@
 <h2 id="010">0.1.0<a class="headerlink" href="#010" title="Permanent link">&para;</a></h2>
 <p>Initial release.</p>
 <ul>
-<li>N+1 lazy load detection</li>
-<li>Unused eager load detection (select_related / prefetch_related)</li>
-<li>Django middleware</li>
+<li>N+1 lazy load detection for related fields (ForeignKey, OneToOneField, ManyToManyField)</li>
+<li>N+1 detection for deferred field access (<code>.defer()</code> / <code>.only()</code>)</li>
+<li><code>.get()</code> in a loop detection</li>
+<li>Unused eager load detection (<code>select_related</code> / <code>prefetch_related</code>)</li>
+<li>SQL-level duplicate query detection as opt-in fallback (<code>NPLUS1_DETECT_DUPLICATE_QUERIES</code>)</li>
+<li>Call-site tracking in detection messages</li>
+<li><code>NPLUS1_SHOW_ALL_CALLERS</code> mode for full stack traces</li>
+<li>Configurable thresholds (<code>NPLUS1_THRESHOLD</code>, <code>NPLUS1_GET_THRESHOLD</code>, <code>NPLUS1_DUPLICATE_QUERY_THRESHOLD</code>)</li>
+<li>Django middleware with sync and async support</li>
 <li>pytest plugin with <code>nplus1</code> fixture and <code>@pytest.mark.nplus1</code> marker</li>
-<li>Profiler context manager</li>
-<li>Whitelisting with wildcard support</li>
+<li><code>Profiler</code> context manager</li>
+<li><code>nplus1_allow()</code> context manager for local suppression</li>
+<li><code>nplus1_detected</code> Django signal for custom reporting</li>
+<li>Whitelisting with wildcard support and validation against Django model registry</li>
+<li>Multiple notification methods: logging, <code>warnings.warn_explicit()</code>, raise exception</li>
 <li>Python 3.12+ / Django 5.2+ support</li>
 </ul>
 

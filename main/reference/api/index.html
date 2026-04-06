@@ -1150,6 +1150,7 @@
 </ul>
 <p>With no arguments, all detections are suppressed within the block. Supports nesting: inner <code>nplus1_allow</code> calls add to the outer rules; exiting restores the previous state.</p>
 <p>Works in both middleware and profiler contexts.</p>
+<p><strong>Note:</strong> <code>nplus1_allow()</code> and <code>Profiler</code> match model names without app label (e.g. <code>"User"</code>), while <code>NPLUS1_WHITELIST</code> in the middleware matches the full <code>app_label.ModelName</code> format (e.g. <code>"auth.User"</code>). Keep this in mind when copying patterns between the two.</p>
 <h2 id="signals">Signals<a class="headerlink" href="#signals" title="Permanent link">&para;</a></h2>
 <h3 id="nplus1_detected"><code>nplus1_detected</code><a class="headerlink" href="#nplus1_detected" title="Permanent link">&para;</a></h3>
 <p>Django signal emitted on every detection (after whitelist and <code>nplus1_allow</code> filtering). Useful for custom reporting (e.g., sending to Sentry).</p>
