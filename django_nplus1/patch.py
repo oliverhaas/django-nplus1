@@ -18,7 +18,10 @@ from django_nplus1 import signals
 
 
 def to_key(instance: Model) -> str:
-    return f"{type(instance).__name__}:{instance.pk}"
+    pk = instance.pk
+    if pk is None:
+        return f"{type(instance).__name__}:{id(instance)}"
+    return f"{type(instance).__name__}:{pk}"
 
 
 def _patch(original: Any, patched: Any) -> None:

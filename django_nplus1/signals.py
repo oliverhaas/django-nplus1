@@ -23,7 +23,10 @@ _listeners: ContextVar[defaultdict[str, list[Callable[..., Any]]]] = ContextVar(
 
 
 def connect(signal_name: str, callback: Callable[..., Any]) -> None:
-    _listeners.get()[signal_name].append(callback)
+    try:
+        _listeners.get()[signal_name].append(callback)
+    except LookupError:
+        return
 
 
 def disconnect(signal_name: str, callback: Callable[..., Any]) -> None:
