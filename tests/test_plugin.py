@@ -82,6 +82,20 @@ class TestProfiler:
             for user in User.objects.all():
                 User.objects.get(pk=user.pk)
 
+    def test_profiler_detects_raw_sql_loop(self, objects):
+        from django.conf import settings
+        from django.db import connection
+
+        settings.NPLUS1_DETECT_DUPLICATE_QUERIES = True
+        try:
+            with pytest.raises(NPlus1Error, match="duplicate query"), Profiler():
+                pks = list(range(1, 3))
+                for pk in pks:
+                    with connection.cursor() as cursor:
+                        cursor.execute("SELECT id FROM testapp_user WHERE id = %s", [pk])
+        finally:
+            del settings.NPLUS1_DETECT_DUPLICATE_QUERIES
+
 
 @pytest.mark.django_db
 class TestNPlus1Allow:

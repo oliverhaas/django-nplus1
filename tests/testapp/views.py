@@ -197,3 +197,26 @@ def many_to_many_allowed(request):
     users = list(models.User.objects.all())
     with nplus1_allow([{"model": "User", "field": "hobbies"}]):
         return HttpResponse(users[0].hobbies.all())
+
+
+def raw_sql_loop(request):
+    """Raw SQL in a loop - should be detected by DuplicateQueryListener."""
+    from django.db import connection
+
+    pks = list(models.User.objects.values_list("pk", flat=True))
+    results = []
+    for pk in pks:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id, name FROM testapp_user WHERE id = %s", [pk])
+            results.append(cursor.fetchone())
+    return HttpResponse(str(results))
+
+
+def raw_sql_single(request):
+    """Single raw SQL query - should NOT be detected."""
+    from django.db import connection
+
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT id, name FROM testapp_user WHERE id = %s", [1])
+        result = cursor.fetchone()
+    return HttpResponse(str(result))

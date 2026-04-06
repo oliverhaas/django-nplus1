@@ -34,4 +34,6 @@ urlpatterns = [
     path("get_single/", views.get_single),
     path("get_different_lines/", views.get_different_lines),
     path("many_to_many_allowed/", views.many_to_many_allowed),
+    path("raw_sql_loop/", views.raw_sql_loop),
+    path("raw_sql_single/", views.raw_sql_single),
 ]
