@@ -38,12 +38,48 @@ Raise `NPlus1Error` on detection instead of (or in addition to) logging. Default
 NPLUS1_RAISE = True  # Recommended for test settings
 ```
 
+### `NPLUS1_WARN`
+
+Emit `UserWarning` via `warnings.warn_explicit()` on detection. Default: `False`.
+
+When caller info is available, the warning points to the exact file and line. Integrates with `pytest -W error::UserWarning` and `warnings.filterwarnings()`.
+
+```python
+NPLUS1_WARN = True
+```
+
 ### `NPLUS1_ERROR`
 
 Custom exception class to raise. Default: `NPlus1Error`.
 
 ```python
 NPLUS1_ERROR = MyCustomError
+```
+
+### `NPLUS1_THRESHOLD`
+
+Number of repeated lazy accesses of the same model/field pair before detection fires. Default: `2`.
+
+```python
+NPLUS1_THRESHOLD = 2
+```
+
+### `NPLUS1_GET_THRESHOLD`
+
+Number of repeated `.get()` calls from the same call-site before detection fires. Default: `2`.
+
+```python
+NPLUS1_GET_THRESHOLD = 2
+```
+
+### `NPLUS1_SHOW_ALL_CALLERS`
+
+Include full stack traces from each repeated access in detection messages. Default: `False`.
+
+When enabled, messages include labeled `CALL 1:`, `CALL 2:` sections with full stack traces.
+
+```python
+NPLUS1_SHOW_ALL_CALLERS = True
 ```
 
 ### `NPLUS1_WHITELIST`
@@ -62,7 +98,6 @@ NPLUS1_WHITELIST = [
 ```python
 # settings/test.py
 NPLUS1_RAISE = True
-NPLUS1_WHITELIST = [
-    # Known acceptable patterns
-]
 ```
+
+With good test coverage, this catches N+1 queries during testing. For existing projects that surface many issues at first, use `nplus1_allow()` to suppress known problems and fix them incrementally. See [nplus1_allow](../reference/api.md#nplus1_allow) for details.

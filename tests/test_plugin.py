@@ -1,5 +1,6 @@
 import pytest
 
+from django_nplus1.detect import nplus1_allow
 from django_nplus1.exceptions import NPlus1Error
 from django_nplus1.profiler import Profiler
 
@@ -80,6 +81,75 @@ class TestProfiler:
         with pytest.raises(NPlus1Error, match=r"get\(\)"), Profiler():
             for user in User.objects.all():
                 User.objects.get(pk=user.pk)
+
+
+@pytest.mark.django_db
+class TestNPlus1Allow:
+    def test_allow_all_suppresses(self, objects):
+        """nplus1_allow() with no args suppresses all detections."""
+        from testapp.models import Occupation
+
+        with Profiler(), nplus1_allow():
+            occupations = list(Occupation.objects.all())
+            occupations[0].user
+
+    def test_allow_specific_model(self, objects):
+        """nplus1_allow(model=...) suppresses only that model."""
+        from testapp.models import Occupation
+
+        with Profiler(), nplus1_allow(model="Occupation"):
+            occupations = list(Occupation.objects.all())
+            occupations[0].user
+
+    def test_allow_specific_model_and_field(self, objects):
+        """nplus1_allow(model=..., field=...) suppresses only that combination."""
+        from testapp.models import User
+
+        with Profiler(), nplus1_allow(model="User", field="hobbies"):
+            users = list(User.objects.all())
+            list(users[0].hobbies.all())
+
+    def test_allow_does_not_suppress_other_models(self, objects):
+        """nplus1_allow for one model does not suppress another."""
+        from testapp.models import Occupation
+
+        with pytest.raises(NPlus1Error, match="Occupation.user"), Profiler(), nplus1_allow(model="User"):
+            occupations = list(Occupation.objects.all())
+            occupations[0].user
+
+    def test_allow_does_not_suppress_other_fields(self, objects):
+        """nplus1_allow for one field does not suppress another field on same model."""
+        from testapp.models import User
+
+        with pytest.raises(NPlus1Error, match="User.hobbies"), Profiler(), nplus1_allow(model="User", field="pet_set"):
+            users = list(User.objects.all())
+            list(users[0].hobbies.all())
+
+    def test_allow_nesting(self, objects):
+        """Nested nplus1_allow combines rules; inner exit restores outer."""
+        from testapp.models import Occupation, User
+
+        with Profiler():
+            with nplus1_allow(model="User"):
+                users = list(User.objects.all())
+                list(users[0].hobbies.all())  # allowed
+
+                with nplus1_allow(model="Occupation"):
+                    occupations = list(Occupation.objects.all())
+                    occupations[0].user  # allowed
+
+            # Outside both: detection should fire again
+            with pytest.raises(NPlus1Error, match="User.hobbies"), Profiler():
+                users = list(User.objects.all())
+                list(users[0].hobbies.all())
+
+    def test_allow_wildcard(self, objects):
+        """nplus1_allow(model='*') suppresses all models."""
+        from testapp.models import Occupation
+
+        with Profiler(), nplus1_allow(model="*"):
+            occupations = list(Occupation.objects.all())
+            occupations[0].user
 
 
 @pytest.mark.django_db

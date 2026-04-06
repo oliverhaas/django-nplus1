@@ -22,6 +22,7 @@ Several features (deferred field detection, call-site tracking in error messages
 - **pytest plugin**: `nplus1` fixture and `@pytest.mark.nplus1` marker for test-time detection
 - **Profiler**: Context manager for manual use in scripts or tests
 - **Whitelisting**: Ignore specific model/field combinations with wildcard support and typo detection
+- **`nplus1_allow()` context manager**: Locally suppress detection for specific code blocks
 - **Multiple notification methods**: Logging, exceptions, `warnings.warn_explicit()`, and a Django signal (`nplus1_detected`)
 - **Configurable threshold**: `NPLUS1_THRESHOLD` controls how many repeated accesses trigger detection
 - **Zero dependencies**: Only requires Django
@@ -43,13 +44,61 @@ MIDDLEWARE = [
     ...,
     "django_nplus1.NPlus1Middleware",
 ]
+```
 
-# Optional
-NPLUS1_RAISE = True           # Raise exceptions instead of logging (recommended for tests)
-NPLUS1_WARN = True            # Emit warnings via warnings.warn_explicit()
-NPLUS1_THRESHOLD = 2            # Number of repeated lazy accesses before detection fires (default: 2)
-NPLUS1_GET_THRESHOLD = 2        # Number of repeated .get() calls from same call-site before detection fires (default: 2)
-NPLUS1_SHOW_ALL_CALLERS = True  # Include full stack traces in messages
+## Recommended Approach
+
+The recommended way to use `django-nplus1` is to have good test coverage and raise on detection in tests:
+
+```python
+# settings/test.py
+NPLUS1_RAISE = True
+```
+
+For existing projects, this will likely surface many N+1 queries at first. Use `nplus1_allow()` to temporarily suppress known issues and fix them incrementally:
+
+```python
+from django_nplus1 import nplus1_allow
+
+def my_view(request):
+    users = list(User.objects.all())
+    with nplus1_allow(model="User", field="profile"):
+        # Known N+1 - TODO: add select_related
+        profiles = [u.profile for u in users]
+    ...
+```
+
+`nplus1_allow()` supports several modes:
+
+```python
+# Suppress all detections in a block
+with nplus1_allow():
+    ...
+
+# Suppress a specific model (supports fnmatch wildcards)
+with nplus1_allow(model="User"):
+    ...
+
+# Suppress a specific model/field combination
+with nplus1_allow(model="User", field="profile"):
+    ...
+```
+
+## Settings
+
+All settings are optional:
+
+```python
+NPLUS1_RAISE = True               # Raise NPlus1Error on detection (default: False)
+NPLUS1_LOG = True                 # Log warnings on detection (default: True)
+NPLUS1_WARN = True                # Emit warnings via warnings.warn_explicit() (default: False)
+NPLUS1_THRESHOLD = 2              # Repeated lazy accesses before detection fires (default: 2)
+NPLUS1_GET_THRESHOLD = 2          # Repeated .get() calls from same call-site before detection fires (default: 2)
+NPLUS1_SHOW_ALL_CALLERS = True    # Include full stack traces in messages (default: False)
+NPLUS1_WHITELIST = [              # Global whitelist (supports fnmatch wildcards)
+    {"model": "myapp.User", "field": "profile"},
+    {"model": "myapp.*"},
+]
 ```
 
 ## Documentation

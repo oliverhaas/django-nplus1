@@ -9,7 +9,7 @@ from django.conf import settings
 from django.utils.decorators import sync_and_async_middleware
 
 from django_nplus1 import notifiers
-from django_nplus1.detect import LISTENERS, Message, Rule
+from django_nplus1.detect import LISTENERS, Message, Rule, is_allowed
 from django_nplus1.exceptions import NPlus1Error
 from django_nplus1.signals import nplus1_detected, setup_context, teardown_context
 
@@ -112,7 +112,7 @@ class _DetectionContext:
                 listener.teardown()
 
     def notify(self, message: Message) -> None:
-        if not message.match(self.whitelist):
+        if not message.match(self.whitelist) and not is_allowed(message):
             nplus1_detected.send(sender=NPlus1Middleware, message=message)
             for notifier in self.nots:
                 notifier.notify(message)
