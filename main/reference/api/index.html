@@ -723,6 +723,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#nplus1_allow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        nplus1_allow
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#signals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Signals
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Signals">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#nplus1_detected" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        nplus1_detected
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#exceptions" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -916,6 +955,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#nplus1_allow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        nplus1_allow
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#signals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Signals
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Signals">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#nplus1_detected" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        nplus1_detected
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#exceptions" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1005,7 +1083,7 @@
 <h1 id="api-reference">API Reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h1>
 <h2 id="middleware">Middleware<a class="headerlink" href="#middleware" title="Permanent link">&para;</a></h2>
 <h3 id="nplus1middleware"><code>NPlus1Middleware</code><a class="headerlink" href="#nplus1middleware" title="Permanent link">&para;</a></h3>
-<p>Django middleware that detects N+1 queries and unused eager loads during request processing.</p>
+<p>Django middleware that detects N+1 queries and unused eager loads during request processing. Supports both sync and async views.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">MIDDLEWARE</span> <span class="o">=</span> <span class="p">[</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">...</span><span class="p">,</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="s2">&quot;django_nplus1.NPlus1Middleware&quot;</span><span class="p">,</span>
@@ -1023,20 +1101,59 @@
 <ul>
 <li><code>whitelist</code> (optional): List of dicts with <code>model</code>, <code>field</code>, and/or <code>label</code> keys.</li>
 </ul>
+<h2 id="nplus1_allow"><code>nplus1_allow</code><a class="headerlink" href="#nplus1_allow" title="Permanent link">&para;</a></h2>
+<p>Context manager to locally suppress N+1 detection for specific code blocks. Useful for incrementally adopting detection in existing projects.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1</span><span class="w"> </span><span class="kn">import</span> <span class="n">nplus1_allow</span>
+</span></code></pre></div>
+<p><strong>Usage:</strong></p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Suppress all detections in a block</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">with</span> <span class="n">nplus1_allow</span><span class="p">():</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="o">...</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="c1"># Suppress a specific model (supports fnmatch wildcards)</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="k">with</span> <span class="n">nplus1_allow</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s2">&quot;User&quot;</span><span class="p">):</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="o">...</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="c1"># Suppress a specific model/field combination</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="k">with</span> <span class="n">nplus1_allow</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s2">&quot;User&quot;</span><span class="p">,</span> <span class="n">field</span><span class="o">=</span><span class="s2">&quot;profile&quot;</span><span class="p">):</span>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>    <span class="o">...</span>
+</span></code></pre></div>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>model</code> (optional): Model name pattern to suppress. Supports fnmatch wildcards (<code>*</code>, <code>?</code>).</li>
+<li><code>field</code> (optional): Field name pattern to suppress. Supports fnmatch wildcards.</li>
+</ul>
+<p>With no arguments, all detections are suppressed within the block. Supports nesting: inner <code>nplus1_allow</code> calls add to the outer rules; exiting restores the previous state.</p>
+<p>Works in both middleware and profiler contexts.</p>
+<h2 id="signals">Signals<a class="headerlink" href="#signals" title="Permanent link">&para;</a></h2>
+<h3 id="nplus1_detected"><code>nplus1_detected</code><a class="headerlink" href="#nplus1_detected" title="Permanent link">&para;</a></h3>
+<p>Django signal emitted on every detection (after whitelist and <code>nplus1_allow</code> filtering). Useful for custom reporting (e.g., sending to Sentry).</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1</span><span class="w"> </span><span class="kn">import</span> <span class="n">nplus1_detected</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">report_nplus1</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">sentry_sdk</span><span class="o">.</span><span class="n">capture_message</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">message</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="s2">&quot;warning&quot;</span><span class="p">)</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="n">nplus1_detected</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">report_nplus1</span><span class="p">)</span>
+</span></code></pre></div>
+<p><strong>Arguments sent:</strong></p>
+<ul>
+<li><code>sender</code>: <code>NPlus1Middleware</code> (function) or <code>Profiler</code> (class)</li>
+<li><code>message</code>: A <code>Message</code> instance with <code>.model</code>, <code>.field</code>, <code>.label</code>, and <code>.message</code> attributes</li>
+</ul>
 <h2 id="exceptions">Exceptions<a class="headerlink" href="#exceptions" title="Permanent link">&para;</a></h2>
 <h3 id="nplus1error"><code>NPlus1Error</code><a class="headerlink" href="#nplus1error" title="Permanent link">&para;</a></h3>
 <p>Raised when an N+1 query or unused eager load is detected (when <code>NPLUS1_RAISE=True</code> or using <code>Profiler</code>).</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">NPlus1Error</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">NPlus1Error</span>
 </span></code></pre></div>
 <h2 id="pytest-plugin">pytest Plugin<a class="headerlink" href="#pytest-plugin" title="Permanent link">&para;</a></h2>
 <h3 id="fixtures">Fixtures<a class="headerlink" href="#fixtures" title="Permanent link">&para;</a></h3>
 <ul>
-<li><code>nplus1</code>:Yields a <code>Profiler</code> instance. Test fails on N+1 detection.</li>
+<li><code>nplus1</code>: Yields a <code>Profiler</code> instance. Test fails on N+1 detection.</li>
 </ul>
 <h3 id="markers">Markers<a class="headerlink" href="#markers" title="Permanent link">&para;</a></h3>
 <ul>
-<li><code>@pytest.mark.nplus1</code>:Auto-detect N+1 in the marked test.</li>
-<li><code>@pytest.mark.nplus1(whitelist=[...])</code>:With whitelisting.</li>
+<li><code>@pytest.mark.nplus1</code>: Auto-detect N+1 in the marked test.</li>
+<li><code>@pytest.mark.nplus1(whitelist=[...])</code>: With whitelisting.</li>
 </ul>
 
 

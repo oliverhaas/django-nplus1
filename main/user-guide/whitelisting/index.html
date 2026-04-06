@@ -578,17 +578,18 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#configuration" class="md-nav__link">
+  <a href="#global-whitelist-settings" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Configuration
+        Global Whitelist (Settings)
       
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
+    <nav class="md-nav" aria-label="Global Whitelist (Settings)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
   <a href="#pattern-options" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -598,12 +599,28 @@
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
+        
+          <li class="md-nav__item">
   <a href="#wildcard-support" class="md-nav__link">
     <span class="md-ellipsis">
       
         Wildcard Support
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#local-suppression-nplus1_allow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Local Suppression (nplus1_allow)
       
     </span>
   </a>
@@ -781,17 +798,18 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#configuration" class="md-nav__link">
+  <a href="#global-whitelist-settings" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Configuration
+        Global Whitelist (Settings)
       
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
+    <nav class="md-nav" aria-label="Global Whitelist (Settings)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
   <a href="#pattern-options" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -801,12 +819,28 @@
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
+        
+          <li class="md-nav__item">
   <a href="#wildcard-support" class="md-nav__link">
     <span class="md-ellipsis">
       
         Wildcard Support
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#local-suppression-nplus1_allow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Local Suppression (nplus1_allow)
       
     </span>
   </a>
@@ -846,14 +880,14 @@
 
 <h1 id="whitelisting">Whitelisting<a class="headerlink" href="#whitelisting" title="Permanent link">&para;</a></h1>
 <p>Whitelist specific model/field combinations to suppress warnings for known acceptable patterns.</p>
-<h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
+<h2 id="global-whitelist-settings">Global Whitelist (Settings)<a class="headerlink" href="#global-whitelist-settings" title="Permanent link">&para;</a></h2>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">NPLUS1_WHITELIST</span> <span class="o">=</span> <span class="p">[</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="p">{</span><span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;myapp.User&quot;</span><span class="p">,</span> <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="s2">&quot;profile&quot;</span><span class="p">},</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="p">{</span><span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;auth.*&quot;</span><span class="p">},</span>                          <span class="c1"># Wildcard model</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="p">{</span><span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="s2">&quot;n_plus_one&quot;</span><span class="p">,</span> <span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;myapp.Post&quot;</span><span class="p">},</span>  <span class="c1"># Only N+1, not unused eager</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="p">]</span>
 </span></code></pre></div>
-<h2 id="pattern-options">Pattern Options<a class="headerlink" href="#pattern-options" title="Permanent link">&para;</a></h2>
+<h3 id="pattern-options">Pattern Options<a class="headerlink" href="#pattern-options" title="Permanent link">&para;</a></h3>
 <p>Each whitelist entry is a dictionary with optional keys:</p>
 <table>
 <thead>
@@ -871,29 +905,48 @@
 </tr>
 <tr>
 <td><code>field</code></td>
-<td>Field name</td>
-<td><code>"profile"</code>, <code>"user"</code></td>
+<td>Field name pattern</td>
+<td><code>"profile"</code>, <code>"*"</code></td>
 </tr>
 <tr>
 <td><code>label</code></td>
-<td>Message type: <code>"n_plus_one"</code> or <code>"unused_eager_load"</code></td>
+<td>Message type: <code>"n_plus_one"</code>, <code>"unused_eager_load"</code>, or <code>"get_in_loop"</code></td>
 <td><code>"n_plus_one"</code></td>
 </tr>
 </tbody>
 </table>
-<h2 id="wildcard-support">Wildcard Support<a class="headerlink" href="#wildcard-support" title="Permanent link">&para;</a></h2>
-<p>The <code>model</code> field supports <code>fnmatch</code> wildcards:</p>
+<h3 id="wildcard-support">Wildcard Support<a class="headerlink" href="#wildcard-support" title="Permanent link">&para;</a></h3>
+<p>Both <code>model</code> and <code>field</code> support <code>fnmatch</code> wildcards:</p>
 <ul>
-<li><code>"myapp.*"</code>:matches all models in <code>myapp</code></li>
-<li><code>"*.User"</code>:matches <code>User</code> in any app</li>
-<li><code>"*"</code>:matches everything (not recommended)</li>
+<li><code>"myapp.*"</code> - matches all models in <code>myapp</code></li>
+<li><code>"*.User"</code> - matches <code>User</code> in any app</li>
+<li><code>"*"</code> - matches everything (not recommended for global whitelist)</li>
 </ul>
+<p>Whitelist entries are validated against the Django model registry at startup. Typos in model or field names raise <code>NPlus1Error</code> with suggestions. Entries using wildcards skip validation.</p>
+<h2 id="local-suppression-nplus1_allow">Local Suppression (<code>nplus1_allow</code>)<a class="headerlink" href="#local-suppression-nplus1_allow" title="Permanent link">&para;</a></h2>
+<p>For suppressing detection in specific code blocks, use the <code>nplus1_allow()</code> context manager:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1</span><span class="w"> </span><span class="kn">import</span> <span class="n">nplus1_allow</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="c1"># Suppress all detections in a block</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="k">with</span> <span class="n">nplus1_allow</span><span class="p">():</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="o">...</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1"># Suppress a specific model</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="k">with</span> <span class="n">nplus1_allow</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s2">&quot;User&quot;</span><span class="p">):</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="o">...</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="c1"># Suppress a specific model/field combination</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="k">with</span> <span class="n">nplus1_allow</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s2">&quot;User&quot;</span><span class="p">,</span> <span class="n">field</span><span class="o">=</span><span class="s2">&quot;profile&quot;</span><span class="p">):</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    <span class="o">...</span>
+</span></code></pre></div>
+<p><code>nplus1_allow()</code> supports nesting. Inner calls add to the outer rules; exiting an inner block restores the previous state. Works in both middleware and profiler contexts.</p>
+<p>This is the recommended approach for incrementally adopting detection in existing projects: enable <code>NPLUS1_RAISE = True</code> in tests, then wrap known N+1 patterns with <code>nplus1_allow()</code> and fix them over time.</p>
 <h2 id="profiler-whitelisting">Profiler Whitelisting<a class="headerlink" href="#profiler-whitelisting" title="Permanent link">&para;</a></h2>
 <p>When using the <code>Profiler</code> directly, pass whitelist to the constructor:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1</span><span class="w"> </span><span class="kn">import</span> <span class="n">Profiler</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="k">with</span> <span class="n">Profiler</span><span class="p">(</span><span class="n">whitelist</span><span class="o">=</span><span class="p">[{</span><span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;User&quot;</span><span class="p">,</span> <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="s2">&quot;profile&quot;</span><span class="p">}]):</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="o">...</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1</span><span class="w"> </span><span class="kn">import</span> <span class="n">Profiler</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="k">with</span> <span class="n">Profiler</span><span class="p">(</span><span class="n">whitelist</span><span class="o">=</span><span class="p">[{</span><span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;User&quot;</span><span class="p">,</span> <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="s2">&quot;profile&quot;</span><span class="p">}]):</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="o">...</span>
 </span></code></pre></div>
 <p>Note: In the profiler context, model matching uses <code>model.__name__</code> (no app label prefix), unlike the middleware which uses <code>app_label.ModelName</code>.</p>
 

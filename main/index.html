@@ -827,16 +827,24 @@
 </div>
 <p>N+1 query detection for Django.</p>
 <p>Based on <a href="https://github.com/jmcarp/nplusone">nplusone</a> by <a href="https://github.com/jmcarp">Joshua Carp</a>, a well-established library for automatic N+1 detection across Python ORMs. If you need broad ORM support (SQLAlchemy, Peewee, etc.), <code>nplusone</code> is still the best choice.</p>
-<p><code>django-nplus1</code> is a modernized, Django-only fork that drops legacy compatibility in favour of Python 3.12+ / Django 5.2+, replaces blinker with Django's native signal dispatch, and adds <strong>unused eager-load detection</strong>.</p>
+<p>Several features (deferred field detection, call-site tracking, <code>.get()</code>-in-a-loop detection, <code>ContextVar</code>-based async safety, and configurable thresholds) were inspired by <a href="https://github.com/taobojlen/django-zeal">django-zeal</a> by <a href="https://github.com/taobojlen">Tao Bojlen</a>.</p>
+<p><code>django-nplus1</code> is a modernized, Django-only fork that drops legacy compatibility in favour of Python 3.12+ / Django 5.2+, uses a lightweight <code>ContextVar</code>-based signal system, and adds unused eager-load detection.</p>
 <h2 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>N+1 detection</strong>: Warns when a related object is lazily loaded on an instance that was part of a bulk query</li>
+<li><strong>Deferred field detection</strong>: Detects N+1 from <code>.defer()</code> / <code>.only()</code> field access</li>
+<li><strong><code>.get()</code> in a loop detection</strong>: Detects <code>Model.objects.get()</code> called repeatedly from the same call-site</li>
 <li><strong>Unused eager load detection</strong>: Warns when <code>select_related</code> or <code>prefetch_related</code> results are never accessed</li>
-<li><strong>Middleware</strong>: Automatically monitors all requests</li>
+<li><strong>Call-site tracking</strong>: Error messages include the exact file, line number, and function name</li>
+<li><strong>Async support</strong>: Works with both sync and async Django views</li>
+<li><strong>Middleware</strong>: Automatically monitors all requests (sync and async)</li>
 <li><strong>pytest plugin</strong>: <code>nplus1</code> fixture and <code>@pytest.mark.nplus1</code> marker for test-time detection</li>
 <li><strong>Profiler</strong>: Context manager for manual use in scripts or tests</li>
-<li><strong>Whitelisting</strong>: Ignore specific model/field combinations with wildcard support</li>
-<li><strong>Zero runtime dependencies</strong>: Only requires Django</li>
+<li><strong>Whitelisting</strong>: Ignore specific model/field combinations with wildcard support and typo detection</li>
+<li><strong><code>nplus1_allow()</code></strong>: Context manager to locally suppress detection for specific code blocks</li>
+<li><strong>Multiple notification methods</strong>: Logging, exceptions, <code>warnings.warn_explicit()</code>, and a Django signal</li>
+<li><strong>Configurable threshold</strong>: <code>NPLUS1_THRESHOLD</code> controls detection sensitivity</li>
+<li><strong>Zero dependencies</strong>: Only requires Django</li>
 </ul>
 <h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span>django-nplus1
@@ -850,6 +858,9 @@
 </span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="o">...</span><span class="p">,</span>
 </span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="s2">&quot;django_nplus1.NPlus1Middleware&quot;</span><span class="p">,</span>
 </span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="p">]</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="c1"># Recommended for test settings</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="n">NPLUS1_RAISE</span> <span class="o">=</span> <span class="kc">True</span>
 </span></code></pre></div>
 <h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h2>
 <ul>
