@@ -50,15 +50,12 @@ def is_allowed(message: Message) -> bool:
 
 
 @contextlib.contextmanager
-def nplus1_allow(
-    *,
-    model: str | None = None,
-    field: str | None = None,
-) -> Generator[None]:
+def nplus1_allow(whitelist: list[dict[str, Any]] | None = None) -> Generator[None]:
     """Context manager to suppress N+1 detection for specific model/field combinations.
 
-    With no arguments, suppresses all detections. With arguments, suppresses only
-    matching detections.
+    With no arguments, suppresses all detections. With a whitelist, suppresses only
+    matching detections. Uses the same format as ``Profiler(whitelist=...)`` and
+    ``@pytest.mark.nplus1(whitelist=...)``.
 
     Usage::
 
@@ -67,20 +64,20 @@ def nplus1_allow(
             ...
 
         # Suppress specific model/field
-        with nplus1_allow(model="User", field="hobbies"):
+        with nplus1_allow([{"model": "User", "field": "hobbies"}]):
             ...
 
         # Suppress all fields on a model (supports fnmatch wildcards)
-        with nplus1_allow(model="User"):
+        with nplus1_allow([{"model": "User"}]):
             ...
     """
-    rule = Rule(model="*", field="*") if model is None and field is None else Rule(model=model, field=field)
+    rules = [Rule(**item) for item in whitelist] if whitelist else [Rule(model="*", field="*")]
 
     try:
         current = _allow_rules.get()
     except LookupError:
         current = []
-    token = _allow_rules.set([*current, rule])
+    token = _allow_rules.set([*current, *rules])
     try:
         yield
     finally:

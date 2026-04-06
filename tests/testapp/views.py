@@ -195,5 +195,5 @@ def many_to_many_allowed(request):
     from django_nplus1 import nplus1_allow
 
     users = list(models.User.objects.all())
-    with nplus1_allow(model="User", field="hobbies"):
+    with nplus1_allow([{"model": "User", "field": "hobbies"}]):
         return HttpResponse(users[0].hobbies.all())

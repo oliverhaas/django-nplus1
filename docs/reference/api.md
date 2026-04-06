@@ -46,18 +46,21 @@ with nplus1_allow():
     ...
 
 # Suppress a specific model (supports fnmatch wildcards)
-with nplus1_allow(model="User"):
+with nplus1_allow([{"model": "User"}]):
     ...
 
 # Suppress a specific model/field combination
-with nplus1_allow(model="User", field="profile"):
+with nplus1_allow([{"model": "User", "field": "profile"}]):
+    ...
+
+# Suppress multiple patterns
+with nplus1_allow([{"model": "User", "field": "profile"}, {"model": "Post"}]):
     ...
 ```
 
 **Parameters:**
 
-- `model` (optional): Model name pattern to suppress. Supports fnmatch wildcards (`*`, `?`).
-- `field` (optional): Field name pattern to suppress. Supports fnmatch wildcards.
+- `whitelist` (optional): List of dicts with `model`, `field`, and/or `label` keys. Same format as `Profiler(whitelist=...)` and `@pytest.mark.nplus1(whitelist=...)`. Supports fnmatch wildcards.
 
 With no arguments, all detections are suppressed within the block. Supports nesting: inner `nplus1_allow` calls add to the outer rules; exiting restores the previous state.
 

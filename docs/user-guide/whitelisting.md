@@ -44,15 +44,19 @@ with nplus1_allow():
     ...
 
 # Suppress a specific model
-with nplus1_allow(model="User"):
+with nplus1_allow([{"model": "User"}]):
     ...
 
 # Suppress a specific model/field combination
-with nplus1_allow(model="User", field="profile"):
+with nplus1_allow([{"model": "User", "field": "profile"}]):
+    ...
+
+# Suppress multiple patterns
+with nplus1_allow([{"model": "User", "field": "profile"}, {"model": "Post"}]):
     ...
 ```
 
-`nplus1_allow()` supports nesting. Inner calls add to the outer rules; exiting an inner block restores the previous state. Works in both middleware and profiler contexts.
+Uses the same whitelist format as `Profiler(whitelist=...)` and `@pytest.mark.nplus1(whitelist=...)`. Supports nesting: inner calls add to the outer rules; exiting an inner block restores the previous state. Works in both middleware and profiler contexts.
 
 This is the recommended approach for incrementally adopting detection in existing projects: enable `NPLUS1_RAISE = True` in tests, then wrap known N+1 patterns with `nplus1_allow()` and fix them over time.
 
