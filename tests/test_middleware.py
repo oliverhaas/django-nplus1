@@ -319,6 +319,35 @@ class TestNPlus1Allow:
         assert logger.log.called
 
 
+@pytest.mark.django_db
+class TestDuplicateQuery:
+    def test_raw_sql_loop_detected(self, objects, client, logger):
+        """Raw SQL in a loop is detected when NPLUS1_DETECT_DUPLICATE_QUERIES=True."""
+        settings.NPLUS1_DETECT_DUPLICATE_QUERIES = True
+        try:
+            client.get("/raw_sql_loop/")
+            messages = [call[0][1] for call in logger.log.call_args_list]
+            assert any("duplicate query" in m.lower() for m in messages)
+        finally:
+            del settings.NPLUS1_DETECT_DUPLICATE_QUERIES
+
+    def test_raw_sql_single_not_detected(self, objects, client, logger):
+        """Single raw SQL query is not detected."""
+        settings.NPLUS1_DETECT_DUPLICATE_QUERIES = True
+        try:
+            client.get("/raw_sql_single/")
+            messages = [call[0][1] for call in logger.log.call_args_list]
+            assert not any("duplicate query" in m.lower() for m in messages)
+        finally:
+            del settings.NPLUS1_DETECT_DUPLICATE_QUERIES
+
+    def test_disabled_by_default(self, objects, client, logger):
+        """Duplicate query detection is off by default."""
+        client.get("/raw_sql_loop/")
+        messages = [call[0][1] for call in logger.log.call_args_list]
+        assert not any("duplicate query" in m.lower() for m in messages)
+
+
 def test_middleware_basic_passthrough():
     """Middleware passes through requests without error when no detection triggers."""
     middleware = NPlus1Middleware(lambda r: HttpResponse())

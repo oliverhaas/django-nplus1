@@ -25,6 +25,7 @@ Several features (deferred field detection, call-site tracking, `.get()`-in-a-lo
 - **Whitelisting**: Ignore specific model/field combinations with wildcard support and typo detection
 - **`nplus1_allow()`**: Context manager to locally suppress detection for specific code blocks
 - **Multiple notification methods**: Logging, exceptions, `warnings.warn_explicit()`, and a Django signal
+- **Duplicate query detection**: Optional SQL-level fallback catches N+1 from raw SQL and `.raw()`
 - **Configurable threshold**: `NPLUS1_THRESHOLD` controls detection sensitivity
 - **Zero dependencies**: Only requires Django
 

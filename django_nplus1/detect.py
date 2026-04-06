@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import fnmatch
+import re
 from collections import defaultdict
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
@@ -357,8 +358,70 @@ class GetLoopListener(Listener):
             self.parent.notify(message)
 
 
+class DuplicateQueryMessage(Message):
+    label = "duplicate_query"
+    formatter = "Potential n+1 query detected: duplicate query `{field}`"
+
+
+_SQL_LITERAL_RE = re.compile(r"'[^']*'|\b\d+\b")
+
+
+def _fingerprint_sql(sql: str) -> str:
+    """Normalize a SQL query by replacing literals with ?, collapsing whitespace."""
+    return " ".join(_SQL_LITERAL_RE.sub("?", sql).split())
+
+
+class DuplicateQueryListener(Listener):
+    """Detects repeated identical SQL queries (N+1 fallback for raw SQL).
+
+    Uses Django's connection.execute_wrapper to intercept all queries,
+    fingerprints them by normalizing literals, and counts occurrences
+    from the same call-site. This catches N+1 patterns from raw SQL,
+    .raw(), and any ORM path not covered by the descriptor-level detection.
+    """
+
+    counts: defaultdict[tuple[str, str, int, str], int]
+
+    def setup(self) -> None:
+        from django.conf import settings
+        from django.db import connection
+
+        self.enabled = getattr(settings, "NPLUS1_DETECT_DUPLICATE_QUERIES", False)
+        if not self.enabled:
+            return
+        self.counts = defaultdict(int)
+        self.threshold = getattr(settings, "NPLUS1_DUPLICATE_QUERY_THRESHOLD", 2)
+        self._connection = connection
+        self._connection.execute_wrappers.append(self._wrapper)
+
+    def teardown(self) -> None:
+        if not self.enabled:
+            return
+        try:
+            self._connection.execute_wrappers.remove(self._wrapper)
+        except ValueError:
+            pass
+
+    def _wrapper(self, execute: Any, sql: str, params: Any, many: bool, context: Any) -> Any:
+        result = execute(sql, params, many, context)
+        if not many:
+            from django_nplus1.util import get_caller
+
+            fingerprint = _fingerprint_sql(sql)
+            caller = get_caller()
+            key = (fingerprint, *caller)
+            self.counts[key] += 1
+            if self.counts[key] == self.threshold:
+                # Use a stub type for model since we don't know the model from raw SQL
+                short_sql = fingerprint[:120] + ("..." if len(fingerprint) > 120 else "")
+                message = DuplicateQueryMessage(type("SQL", (), {"__name__": "SQL"}), short_sql, caller=caller)
+                self.parent.notify(message)
+        return result
+
+
 LISTENERS: dict[str, type[Listener]] = {
     "lazy_load": LazyListener,
     "eager_load": EagerListener,
     "get_loop": GetLoopListener,
+    "duplicate_query": DuplicateQueryListener,
 }

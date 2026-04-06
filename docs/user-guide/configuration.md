@@ -82,6 +82,26 @@ When enabled, messages include labeled `CALL 1:`, `CALL 2:` sections with full s
 NPLUS1_SHOW_ALL_CALLERS = True
 ```
 
+### `NPLUS1_DETECT_DUPLICATE_QUERIES`
+
+Enable SQL-level duplicate query detection. Default: `False`.
+
+The primary detection works at the ORM descriptor level, which provides exact model/field identification but only catches queries going through the ORM. This setting enables a secondary detector that fingerprints raw SQL queries and flags repeated identical queries from the same call-site.
+
+This catches N+1 patterns from `cursor.execute()`, `QuerySet.raw()`, and any other path that bypasses the ORM descriptors.
+
+```python
+NPLUS1_DETECT_DUPLICATE_QUERIES = True
+```
+
+### `NPLUS1_DUPLICATE_QUERY_THRESHOLD`
+
+Number of repeated identical SQL queries from the same call-site before detection fires. Default: `2`. Only relevant when `NPLUS1_DETECT_DUPLICATE_QUERIES` is enabled.
+
+```python
+NPLUS1_DUPLICATE_QUERY_THRESHOLD = 3
+```
+
 ### `NPLUS1_WHITELIST`
 
 List of patterns to ignore. See [Whitelisting](whitelisting.md) for details.
