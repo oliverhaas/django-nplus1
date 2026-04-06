@@ -5,4 +5,5 @@ from myapp import views
 urlpatterns = [
     path("books/bad/", views.book_list_bad),
     path("books/good/", views.book_list_good),
+    path("books/good-batch/", views.book_list_good_batch),
 ]
