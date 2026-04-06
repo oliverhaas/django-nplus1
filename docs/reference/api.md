@@ -66,6 +66,8 @@ With no arguments, all detections are suppressed within the block. Supports nest
 
 Works in both middleware and profiler contexts.
 
+**Note:** `nplus1_allow()` and `Profiler` match model names without app label (e.g. `"User"`), while `NPLUS1_WHITELIST` in the middleware matches the full `app_label.ModelName` format (e.g. `"auth.User"`). Keep this in mind when copying patterns between the two.
+
 ## Signals
 
 ### `nplus1_detected`

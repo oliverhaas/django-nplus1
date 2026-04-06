@@ -367,6 +367,10 @@ class DuplicateQueryMessage(Message):
     formatter = "Potential n+1 query detected: duplicate query `{field}`"
 
 
+class _SQL:
+    pass
+
+
 _SQL_LITERAL_RE = re.compile(r"'(?:[^']|'')*'|\b\d+\b")
 
 
@@ -425,7 +429,7 @@ class DuplicateQueryListener(Listener):
             self.counts[key] += 1
             if self.counts[key] == self.threshold:
                 short_sql = fingerprint[:120] + ("..." if len(fingerprint) > 120 else "")
-                message = DuplicateQueryMessage(type("SQL", (), {"__name__": "SQL"}), short_sql, caller=caller)
+                message = DuplicateQueryMessage(_SQL, short_sql, caller=caller)
                 self.parent.notify(message)
         return result
 

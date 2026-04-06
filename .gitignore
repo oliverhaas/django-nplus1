@@ -5,7 +5,6 @@ __pycache__/
 *.bz2
 *~
 *.log
-*.json
 *.wsgi
 local_settings.py
 development_settings.py
