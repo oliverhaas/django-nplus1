@@ -8,6 +8,8 @@ INSTALLED_APPS = [
     "myapp",
 ]
 
+ROOT_URLCONF = "myapp.urls"
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",

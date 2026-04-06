@@ -19,17 +19,13 @@ INSTALLED_APPS = [..., "django_nplus1"]
 # tests.py
 @pytest.mark.nplus1
 class TestMyView:
-    def test_no_nplus1(self):
-        books = list(Book.objects.select_related("author"))
-        [book.author.name for book in books]  # OK
-
-    def test_nplus1_detected(self):
-        with pytest.raises(NPlus1Error):
-            books = list(Book.objects.all())
-            [book.author.name for book in books]  # N+1!
+    def test_list_books(self, books):
+        response = client.get("/books/")  # raises NPlus1Error if view has N+1
 ```
 
-Use `nplus1_allow()` to suppress known N+1s while you fix them. Use `NPlus1Middleware` for runtime detection. See [examples/](examples/) for a working project and the [docs](https://oliverhaas.github.io/django-nplus1/) for full configuration.
+Tests marked with `@pytest.mark.nplus1` will fail if the code under test triggers an N+1 query. Fix the N+1, or use `nplus1_allow()` in helper functions that intentionally defer prefetching to their callers.
+
+See [examples/](examples/) for a working project and the [docs](https://oliverhaas.github.io/django-nplus1/) for full configuration.
 
 ## License
 
