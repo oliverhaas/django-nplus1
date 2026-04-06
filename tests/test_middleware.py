@@ -306,6 +306,19 @@ class TestShowAllCallers:
         assert "with calls:" in message
 
 
+@pytest.mark.django_db
+class TestNPlus1Allow:
+    def test_allow_suppresses_in_middleware(self, objects, client, logger):
+        """nplus1_allow in a view suppresses detection."""
+        client.get("/many_to_many_allowed/")
+        assert not logger.log.called
+
+    def test_without_allow_still_detected(self, objects, client, logger):
+        """Same query pattern without nplus1_allow is still detected."""
+        client.get("/many_to_many/")
+        assert logger.log.called
+
+
 def test_middleware_basic_passthrough():
     """Middleware passes through requests without error when no detection triggers."""
     middleware = NPlus1Middleware(lambda r: HttpResponse())

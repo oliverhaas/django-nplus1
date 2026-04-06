@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import contextlib
 import fnmatch
 from collections import defaultdict
+from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Generator, Sequence
 
 
 class Rule:
@@ -19,8 +21,13 @@ class Rule:
             (self.label or self.model or self.field)
             and (self.label is None or self.label == label)
             and (self.model is None or self.match_model(model))
-            and (self.field is None or self.field == field),
+            and (self.field is None or self.match_field(field)),
         )
+
+    def match_field(self, field: str) -> bool:
+        if self.field is None:
+            return True
+        return fnmatch.fnmatch(field, self.field)
 
     def match_model(self, model: type) -> bool:
         if self.model is model:
@@ -28,6 +35,56 @@ class Rule:
         if isinstance(self.model, str):
             return fnmatch.fnmatch(model.__name__, self.model)
         return False
+
+
+_allow_rules: ContextVar[list[Rule]] = ContextVar("nplus1_allow_rules")
+
+
+def is_allowed(message: Message) -> bool:
+    """Check if a message is suppressed by nplus1_allow rules."""
+    try:
+        rules = _allow_rules.get()
+    except LookupError:
+        return False
+    return message.match(rules) if rules else False
+
+
+@contextlib.contextmanager
+def nplus1_allow(
+    *,
+    model: str | None = None,
+    field: str | None = None,
+) -> Generator[None]:
+    """Context manager to suppress N+1 detection for specific model/field combinations.
+
+    With no arguments, suppresses all detections. With arguments, suppresses only
+    matching detections.
+
+    Usage::
+
+        # Suppress all detections
+        with nplus1_allow():
+            ...
+
+        # Suppress specific model/field
+        with nplus1_allow(model="User", field="hobbies"):
+            ...
+
+        # Suppress all fields on a model (supports fnmatch wildcards)
+        with nplus1_allow(model="User"):
+            ...
+    """
+    rule = Rule(model="*", field="*") if model is None and field is None else Rule(model=model, field=field)
+
+    try:
+        current = _allow_rules.get()
+    except LookupError:
+        current = []
+    token = _allow_rules.set([*current, rule])
+    try:
+        yield
+    finally:
+        _allow_rules.reset(token)
 
 
 class Message:
