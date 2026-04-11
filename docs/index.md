@@ -9,7 +9,7 @@ Based on [nplusone](https://github.com/jmcarp/nplusone) by [Joshua Carp](https:/
 
 Several features (deferred field detection, call-site tracking, `.get()`-in-a-loop detection, `ContextVar`-based async safety, and configurable thresholds) were inspired by [django-zeal](https://github.com/taobojlen/django-zeal) by [Tao Bojlen](https://github.com/taobojlen).
 
-`django-nplus1` is a modernized, Django-only fork that drops legacy compatibility in favour of Python 3.12+ / Django 5.2+, uses a lightweight `ContextVar`-based signal system, and adds unused eager-load detection.
+`django-nplus1` is a Django-only fork that drops legacy compatibility in favour of Python 3.12+ / Django 5.2+, uses a `ContextVar`-based signal system, and adds unused eager-load detection.
 
 ## Features
 

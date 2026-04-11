@@ -404,10 +404,6 @@ class DuplicateQueryListener(Listener):
         self.counts = defaultdict(int)
         self.threshold = getattr(settings, "NPLUS1_DUPLICATE_QUERY_THRESHOLD", 2)
         self._connection = connection
-        # Store a unique token so the wrapper can verify it belongs to this context.
-        # This prevents cross-request contamination in async ASGI where
-        # connection.execute_wrappers is shared across coroutines on the same thread.
-        self._context_token = id(self)
         self._connection.execute_wrappers.append(self._wrapper)
 
     def teardown(self) -> None:
