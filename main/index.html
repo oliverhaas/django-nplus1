@@ -828,7 +828,7 @@
 <p>N+1 query detection for Django.</p>
 <p>Based on <a href="https://github.com/jmcarp/nplusone">nplusone</a> by <a href="https://github.com/jmcarp">Joshua Carp</a>, a well-established library for automatic N+1 detection across Python ORMs. If you need broad ORM support (SQLAlchemy, Peewee, etc.), <code>nplusone</code> is still the best choice.</p>
 <p>Several features (deferred field detection, call-site tracking, <code>.get()</code>-in-a-loop detection, <code>ContextVar</code>-based async safety, and configurable thresholds) were inspired by <a href="https://github.com/taobojlen/django-zeal">django-zeal</a> by <a href="https://github.com/taobojlen">Tao Bojlen</a>.</p>
-<p><code>django-nplus1</code> is a modernized, Django-only fork that drops legacy compatibility in favour of Python 3.12+ / Django 5.2+, uses a lightweight <code>ContextVar</code>-based signal system, and adds unused eager-load detection.</p>
+<p><code>django-nplus1</code> is a Django-only fork that drops legacy compatibility in favour of Python 3.12+ / Django 5.2+, uses a <code>ContextVar</code>-based signal system, and adds unused eager-load detection.</p>
 <h2 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>N+1 detection</strong>: Warns when a related object is lazily loaded on an instance that was part of a bulk query</li>
