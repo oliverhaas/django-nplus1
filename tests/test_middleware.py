@@ -268,6 +268,7 @@ class TestGetInLoop:
         assert not any("get()" in m for m in messages)
 
 
+@pytest.mark.django_db
 class TestThreshold:
     def test_threshold_setting(self, objects, client, logger, monkeypatch):
         """NPLUS1_THRESHOLD controls how many accesses trigger detection."""
@@ -346,6 +347,17 @@ class TestDuplicateQuery:
         client.get("/raw_sql_loop/")
         messages = [call[0][1] for call in logger.log.call_args_list]
         assert not any("duplicate query" in m.lower() for m in messages)
+
+    def test_with_whitelist_does_not_crash(self, objects, client, logger, monkeypatch):
+        """Duplicate query detection with a model whitelist must not crash."""
+        settings.NPLUS1_DETECT_DUPLICATE_QUERIES = True
+        monkeypatch.setattr(settings, "NPLUS1_WHITELIST", [{"model": "testapp.User"}])
+        try:
+            client.get("/raw_sql_loop/")
+            messages = [call[0][1] for call in logger.log.call_args_list]
+            assert any("duplicate query" in m.lower() for m in messages)
+        finally:
+            del settings.NPLUS1_DETECT_DUPLICATE_QUERIES
 
 
 def test_middleware_basic_passthrough():

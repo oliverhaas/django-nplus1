@@ -70,8 +70,11 @@ class DjangoRule(Rule):
         if self.model is model:
             return True
         if isinstance(self.model, str):
+            meta = getattr(model, "_meta", None)
+            if meta is None:
+                return False
             return fnmatch.fnmatch(
-                f"{model._meta.app_label}.{model.__name__}",  # type: ignore[attr-defined]
+                f"{meta.app_label}.{model.__name__}",
                 self.model,
             )
         return False
