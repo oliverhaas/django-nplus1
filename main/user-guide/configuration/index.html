@@ -1125,6 +1125,7 @@
 <p>This catches N+1 patterns from <code>cursor.execute()</code>, <code>QuerySet.raw()</code>, and any other path that bypasses the ORM descriptors.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">NPLUS1_DETECT_DUPLICATE_QUERIES</span> <span class="o">=</span> <span class="kc">True</span>
 </span></code></pre></div>
+<p>Note: duplicate query detection only monitors the default database connection. Multi-database setups won't detect duplicates on secondary connections.</p>
 <h3 id="nplus1_duplicate_query_threshold"><code>NPLUS1_DUPLICATE_QUERY_THRESHOLD</code><a class="headerlink" href="#nplus1_duplicate_query_threshold" title="Permanent link">&para;</a></h3>
 <p>Number of repeated identical SQL queries from the same call-site before detection fires. Default: <code>2</code>. Only relevant when <code>NPLUS1_DETECT_DUPLICATE_QUERIES</code> is enabled.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">NPLUS1_DUPLICATE_QUERY_THRESHOLD</span> <span class="o">=</span> <span class="mi">3</span>
