@@ -80,17 +80,18 @@ class DjangoRule(Rule):
         return False
 
 
-_last_validated_whitelist_id: int | None = None
+_last_validated_whitelist: tuple[int, int] | None = None
 
 
 def _load_config() -> tuple[list[notifiers.Notifier], list[DjangoRule]]:
     """Load notifiers and whitelist from settings."""
-    global _last_validated_whitelist_id  # noqa: PLW0603
+    global _last_validated_whitelist  # noqa: PLW0603
     nots = notifiers.init(settings)
     whitelist_data = getattr(settings, "NPLUS1_WHITELIST", [])
-    if id(whitelist_data) != _last_validated_whitelist_id:
+    cache_key = (id(whitelist_data), len(whitelist_data))
+    if cache_key != _last_validated_whitelist:
         _validate_whitelist(whitelist_data)
-        _last_validated_whitelist_id = id(whitelist_data)
+        _last_validated_whitelist = cache_key
     whitelist = [DjangoRule(**item) for item in whitelist_data]
     return nots, whitelist
 

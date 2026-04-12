@@ -1,7 +1,7 @@
 # Django N+1
 
-!!! warning "Exploratory / Alpha"
-    This package is under active development and the API may change.
+!!! note "Beta"
+    This package is under active development and the API may change before 1.0.
 
 N+1 query detection for Django.
 

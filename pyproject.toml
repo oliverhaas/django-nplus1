@@ -1,6 +1,6 @@
 [project]
 name = "django-nplus1"
-version = "0.1.0a2"
+version = "0.1.0"
 description = "N+1 query detection for Django"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -8,7 +8,7 @@ requires-python = ">=3.12"
 keywords = ["django", "n+1", "query", "detection", "performance", "orm"]
 authors = [{ name = "Oliver Haas", email = "ohaas@e1plus.de" }]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "Environment :: Web Environment",
   "Framework :: Django",
   "Framework :: Django :: 5.2",

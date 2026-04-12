@@ -94,6 +94,8 @@ This catches N+1 patterns from `cursor.execute()`, `QuerySet.raw()`, and any oth
 NPLUS1_DETECT_DUPLICATE_QUERIES = True
 ```
 
+Note: duplicate query detection only monitors the default database connection. Multi-database setups won't detect duplicates on secondary connections.
+
 ### `NPLUS1_DUPLICATE_QUERY_THRESHOLD`
 
 Number of repeated identical SQL queries from the same call-site before detection fires. Default: `2`. Only relevant when `NPLUS1_DETECT_DUPLICATE_QUERIES` is enabled.
