@@ -40,7 +40,7 @@ def send(signal_name: str, **kwargs: Any) -> None:
     try:
         listeners = _listeners.get()
     except LookupError:
-        return  # No active context — detection not enabled
+        return  # No active context - detection not enabled
     for callback in listeners[signal_name][:]:
         callback(**kwargs)
 

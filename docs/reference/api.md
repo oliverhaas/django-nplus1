@@ -106,7 +106,7 @@ When enabled, all SQL queries are fingerprinted (literals replaced with `?`) and
 Raised when an N+1 query or unused eager load is detected (when `NPLUS1_RAISE=True` or using `Profiler`).
 
 ```python
-from django_nplus1.exceptions import NPlus1Error
+from django_nplus1 import NPlus1Error
 ```
 
 ## pytest Plugin
