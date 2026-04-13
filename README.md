@@ -25,6 +25,26 @@ Tests marked with `@pytest.mark.nplus1` will fail if the code under test trigger
 
 See [examples/](examples/) for a working project and the [docs](https://oliverhaas.github.io/django-nplus1/) for full configuration.
 
+## Celery Integration
+
+Detect N+1 queries inside Celery tasks, using the same per-execution scoping as the HTTP middleware.
+
+```bash
+pip install django-nplus1[celery]
+```
+
+```python
+# settings.py
+NPLUS1_CELERY = True
+```
+
+Each task execution gets its own detection scope. Lazy loads, `.get()`-in-a-loop, unused eager loads, and duplicate queries are all detected per-task, just as they are per-request. `nplus1_allow()` works inside tasks the same way it does in views.
+
+**Limitations:**
+
+- `nplus1_allow()` context does not propagate across task boundaries. If a view calls `task.delay()` inside an `nplus1_allow()` block, the allow rules do not carry into the worker (ContextVars don't survive serialization).
+- Scope nesting for synchronous subtasks (`.apply()` inside a task) creates a separate scope for the inner task.
+
 ## Credits
 
 This project builds on the work of:
