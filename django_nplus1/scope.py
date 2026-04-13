@@ -6,6 +6,7 @@ from django_nplus1.detect import LISTENERS, is_allowed
 from django_nplus1.signals import nplus1_detected, setup_context, teardown_context
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from contextvars import Token
     from types import TracebackType
 
@@ -30,7 +31,7 @@ class DetectionContext:
         self,
         *,
         notifiers: list[Notifier] | None = None,
-        whitelist: list[Rule] | None = None,
+        whitelist: Sequence[Rule] | None = None,
         sender: Any = None,
     ) -> None:
         self._notifiers = notifiers or []

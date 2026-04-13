@@ -60,7 +60,7 @@ def setup_celery_detection() -> None:
         return
 
     try:
-        from celery.signals import task_postrun, task_prerun
+        from celery.signals import task_postrun, task_prerun  # type: ignore[import-untyped]
     except ImportError as exc:
         msg = (
             "Celery is required for django-nplus1 Celery integration. "
@@ -79,7 +79,7 @@ def teardown_celery_detection() -> None:
     if not _connected:
         return
     try:
-        from celery.signals import task_postrun, task_prerun
+        from celery.signals import task_postrun, task_prerun  # type: ignore[import-untyped]
     except ImportError:
         return
     task_prerun.disconnect(_on_prerun)

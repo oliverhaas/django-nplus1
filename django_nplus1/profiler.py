@@ -13,6 +13,10 @@ class Profiler(DetectionContext):
         rules = [Rule(**item) for item in (whitelist or [])]
         super().__init__(whitelist=rules)
 
+    def __enter__(self) -> Profiler:
+        super().__enter__()
+        return self
+
     def notify(self, message: Message) -> None:
         if not message.match(self._whitelist) and not is_allowed(message):
             nplus1_detected.send(sender=type(self), message=message)
