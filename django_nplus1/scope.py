@@ -13,8 +13,8 @@ if TYPE_CHECKING:
     from django_nplus1.notifiers import Notifier
 
 
-class DetectionScope:
-    """Reusable detection scope for N+1 query detection.
+class DetectionContext:
+    """Reusable detection context for N+1 query detection.
 
     Context manager that activates N+1 detection for its duration.
     Used by ``NPlus1Middleware`` (per-request), ``Profiler`` (per-test),
@@ -22,7 +22,7 @@ class DetectionScope:
 
     Usage::
 
-        with DetectionScope(notifiers=nots, whitelist=wl, sender=MyClass):
+        with DetectionContext(notifiers=nots, whitelist=wl, sender=MyClass):
             code_to_monitor()
     """
 
@@ -39,7 +39,7 @@ class DetectionScope:
         self._listeners: dict[str, Listener] = {}
         self._token: Token[Any] | None = None
 
-    def __enter__(self) -> DetectionScope:
+    def __enter__(self) -> DetectionContext:
         self._token = setup_context()
         for name, listener_cls in LISTENERS.items():
             listener = listener_cls(self)

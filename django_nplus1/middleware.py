@@ -11,7 +11,7 @@ from django.utils.decorators import sync_and_async_middleware
 from django_nplus1 import notifiers
 from django_nplus1.detect import Rule
 from django_nplus1.exceptions import NPlus1Error
-from django_nplus1.scope import DetectionScope
+from django_nplus1.scope import DetectionContext
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -100,14 +100,14 @@ def NPlus1Middleware(get_response: Any) -> Any:  # noqa: N802
 
         async def async_middleware(request: HttpRequest) -> HttpResponse:
             nots, whitelist = _load_config()
-            with DetectionScope(notifiers=nots, whitelist=whitelist, sender=NPlus1Middleware):
+            with DetectionContext(notifiers=nots, whitelist=whitelist, sender=NPlus1Middleware):
                 return await get_response(request)
 
         return async_middleware
 
     def sync_middleware(request: HttpRequest) -> HttpResponse:
         nots, whitelist = _load_config()
-        with DetectionScope(notifiers=nots, whitelist=whitelist, sender=NPlus1Middleware):
+        with DetectionContext(notifiers=nots, whitelist=whitelist, sender=NPlus1Middleware):
             return get_response(request)
 
     return sync_middleware

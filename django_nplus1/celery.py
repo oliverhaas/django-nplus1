@@ -1,6 +1,6 @@
 """Celery integration for per-task N+1 query detection.
 
-Wraps each Celery task execution in a DetectionScope, mirroring how
+Wraps each Celery task execution in a DetectionContext, mirroring how
 NPlus1Middleware wraps HTTP requests.
 
 Activate via settings::
@@ -19,30 +19,30 @@ import logging
 from typing import Any
 
 from django_nplus1.middleware import _load_config
-from django_nplus1.scope import DetectionScope
+from django_nplus1.scope import DetectionContext
 
 logger = logging.getLogger("django_nplus1")
 
-# task_id -> active DetectionScope (one entry per in-flight task)
-_active_scopes: dict[str, DetectionScope] = {}
+# task_id -> active DetectionContext (one entry per in-flight task)
+_active_scopes: dict[str, DetectionContext] = {}
 
 _connected = False
 
 
 def _on_prerun(sender: Any = None, task_id: str = "", **kwargs: Any) -> None:
-    """Create and enter a DetectionScope for this task."""
+    """Create and enter a DetectionContext for this task."""
     try:
         nots, whitelist = _load_config()
     except Exception:  # noqa: BLE001
         logger.debug("Failed to load config for task %s", task_id, exc_info=True)
         return
-    scope = DetectionScope(notifiers=nots, whitelist=whitelist)
+    scope = DetectionContext(notifiers=nots, whitelist=whitelist)
     scope.__enter__()
     _active_scopes[task_id] = scope
 
 
 def _on_postrun(sender: Any = None, task_id: str = "", **kwargs: Any) -> None:
-    """Exit and clean up the DetectionScope for this task."""
+    """Exit and clean up the DetectionContext for this task."""
     scope = _active_scopes.pop(task_id, None)
     if scope is not None:
         scope.__exit__(None, None, None)
