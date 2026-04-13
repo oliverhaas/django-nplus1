@@ -801,6 +801,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#celery-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Celery Integration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Celery Integration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#setup_celery_detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        setup_celery_detection()
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#pytest-plugin" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1044,6 +1072,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#celery-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Celery Integration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Celery Integration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#setup_celery_detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        setup_celery_detection()
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#pytest-plugin" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1177,6 +1233,23 @@
 <p>Raised when an N+1 query or unused eager load is detected (when <code>NPLUS1_RAISE=True</code> or using <code>Profiler</code>).</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1</span><span class="w"> </span><span class="kn">import</span> <span class="n">NPlus1Error</span>
 </span></code></pre></div>
+<h2 id="celery-integration">Celery Integration<a class="headerlink" href="#celery-integration" title="Permanent link">&para;</a></h2>
+<p>Per-task N+1 detection for Celery workers. Each task execution gets its own detection context, mirroring how the middleware wraps HTTP requests.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>pip<span class="w"> </span>install<span class="w"> </span>django-nplus1<span class="o">[</span>celery<span class="o">]</span>
+</span></code></pre></div>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># settings.py</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">NPLUS1_CELERY</span> <span class="o">=</span> <span class="kc">True</span>
+</span></code></pre></div>
+<h3 id="setup_celery_detection"><code>setup_celery_detection()</code><a class="headerlink" href="#setup_celery_detection" title="Permanent link">&para;</a></h3>
+<p>Manually connect Celery task signals. Called automatically when <code>NPLUS1_CELERY = True</code>.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1.celery</span><span class="w"> </span><span class="kn">import</span> <span class="n">setup_celery_detection</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">setup_celery_detection</span><span class="p">()</span>
+</span></code></pre></div>
+<p><strong>Limitations:</strong></p>
+<ul>
+<li><code>nplus1_allow()</code> context does not propagate across task boundaries (ContextVars don't survive serialization).</li>
+<li>Scope nesting for synchronous subtasks (<code>.apply()</code> inside a task) creates a separate context for the inner task.</li>
+</ul>
 <h2 id="pytest-plugin">pytest Plugin<a class="headerlink" href="#pytest-plugin" title="Permanent link">&para;</a></h2>
 <h3 id="fixtures">Fixtures<a class="headerlink" href="#fixtures" title="Permanent link">&para;</a></h3>
 <ul>
