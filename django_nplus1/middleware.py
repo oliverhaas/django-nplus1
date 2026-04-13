@@ -9,14 +9,12 @@ from django.conf import settings
 from django.utils.decorators import sync_and_async_middleware
 
 from django_nplus1 import notifiers
-from django_nplus1.detect import LISTENERS, Message, Rule, is_allowed
+from django_nplus1.detect import Rule
 from django_nplus1.exceptions import NPlus1Error
-from django_nplus1.signals import nplus1_detected, setup_context, teardown_context
+from django_nplus1.scope import DetectionScope
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
-
-    from django_nplus1.detect import Listener
 
 _FNMATCH_CHARS = set("*?[]")
 
@@ -96,64 +94,20 @@ def _load_config() -> tuple[list[notifiers.Notifier], list[DjangoRule]]:
     return nots, whitelist
 
 
-class _DetectionContext:
-    """Manages listener setup/teardown for a single request scope."""
-
-    def __init__(self, nots: list[notifiers.Notifier], whitelist: list[DjangoRule]) -> None:
-        self.nots = nots
-        self.whitelist = whitelist
-        self.listeners: dict[str, Listener] = {}
-
-    def setup(self) -> None:
-        for name, listener_type in LISTENERS.items():
-            self.listeners[name] = listener_type(self)
-            self.listeners[name].setup()
-
-    def teardown(self) -> None:
-        for name in list(LISTENERS.keys()):
-            listener = self.listeners.pop(name, None)
-            if listener:
-                listener.teardown()
-
-    def notify(self, message: Message) -> None:
-        if not message.match(self.whitelist) and not is_allowed(message):
-            nplus1_detected.send(sender=NPlus1Middleware, message=message)
-            for notifier in self.nots:
-                notifier.notify(message)
-
-
 @sync_and_async_middleware
 def NPlus1Middleware(get_response: Any) -> Any:  # noqa: N802
     if iscoroutinefunction(get_response):
 
         async def async_middleware(request: HttpRequest) -> HttpResponse:
-            token = setup_context()
-            try:
-                nots, whitelist = _load_config()
-                ctx = _DetectionContext(nots, whitelist)
-                ctx.setup()
-                try:
-                    response = await get_response(request)
-                finally:
-                    ctx.teardown()
-            finally:
-                teardown_context(token)
-            return response
+            nots, whitelist = _load_config()
+            with DetectionScope(notifiers=nots, whitelist=whitelist, sender=NPlus1Middleware):
+                return await get_response(request)
 
         return async_middleware
 
     def sync_middleware(request: HttpRequest) -> HttpResponse:
-        token = setup_context()
-        try:
-            nots, whitelist = _load_config()
-            ctx = _DetectionContext(nots, whitelist)
-            ctx.setup()
-            try:
-                response = get_response(request)
-            finally:
-                ctx.teardown()
-        finally:
-            teardown_context(token)
-        return response
+        nots, whitelist = _load_config()
+        with DetectionScope(notifiers=nots, whitelist=whitelist, sender=NPlus1Middleware):
+            return get_response(request)
 
     return sync_middleware
