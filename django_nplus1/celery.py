@@ -79,7 +79,7 @@ def teardown_celery_detection() -> None:
     if not _connected:
         return
     try:
-        from celery.signals import task_postrun, task_prerun  # type: ignore[import-untyped]
+        from celery.signals import task_postrun, task_prerun
     except ImportError:
         return
     task_prerun.disconnect(_on_prerun)
