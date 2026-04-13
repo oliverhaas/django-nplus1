@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0
+
+- Celery integration: per-task N+1 detection via `task_prerun`/`task_postrun` signals. Enable with `NPLUS1_CELERY = True` or `pip install django-nplus1[celery]`.
+- Extract `DetectionContext` as a reusable public class for scoped detection.
+- Require Python 3.14+ and Django 6+.
+
 ## 0.1.0
 
 Initial release.

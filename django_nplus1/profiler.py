@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Any
 
 from django_nplus1.detect import Message, Rule, is_allowed

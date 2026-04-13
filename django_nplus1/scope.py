@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
 
 from django_nplus1.detect import LISTENERS, is_allowed

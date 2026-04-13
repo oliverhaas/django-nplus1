@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import contextlib
 import functools
 from collections import defaultdict
@@ -32,7 +30,7 @@ def connect(signal_name: str, callback: Callable[..., Any]) -> None:
 def disconnect(signal_name: str, callback: Callable[..., Any]) -> None:
     try:
         _listeners.get()[signal_name].remove(callback)
-    except (ValueError, LookupError):
+    except ValueError, LookupError:
         pass
 
 

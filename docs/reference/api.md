@@ -109,6 +109,33 @@ Raised when an N+1 query or unused eager load is detected (when `NPLUS1_RAISE=Tr
 from django_nplus1 import NPlus1Error
 ```
 
+## Celery Integration
+
+Per-task N+1 detection for Celery workers. Each task execution gets its own detection context, mirroring how the middleware wraps HTTP requests.
+
+```bash
+pip install django-nplus1[celery]
+```
+
+```python
+# settings.py
+NPLUS1_CELERY = True
+```
+
+### `setup_celery_detection()`
+
+Manually connect Celery task signals. Called automatically when `NPLUS1_CELERY = True`.
+
+```python
+from django_nplus1.celery import setup_celery_detection
+setup_celery_detection()
+```
+
+**Limitations:**
+
+- `nplus1_allow()` context does not propagate across task boundaries (ContextVars don't survive serialization).
+- Scope nesting for synchronous subtasks (`.apply()` inside a task) creates a separate context for the inner task.
+
 ## pytest Plugin
 
 ### Fixtures
