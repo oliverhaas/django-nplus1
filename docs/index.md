@@ -9,7 +9,7 @@ Based on [nplusone](https://github.com/jmcarp/nplusone) by [Joshua Carp](https:/
 
 Several features (deferred field detection, call-site tracking, `.get()`-in-a-loop detection, `ContextVar`-based async safety, and configurable thresholds) were inspired by [django-zeal](https://github.com/taobojlen/django-zeal) by [Tao Bojlen](https://github.com/taobojlen).
 
-`django-nplus1` is a Django-only fork that drops legacy compatibility in favour of Python 3.12+ / Django 5.2+, uses a `ContextVar`-based signal system, and adds unused eager-load detection.
+`django-nplus1` is a Django-only fork that drops legacy compatibility in favour of Python 3.14+ / Django 6+, uses a `ContextVar`-based signal system, and adds unused eager-load detection.
 
 ## Features
 
@@ -20,6 +20,7 @@ Several features (deferred field detection, call-site tracking, `.get()`-in-a-lo
 - **Call-site tracking**: Error messages include the exact file, line number, and function name
 - **Async support**: Works with both sync and async Django views
 - **Middleware**: Automatically monitors all requests (sync and async)
+- **Celery integration**: Per-task detection via `task_prerun`/`task_postrun` signals
 - **pytest plugin**: `nplus1` fixture and `@pytest.mark.nplus1` marker for test-time detection
 - **Profiler**: Context manager for manual use in scripts or tests
 - **Whitelisting**: Ignore specific model/field combinations with wildcard support and typo detection
@@ -52,5 +53,5 @@ NPLUS1_RAISE = True
 
 ## Requirements
 
-- Python 3.12+
-- Django 5.2+
+- Python 3.14+
+- Django 6+

@@ -52,3 +52,12 @@ with Profiler():
     users = list(User.objects.all())
     users[0].profile  # Raises NPlus1Error
 ```
+
+## Celery Tasks
+
+```python
+# settings.py
+NPLUS1_CELERY = True
+```
+
+Each task gets its own detection context, so N+1 queries inside `task.delay()` or `task.apply()` are reported the same way as in HTTP requests.

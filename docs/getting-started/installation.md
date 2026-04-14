@@ -35,3 +35,18 @@ MIDDLEWARE = [
 ```
 
 The middleware will now log warnings when N+1 queries or unused eager loads are detected.
+
+## Celery Integration
+
+To detect N+1 queries inside Celery tasks, install the `celery` extra and enable the integration:
+
+```bash
+pip install django-nplus1[celery]
+```
+
+```python
+# settings.py
+NPLUS1_CELERY = True
+```
+
+Each task execution gets its own detection context, mirroring how the middleware wraps HTTP requests. See [Celery Integration](../reference/api.md#celery-integration) for details.
