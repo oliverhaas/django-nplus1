@@ -504,6 +504,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#celery-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Celery Tasks
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -880,6 +891,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#celery-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Celery Tasks
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -937,6 +959,11 @@
 </span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">users</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">all</span><span class="p">())</span>
 </span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="n">users</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">profile</span>  <span class="c1"># Raises NPlus1Error</span>
 </span></code></pre></div>
+<h2 id="celery-tasks">Celery Tasks<a class="headerlink" href="#celery-tasks" title="Permanent link">&para;</a></h2>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># settings.py</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">NPLUS1_CELERY</span> <span class="o">=</span> <span class="kc">True</span>
+</span></code></pre></div>
+<p>Each task gets its own detection context, so N+1 queries inside <code>task.delay()</code> or <code>task.apply()</code> are reported the same way as in HTTP requests.</p>
 
 
 

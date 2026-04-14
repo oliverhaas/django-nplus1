@@ -828,7 +828,7 @@
 <p>N+1 query detection for Django.</p>
 <p>Based on <a href="https://github.com/jmcarp/nplusone">nplusone</a> by <a href="https://github.com/jmcarp">Joshua Carp</a>, a well-established library for automatic N+1 detection across Python ORMs. If you need broad ORM support (SQLAlchemy, Peewee, etc.), <code>nplusone</code> is still the best choice.</p>
 <p>Several features (deferred field detection, call-site tracking, <code>.get()</code>-in-a-loop detection, <code>ContextVar</code>-based async safety, and configurable thresholds) were inspired by <a href="https://github.com/taobojlen/django-zeal">django-zeal</a> by <a href="https://github.com/taobojlen">Tao Bojlen</a>.</p>
-<p><code>django-nplus1</code> is a Django-only fork that drops legacy compatibility in favour of Python 3.12+ / Django 5.2+, uses a <code>ContextVar</code>-based signal system, and adds unused eager-load detection.</p>
+<p><code>django-nplus1</code> is a Django-only fork that drops legacy compatibility in favour of Python 3.14+ / Django 6+, uses a <code>ContextVar</code>-based signal system, and adds unused eager-load detection.</p>
 <h2 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>N+1 detection</strong>: Warns when a related object is lazily loaded on an instance that was part of a bulk query</li>
@@ -838,6 +838,7 @@
 <li><strong>Call-site tracking</strong>: Error messages include the exact file, line number, and function name</li>
 <li><strong>Async support</strong>: Works with both sync and async Django views</li>
 <li><strong>Middleware</strong>: Automatically monitors all requests (sync and async)</li>
+<li><strong>Celery integration</strong>: Per-task detection via <code>task_prerun</code>/<code>task_postrun</code> signals</li>
 <li><strong>pytest plugin</strong>: <code>nplus1</code> fixture and <code>@pytest.mark.nplus1</code> marker for test-time detection</li>
 <li><strong>Profiler</strong>: Context manager for manual use in scripts or tests</li>
 <li><strong>Whitelisting</strong>: Ignore specific model/field combinations with wildcard support and typo detection</li>
@@ -865,8 +866,8 @@
 </span></code></pre></div>
 <h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Python 3.12+</li>
-<li>Django 5.2+</li>
+<li>Python 3.14+</li>
+<li>Django 6+</li>
 </ul>
 
 

@@ -437,6 +437,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#celery-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Celery Integration
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -802,6 +813,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#celery-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Celery Integration
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -848,6 +870,14 @@
 </span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="p">]</span>
 </span></code></pre></div>
 <p>The middleware will now log warnings when N+1 queries or unused eager loads are detected.</p>
+<h2 id="celery-integration">Celery Integration<a class="headerlink" href="#celery-integration" title="Permanent link">&para;</a></h2>
+<p>To detect N+1 queries inside Celery tasks, install the <code>celery</code> extra and enable the integration:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>pip<span class="w"> </span>install<span class="w"> </span>django-nplus1<span class="o">[</span>celery<span class="o">]</span>
+</span></code></pre></div>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># settings.py</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">NPLUS1_CELERY</span> <span class="o">=</span> <span class="kc">True</span>
+</span></code></pre></div>
+<p>Each task execution gets its own detection context, mirroring how the middleware wraps HTTP requests. See <a href="../../reference/api/#celery-integration">Celery Integration</a> for details.</p>
 
 
 
