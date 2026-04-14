@@ -275,6 +275,10 @@ class LazyListener(Listener):
         # select_related on one item from a queryset), this is semantically
         # an N+1 pattern, not an unused eager load. We use LazyLoadMessage
         # with label "n_plus_one" intentionally.
+        from django_nplus1.patch import _in_queryset_prefetch
+
+        if _in_queryset_prefetch.get():
+            return
         model, field, keys, _key = parser(args, kwargs, context)
         if len(keys) == 1 and keys[0] in self.loaded and keys[0] not in self.ignore:
             key = (model, field)
