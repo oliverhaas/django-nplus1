@@ -628,6 +628,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#inline-suppression-nplus1-ignore" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inline Suppression (# nplus1: ignore)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#profiler-whitelisting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -848,6 +859,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#inline-suppression-nplus1-ignore" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inline Suppression (# nplus1: ignore)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#profiler-whitelisting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -945,12 +967,27 @@
 </span></code></pre></div>
 <p>Uses the same whitelist format as <code>Profiler(whitelist=...)</code> and <code>@pytest.mark.nplus1(whitelist=...)</code>. Supports nesting: inner calls add to the outer rules; exiting an inner block restores the previous state. Works in both middleware and profiler contexts.</p>
 <p>This is the recommended approach for incrementally adopting detection in existing projects: enable <code>NPLUS1_RAISE = True</code> in tests, then wrap known N+1 patterns with <code>nplus1_allow()</code> and fix them over time.</p>
+<h2 id="inline-suppression-nplus1-ignore">Inline Suppression (<code># nplus1: ignore</code>)<a class="headerlink" href="#inline-suppression-nplus1-ignore" title="Permanent link">&para;</a></h2>
+<p>For per-line suppression co-located with the offending code, add a trailing comment to the call site:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Suppress any detection on this line</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">occupations</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">user</span>  <span class="c1"># nplus1: ignore</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Scope to one label</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="k">for</span> <span class="n">user</span> <span class="ow">in</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">pk</span><span class="o">=</span><span class="n">user</span><span class="o">.</span><span class="n">pk</span><span class="p">)</span>  <span class="c1"># nplus1: ignore[get_in_loop]</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="c1"># Scope to multiple labels</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="k">for</span> <span class="n">user</span> <span class="ow">in</span> <span class="n">users</span><span class="p">:</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">pk</span><span class="o">=</span><span class="n">user</span><span class="o">.</span><span class="n">pk</span><span class="p">)</span>  <span class="c1"># nplus1: ignore[n_plus_one, get_in_loop]</span>
+</span></code></pre></div>
+<p>Supported labels: <code>n_plus_one</code>, <code>get_in_loop</code>, <code>duplicate_query</code>.</p>
+<p>Inline comments apply to the exact line captured as the detection's call site. They do <strong>not</strong> apply to <code>unused_eager_load</code> detections, which happen at teardown without a specific call site — use the global whitelist or <code>nplus1_allow()</code> for those.</p>
 <h2 id="profiler-whitelisting">Profiler Whitelisting<a class="headerlink" href="#profiler-whitelisting" title="Permanent link">&para;</a></h2>
 <p>When using the <code>Profiler</code> directly, pass whitelist to the constructor:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1</span><span class="w"> </span><span class="kn">import</span> <span class="n">Profiler</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="k">with</span> <span class="n">Profiler</span><span class="p">(</span><span class="n">whitelist</span><span class="o">=</span><span class="p">[{</span><span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;User&quot;</span><span class="p">,</span> <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="s2">&quot;profile&quot;</span><span class="p">}]):</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="o">...</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1</span><span class="w"> </span><span class="kn">import</span> <span class="n">Profiler</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="k">with</span> <span class="n">Profiler</span><span class="p">(</span><span class="n">whitelist</span><span class="o">=</span><span class="p">[{</span><span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;User&quot;</span><span class="p">,</span> <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="s2">&quot;profile&quot;</span><span class="p">}]):</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="o">...</span>
 </span></code></pre></div>
 <p>Note: In the profiler context, model matching uses <code>model.__name__</code> (no app label prefix), unlike the middleware which uses <code>app_label.ModelName</code>.</p>
 
