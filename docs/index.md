@@ -24,6 +24,7 @@ Several features (deferred field detection, call-site tracking, `.get()`-in-a-lo
 - **pytest plugin**: `nplus1` fixture and `@pytest.mark.nplus1` marker for test-time detection
 - **Profiler**: Context manager for manual use in scripts or tests
 - **Whitelisting**: Ignore specific model/field combinations with wildcard support and typo detection
+- **Inline suppression**: `# nplus1: ignore` comments for per-line suppression
 - **`nplus1_allow()`**: Context manager to locally suppress detection for specific code blocks
 - **Multiple notification methods**: Logging, exceptions, `warnings.warn_explicit()`, and a Django signal
 - **Duplicate query detection**: Optional SQL-level fallback catches N+1 from raw SQL and `.raw()`

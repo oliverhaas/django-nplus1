@@ -1,6 +1,6 @@
 from typing import Any
 
-from django_nplus1.detect import Message, Rule, is_allowed
+from django_nplus1.detect import Message, Rule, is_allowed, is_inline_ignored
 from django_nplus1.exceptions import NPlus1Error
 from django_nplus1.scope import DetectionContext
 from django_nplus1.signals import nplus1_detected
@@ -16,6 +16,7 @@ class Profiler(DetectionContext):
         return self
 
     def notify(self, message: Message) -> None:
-        if not message.match(self._whitelist) and not is_allowed(message):
-            nplus1_detected.send(sender=type(self), message=message)
-            raise NPlus1Error(message.message)
+        if message.match(self._whitelist) or is_allowed(message) or is_inline_ignored(message):
+            return
+        nplus1_detected.send(sender=type(self), message=message)
+        raise NPlus1Error(message.message)

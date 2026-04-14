@@ -1,5 +1,6 @@
 import contextlib
 import fnmatch
+import linecache
 import re
 from collections import defaultdict
 from contextvars import ContextVar
@@ -46,6 +47,41 @@ def is_allowed(message: Message) -> bool:
     except LookupError:
         return False
     return message.match(rules) if rules else False
+
+
+_INLINE_IGNORE_RE = re.compile(r"#\s*nplus1:\s*ignore(?:\[([^\]]*)\])?")
+
+
+def _caller_ignores(caller: tuple[str, int, str], label: str) -> bool:
+    filename, lineno, _ = caller
+    line = linecache.getline(filename, lineno)
+    if not line:
+        return False
+    match = _INLINE_IGNORE_RE.search(line)
+    if not match:
+        return False
+    labels = match.group(1)
+    if not labels:
+        return True
+    return label in {s.strip() for s in labels.split(",")}
+
+
+def is_inline_ignored(message: Message) -> bool:
+    """Check if a detection is suppressed by an inline ``# nplus1: ignore`` comment.
+
+    Recognizes ``# nplus1: ignore`` (any label) and ``# nplus1: ignore[label, ...]``
+    (scoped to the listed labels, e.g. ``n_plus_one``, ``get_in_loop``,
+    ``duplicate_query``).
+
+    Does not apply to messages without caller info (e.g. ``EagerLoadMessage``
+    from unused ``select_related`` / ``prefetch_related``, which is detected at
+    teardown without a specific call site).
+    """
+    if message.caller:
+        return _caller_ignores(message.caller, message.label)
+    if message.callers:
+        return any(_caller_ignores(stack[0], message.label) for stack in message.callers if stack)
+    return False
 
 
 @contextlib.contextmanager

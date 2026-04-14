@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Any
 
-from django_nplus1.detect import LISTENERS, is_allowed
+from django_nplus1.detect import LISTENERS, is_allowed, is_inline_ignored
 from django_nplus1.signals import nplus1_detected, setup_context, teardown_context
 
 if TYPE_CHECKING:
@@ -63,8 +63,9 @@ class DetectionContext:
                 self._token = None
 
     def notify(self, message: Message) -> None:
-        if not message.match(self._whitelist) and not is_allowed(message):
-            sender = self._sender if self._sender is not None else type(self)
-            nplus1_detected.send(sender=sender, message=message)
-            for notifier in self._notifiers:
-                notifier.notify(message)
+        if message.match(self._whitelist) or is_allowed(message) or is_inline_ignored(message):
+            return
+        sender = self._sender if self._sender is not None else type(self)
+        nplus1_detected.send(sender=sender, message=message)
+        for notifier in self._notifiers:
+            notifier.notify(message)

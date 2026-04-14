@@ -60,6 +60,27 @@ Uses the same whitelist format as `Profiler(whitelist=...)` and `@pytest.mark.np
 
 This is the recommended approach for incrementally adopting detection in existing projects: enable `NPLUS1_RAISE = True` in tests, then wrap known N+1 patterns with `nplus1_allow()` and fix them over time.
 
+## Inline Suppression (`# nplus1: ignore`)
+
+For per-line suppression co-located with the offending code, add a trailing comment to the call site:
+
+```python
+# Suppress any detection on this line
+occupations[0].user  # nplus1: ignore
+
+# Scope to one label
+for user in User.objects.all():
+    User.objects.get(pk=user.pk)  # nplus1: ignore[get_in_loop]
+
+# Scope to multiple labels
+for user in users:
+    User.objects.get(pk=user.pk)  # nplus1: ignore[n_plus_one, get_in_loop]
+```
+
+Supported labels: `n_plus_one`, `get_in_loop`, `duplicate_query`.
+
+Inline comments apply to the exact line captured as the detection's call site. They do **not** apply to `unused_eager_load` detections, which happen at teardown without a specific call site — use the global whitelist or `nplus1_allow()` for those.
+
 ## Profiler Whitelisting
 
 When using the `Profiler` directly, pass whitelist to the constructor:
