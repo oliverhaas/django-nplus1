@@ -1,6 +1,7 @@
 import copy
 import functools
 import importlib
+from contextvars import ContextVar
 from typing import Any
 
 from django.db.models import Model, query
@@ -13,6 +14,11 @@ from django.db.models.fields.related_descriptors import (
 from django.db.models.query_utils import DeferredAttribute
 
 from django_nplus1 import signals
+
+# True while inside QuerySet._prefetch_related_objects. A prefetch that fires here
+# is proper queryset-level usage (e.g. ``Model.objects.prefetch_related(...).filter(pk=X)``)
+# and must not be flagged as N+1 even when the queryset returns a single instance.
+_in_queryset_prefetch: ContextVar[bool] = ContextVar("nplus1_in_queryset_prefetch", default=False)
 
 
 def to_key(instance: Model) -> str:
@@ -430,6 +436,22 @@ query.prefetch_one_level = signals.signalify(
     query.prefetch_one_level,
     parser=parse_eager_join,
 )
+
+
+# Mark queryset-level prefetch so single-instance prefetches on
+# ``qs.prefetch_related(...).filter(pk=X)`` aren't flagged as N+1.
+_original_prefetch_related_objects = query.QuerySet._prefetch_related_objects
+
+
+def _prefetch_related_objects(self: Any) -> None:
+    token = _in_queryset_prefetch.set(True)
+    try:
+        _original_prefetch_related_objects(self)
+    finally:
+        _in_queryset_prefetch.reset(token)
+
+
+query.QuerySet._prefetch_related_objects = _prefetch_related_objects  # type: ignore[method-assign]
 
 # Emit touch on indexing into prefetched QuerySet instances
 _original_getitem = query.QuerySet.__getitem__

@@ -94,6 +94,13 @@ class TestManyToMany:
         list(hobbies[0].users.all())
         assert len(calls) == 0
 
+    def test_prefetch_related_filter_pk_after_bulk_load(self, objects, lazy_listener):
+        """prefetch_related().filter(pk=X) after a bulk load must not be flagged."""
+        list(models.User.objects.all())  # bulk load populates `loaded`
+        user = models.User.objects.prefetch_related("hobbies").filter(pk=1).first()
+        list(user.hobbies.all())
+        lazy_listener.parent.notify.assert_not_called()
+
     def test_many_to_many_reverse_no_related_name(self, objects, calls):
         pet = models.Pet.objects.first()
         pet.allergy_set.first()
