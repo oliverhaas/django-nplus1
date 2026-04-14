@@ -440,7 +440,7 @@ query.prefetch_one_level = signals.signalify(
 
 # Mark queryset-level prefetch so single-instance prefetches on
 # ``qs.prefetch_related(...).filter(pk=X)`` aren't flagged as N+1.
-_original_prefetch_related_objects = query.QuerySet._prefetch_related_objects
+_original_prefetch_related_objects = query.QuerySet._prefetch_related_objects  # type: ignore[attr-defined]
 
 
 def _prefetch_related_objects(self: Any) -> None:
@@ -451,7 +451,7 @@ def _prefetch_related_objects(self: Any) -> None:
         _in_queryset_prefetch.reset(token)
 
 
-query.QuerySet._prefetch_related_objects = _prefetch_related_objects  # type: ignore[method-assign]
+query.QuerySet._prefetch_related_objects = _prefetch_related_objects  # type: ignore[attr-defined]
 
 # Emit touch on indexing into prefetched QuerySet instances
 _original_getitem = query.QuerySet.__getitem__
