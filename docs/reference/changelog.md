@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0
+
+- Inline `# nplus1: ignore` suppression. Add a trailing comment to the call site to suppress a detection, optionally scoped to labels (`# nplus1: ignore[n_plus_one, get_in_loop]`).
+- Fix false positive on `qs.prefetch_related(...).filter(pk=X)` where a queryset-level prefetch returning a single instance was flagged as N+1.
+
 ## 0.2.0
 
 - Celery integration: per-task N+1 detection via `task_prerun`/`task_postrun` signals. Enable with `NPLUS1_CELERY = True` or `pip install django-nplus1[celery]`.
