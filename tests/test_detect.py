@@ -101,6 +101,13 @@ class TestManyToMany:
         list(user.hobbies.all())
         lazy_listener.parent.notify.assert_not_called()
 
+    def test_many_to_many_forward_no_related_name(self, objects, calls):
+        allergy = models.Allergy.objects.first()
+        list(allergy.pets.all())
+        assert len(calls) == 1
+        call = calls[0]
+        assert call == (models.Allergy, f"Allergy:{allergy.pk}", "pets")
+
     def test_many_to_many_reverse_no_related_name(self, objects, calls):
         pet = models.Pet.objects.first()
         pet.allergy_set.first()

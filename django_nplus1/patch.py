@@ -134,12 +134,15 @@ def parse_many_related_queryset(
     rel = context["rel"]
     manager = context["args"][0]
     model = manager.instance.__class__
-    related_model = manager.target_field.related_model
-    field = manager.prefetch_cache_name if rel.related_name else None
+    if manager.reverse:
+        related_model = manager.target_field.related_model
+        field = rel.related_name or get_related_name(related_model)
+    else:
+        field = manager.prefetch_cache_name
     return (
         model,
         to_key(manager.instance),
-        field or get_related_name(related_model),
+        field,
     )
 
 

@@ -36,4 +36,5 @@ urlpatterns = [
     path("many_to_many_allowed/", views.many_to_many_allowed),
     path("raw_sql_loop/", views.raw_sql_loop),
     path("raw_sql_single/", views.raw_sql_single),
+    path("many_to_many_forward_no_related/", views.many_to_many_forward_no_related),
 ]

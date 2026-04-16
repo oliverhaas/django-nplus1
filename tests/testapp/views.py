@@ -220,3 +220,9 @@ def raw_sql_single(request):
         cursor.execute("SELECT id, name FROM testapp_user WHERE id = %s", [1])
         result = cursor.fetchone()
     return HttpResponse(str(result))
+
+
+def many_to_many_forward_no_related(request):
+    """Forward M2M without explicit related_name -- triggers N+1."""
+    allergies = list(models.Allergy.objects.all())
+    return HttpResponse(list(allergies[0].pets.all()))

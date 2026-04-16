@@ -226,6 +226,16 @@ class TestWhitelistValidation:
         client.get("/many_to_many/")
         assert not logger.log.called
 
+    def test_m2m_forward_no_related_name_whitelist(self, objects, client, logger, monkeypatch):
+        """Whitelisting a forward M2M field without explicit related_name works."""
+        monkeypatch.setattr(
+            settings,
+            "NPLUS1_WHITELIST",
+            [{"model": "testapp.Allergy", "field": "pets"}],
+        )
+        client.get("/many_to_many_forward_no_related/")
+        assert not logger.log.called
+
 
 @pytest.mark.django_db
 class TestDeferred:
