@@ -14,31 +14,41 @@ INSTALLED_APPS = [..., "django_nplus1"]
 ```
 
 ```python
-# tests.py
-@pytest.mark.nplus1
-class TestMyView:
-    def test_list_books(self, books):
-        response = client.get("/books/")  # raises NPlus1Error if view has N+1
+# settings/testing.py
+MIDDLEWARE = [..., "django_nplus1.NPlus1Middleware"]
+NPLUS1_RAISE = True
 ```
 
-Tests marked with `@pytest.mark.nplus1` will fail if the code under test triggers an N+1 query. Fix the N+1, or use `nplus1_allow()` in helper functions that intentionally defer prefetching to their callers.
+Adding the middleware to your test settings means every view test that goes through the Django test client will fail on N+1 queries. This catches real problems in actual request paths without false positives from helper functions or scripts that intentionally defer prefetching.
 
-See [examples/](examples/) for a working project and the [docs](https://oliverhaas.github.io/django-nplus1/) for full configuration.
+For existing projects, introducing django-nplus1 will likely surface many N+1 queries at once. Whitelist the known issues and fix them over time:
+
+```python
+# settings/testing.py
+NPLUS1_WHITELIST = [
+    {"model": "myapp.Author", "field": "books"},
+    {"model": "myapp.Book", "field": "publisher"},
+]
+```
+
+The middleware can also run in development or production settings to log warnings instead of raising — see the [docs](https://oliverhaas.github.io/django-nplus1/) for all options, including the pytest plugin and the `Profiler` context manager.
+
+See [examples/](examples/) for a working project.
 
 ## Celery Integration
 
-Detect N+1 queries inside Celery tasks, using the same per-execution scoping as the HTTP middleware.
+The equivalent of the middleware for Celery tasks — each task execution gets its own detection scope.
 
 ```bash
 pip install django-nplus1[celery]
 ```
 
 ```python
-# settings.py
+# settings.py (or settings/testing.py)
 NPLUS1_CELERY = True
 ```
 
-Each task execution gets its own detection scope. Lazy loads, `.get()`-in-a-loop, unused eager loads, and duplicate queries are all detected per-task, just as they are per-request. `nplus1_allow()` works inside tasks the same way it does in views.
+Lazy loads, `.get()`-in-a-loop, unused eager loads, and duplicate queries are all detected per-task, just as they are per-request. `nplus1_allow()` works inside tasks the same way it does in views.
 
 **Limitations:**
 

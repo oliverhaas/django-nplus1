@@ -118,8 +118,20 @@ NPLUS1_WHITELIST = [
 ## Recommended Test Configuration
 
 ```python
-# settings/test.py
+# settings/testing.py
+MIDDLEWARE = [
+    ...,
+    "django_nplus1.NPlus1Middleware",
+]
 NPLUS1_RAISE = True
 ```
 
-With good test coverage, this catches N+1 queries during testing. For existing projects that surface many issues at first, use `nplus1_allow()` to suppress known problems and fix them incrementally. See [nplus1_allow](../reference/api.md#nplus1_allow) for details.
+Adding the middleware only in test settings catches N+1 queries in your actual view code paths. For existing projects that surface many issues at first, whitelist the known problems and fix them incrementally:
+
+```python
+NPLUS1_WHITELIST = [
+    {"model": "myapp.Author", "field": "books"},
+]
+```
+
+See [Whitelisting](whitelisting.md) for the full format.
