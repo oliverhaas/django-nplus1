@@ -18,6 +18,7 @@ def objects(db):
     allergy = Allergy.objects.create()
     allergy.pets.add(pet)
     Occupation.objects.create(user=user)
+    Occupation.objects.create(user=user2)
     Address.objects.create(user=user)
     hobby = Hobby.objects.create()
     user.hobbies.add(hobby)

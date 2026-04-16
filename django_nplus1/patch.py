@@ -363,6 +363,12 @@ def is_single(low: int, high: int | None) -> bool:
     return high is not None and high - low == 1
 
 
+def _should_ignore_single_result() -> bool:
+    from django.conf import settings
+
+    return getattr(settings, "NPLUS1_IGNORE_SINGLE_RESULT", True)
+
+
 # Patch _fetch_all to emit load/ignore_load and touch signals
 _original_fetch_all = query.QuerySet._fetch_all
 
@@ -375,7 +381,12 @@ def _fetch_all(self: Any) -> None:
             parser=parse_fetch_all,
         )
     _original_fetch_all(self)
-    signal = signals.IGNORE_LOAD if is_single(self.query.low_mark, self.query.high_mark) else signals.LOAD
+    if is_single(self.query.low_mark, self.query.high_mark) or (
+        len(self._result_cache or ()) <= 1 and _should_ignore_single_result()
+    ):
+        signal = signals.IGNORE_LOAD
+    else:
+        signal = signals.LOAD
     signals.send(
         signal,
         args=(self,),
