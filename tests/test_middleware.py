@@ -2,6 +2,7 @@ import pytest
 from django.conf import settings
 from django.http.request import HttpRequest
 from django.http.response import HttpResponse
+from testapp.models import Pet, User
 
 from django_nplus1.exceptions import NPlus1Error
 from django_nplus1.middleware import NPlus1Middleware
@@ -54,15 +55,11 @@ class TestIntegration:
         assert not logger.log.called
 
     def test_prefetch_many_to_many_empty(self, objects, client, logger):
-        from testapp.models import User
-
         User.objects.all().delete()
         client.get("/prefetch_many_to_many/")
         assert not logger.log.called
 
     def test_prefetch_many_to_many_render_empty(self, objects, client, logger):
-        from testapp.models import User
-
         User.objects.all().delete()
         client.get("/prefetch_many_to_many_render/")
         assert not logger.log.called
@@ -84,8 +81,6 @@ class TestIntegration:
         assert not logger.log.called
 
     def test_select_many_to_one_empty(self, objects, client, logger):
-        from testapp.models import Pet
-
         Pet.objects.all().delete()
         client.get("/select_many_to_one/")
         assert not logger.log.called

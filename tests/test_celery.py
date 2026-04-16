@@ -1,6 +1,8 @@
 import pytest
 from celery import Celery
+from testapp.models import Occupation, User
 
+from django_nplus1 import nplus1_allow
 from django_nplus1.celery import _active_scopes, setup_celery_detection, teardown_celery_detection
 from django_nplus1.exceptions import NPlus1Error
 
@@ -13,18 +15,12 @@ app.conf.update(
 
 @app.task
 def nplus1_task():
-    from testapp.models import Occupation
-
     occupations = list(Occupation.objects.all())
     occupations[0].user
 
 
 @app.task
 def allowed_task():
-    from testapp.models import Occupation
-
-    from django_nplus1 import nplus1_allow
-
     with nplus1_allow():
         occupations = list(Occupation.objects.all())
         occupations[0].user
@@ -37,8 +33,6 @@ def failing_task():
 
 @app.task
 def clean_task():
-    from testapp.models import User
-
     list(User.objects.all())
 
 

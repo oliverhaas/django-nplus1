@@ -1,6 +1,10 @@
+from django.db import connection
+from django.db.models import prefetch_related_objects
 from django.http import HttpResponse
 from django.template import Context, Template
 from testapp import models
+
+from django_nplus1 import nplus1_allow
 
 
 def one_to_one(request):
@@ -127,8 +131,6 @@ def select_nested_unused(request):
 
 
 def prefetch_related_objects_loop(request):
-    from django.db.models import prefetch_related_objects
-
     users = list(models.User.objects.all())
     for user in users:
         prefetch_related_objects([user], "hobbies")
@@ -136,24 +138,18 @@ def prefetch_related_objects_loop(request):
 
 
 def prefetch_related_objects_bulk(request):
-    from django.db.models import prefetch_related_objects
-
     users = list(models.User.objects.all())
     prefetch_related_objects(users, "hobbies")
     return HttpResponse([user.hobbies.all() for user in users])
 
 
 def prefetch_related_objects_get(request):
-    from django.db.models import prefetch_related_objects
-
     user = models.User.objects.get(pk=1)
     prefetch_related_objects([user], "hobbies")
     return HttpResponse(user.hobbies.all())
 
 
 def prefetch_related_objects_first(request):
-    from django.db.models import prefetch_related_objects
-
     user = models.User.objects.first()
     prefetch_related_objects([user], "hobbies")
     return HttpResponse(user.hobbies.all())
@@ -192,8 +188,6 @@ def get_different_lines(request):
 
 def many_to_many_allowed(request):
     """N+1 that is explicitly allowed via nplus1_allow."""
-    from django_nplus1 import nplus1_allow
-
     users = list(models.User.objects.all())
     with nplus1_allow([{"model": "User", "field": "hobbies"}]):
         return HttpResponse(users[0].hobbies.all())
@@ -201,8 +195,6 @@ def many_to_many_allowed(request):
 
 def raw_sql_loop(request):
     """Raw SQL in a loop - should be detected by DuplicateQueryListener."""
-    from django.db import connection
-
     pks = list(models.User.objects.values_list("pk", flat=True))
     results = []
     for pk in pks:
@@ -214,8 +206,6 @@ def raw_sql_loop(request):
 
 def raw_sql_single(request):
     """Single raw SQL query - should NOT be detected."""
-    from django.db import connection
-
     with connection.cursor() as cursor:
         cursor.execute("SELECT id, name FROM testapp_user WHERE id = %s", [1])
         result = cursor.fetchone()

@@ -2,6 +2,7 @@ import pytest
 
 from django_nplus1 import signals
 from django_nplus1.detect import EagerListener
+from django_nplus1.signals import _listeners, setup_context, teardown_context
 
 
 @pytest.mark.django_db
@@ -66,7 +67,6 @@ class TestEagerListenerCleanup:
 
     def test_no_stale_handlers_after_teardown(self):
         """After teardown, all signal handlers registered by EagerListener must be removed."""
-        from django_nplus1.signals import _listeners, setup_context, teardown_context
 
         token = setup_context()
 

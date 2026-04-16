@@ -1,5 +1,6 @@
 import pytest
 from django.conf import settings
+from testapp.models import User
 
 from django_nplus1 import signals
 from django_nplus1.detect import LazyLoadMessage
@@ -83,8 +84,6 @@ class TestNPlus1DetectedSignalMiddleware:
 
     def test_signal_carries_correct_model(self, objects, client, logger):
         """The message in the signal has the correct model."""
-        from testapp.models import User
-
         received = []
 
         def handler(sender, message, **kwargs):
@@ -101,8 +100,6 @@ class TestNPlus1DetectedSignalMiddleware:
 @pytest.mark.django_db
 class TestNPlus1DetectedSignalProfiler:
     def test_signal_emitted_on_detection(self, objects):
-        from testapp.models import User
-
         received = []
 
         def handler(sender, message, **kwargs):
@@ -121,8 +118,6 @@ class TestNPlus1DetectedSignalProfiler:
             nplus1_detected.disconnect(handler)
 
     def test_signal_sender_is_profiler_class(self, objects):
-        from testapp.models import User
-
         received = []
 
         def handler(sender, message, **kwargs):
@@ -139,8 +134,6 @@ class TestNPlus1DetectedSignalProfiler:
             nplus1_detected.disconnect(handler)
 
     def test_signal_not_emitted_when_whitelisted(self, objects):
-        from testapp.models import User
-
         received = []
 
         def handler(sender, message, **kwargs):
