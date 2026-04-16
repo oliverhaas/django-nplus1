@@ -1138,10 +1138,19 @@
 </span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="p">]</span>
 </span></code></pre></div>
 <h2 id="recommended-test-configuration">Recommended Test Configuration<a class="headerlink" href="#recommended-test-configuration" title="Permanent link">&para;</a></h2>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># settings/test.py</span>
-</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="n">NPLUS1_RAISE</span> <span class="o">=</span> <span class="kc">True</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># settings/testing.py</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="n">MIDDLEWARE</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>    <span class="o">...</span><span class="p">,</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    <span class="s2">&quot;django_nplus1.NPlus1Middleware&quot;</span><span class="p">,</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="p">]</span>
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="n">NPLUS1_RAISE</span> <span class="o">=</span> <span class="kc">True</span>
 </span></code></pre></div>
-<p>With good test coverage, this catches N+1 queries during testing. For existing projects that surface many issues at first, use <code>nplus1_allow()</code> to suppress known problems and fix them incrementally. See <a href="../../reference/api/#nplus1_allow">nplus1_allow</a> for details.</p>
+<p>Adding the middleware only in test settings catches N+1 queries in your actual view code paths. For existing projects that surface many issues at first, whitelist the known problems and fix them incrementally:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">NPLUS1_WHITELIST</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>    <span class="p">{</span><span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;myapp.Author&quot;</span><span class="p">,</span> <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="s2">&quot;books&quot;</span><span class="p">},</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="p">]</span>
+</span></code></pre></div>
+<p>See <a href="../whitelisting/">Whitelisting</a> for the full format.</p>
 
 
 
