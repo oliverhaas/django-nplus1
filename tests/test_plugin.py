@@ -44,6 +44,15 @@ class TestProfiler:
             for user in users:
                 list(user.hobbies.all())
 
+    def test_profiler_no_false_positive_single_result_prefetch(self, objects, settings):
+        from django.db.models import prefetch_related_objects
+        from testapp.models import User
+
+        with Profiler():
+            users = list(User.objects.filter(pk=1))
+            prefetch_related_objects(users, "hobbies")
+            list(users[0].hobbies.all())
+
     def test_profiler_error_includes_caller(self, objects):
         with pytest.raises(NPlus1Error, match=r"at .+\.py:\d+ in"), Profiler():
             occupations = list(Occupation.objects.all())
