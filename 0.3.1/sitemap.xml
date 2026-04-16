@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+         <loc>https://oliverhaas.github.io/django-nplus1/0.3.1/</loc>
+         <lastmod>2026-04-16</lastmod>
+    </url>
+    <url>
+         <loc>https://oliverhaas.github.io/django-nplus1/0.3.1/getting-started/installation/</loc>
+         <lastmod>2026-04-16</lastmod>
+    </url>
+    <url>
+         <loc>https://oliverhaas.github.io/django-nplus1/0.3.1/getting-started/quickstart/</loc>
+         <lastmod>2026-04-16</lastmod>
+    </url>
+    <url>
+         <loc>https://oliverhaas.github.io/django-nplus1/0.3.1/reference/api/</loc>
+         <lastmod>2026-04-16</lastmod>
+    </url>
+    <url>
+         <loc>https://oliverhaas.github.io/django-nplus1/0.3.1/reference/changelog/</loc>
+         <lastmod>2026-04-16</lastmod>
+    </url>
+    <url>
+         <loc>https://oliverhaas.github.io/django-nplus1/0.3.1/user-guide/configuration/</loc>
+         <lastmod>2026-04-16</lastmod>
+    </url>
+    <url>
+         <loc>https://oliverhaas.github.io/django-nplus1/0.3.1/user-guide/pytest-plugin/</loc>
+         <lastmod>2026-04-16</lastmod>
+    </url>
+    <url>
+         <loc>https://oliverhaas.github.io/django-nplus1/0.3.1/user-guide/whitelisting/</loc>
+         <lastmod>2026-04-16</lastmod>
+    </url>
+</urlset>
