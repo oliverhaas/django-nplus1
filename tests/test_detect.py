@@ -1,3 +1,4 @@
+import sys
 from unittest import mock
 
 import pytest
@@ -277,3 +278,37 @@ class TestStandalonePrefetch:
         for user in users:
             prefetch_related_objects([user], "hobbies")
         lazy_listener.parent.notify.assert_called()
+
+    def test_stale_import_converging_fk_chains(self, shared_fk_objects, lazy_listener):
+        """sys.modules walk replaces stale from-imports so suppression still works."""
+        import types
+
+        from django_nplus1.patch import (
+            _original_prefetch_related_objects,
+            _standalone_prefetch_related_objects,
+        )
+
+        # Simulate a module that captured the original before patching.
+        stale_mod = types.ModuleType("_stale_test_mod")
+        stale_mod.prefetch_related_objects = _original_prefetch_related_objects  # type: ignore[attr-defined]
+        sys.modules["_stale_test_mod"] = stale_mod
+
+        # Re-run the fixup walk.
+        for mod in list(sys.modules.values()):
+            try:
+                if getattr(mod, "prefetch_related_objects", None) is _original_prefetch_related_objects:
+                    mod.prefetch_related_objects = _standalone_prefetch_related_objects  # type: ignore[attr-defined]
+            except AttributeError, TypeError:
+                pass
+
+        try:
+            lazy_listener.threshold = 2
+            companies = list(Company.objects.all())
+            stale_mod.prefetch_related_objects(
+                companies,
+                "main_store__region",
+                "backup_store__region",
+            )
+            lazy_listener.parent.notify.assert_not_called()
+        finally:
+            del sys.modules["_stale_test_mod"]

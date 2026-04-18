@@ -2,6 +2,7 @@ import copy
 import functools
 import importlib
 import itertools
+import sys
 from contextvars import ContextVar
 from typing import Any
 
@@ -480,6 +481,15 @@ def _standalone_prefetch_related_objects(model_instances: Any, *related_lookups:
 # ``from django.db.models import prefetch_related_objects`` picks up the wrapper.
 query.prefetch_related_objects = _standalone_prefetch_related_objects
 importlib.import_module("django.db.models").prefetch_related_objects = _standalone_prefetch_related_objects  # type: ignore[attr-defined]
+
+# Fix stale from-imports captured before AppConfig.ready() ran.
+for _mod in list(sys.modules.values()):
+    try:
+        if getattr(_mod, "prefetch_related_objects", None) is _original_prefetch_related_objects:
+            _mod.prefetch_related_objects = _standalone_prefetch_related_objects  # type: ignore[attr-defined]
+    except AttributeError, TypeError:
+        pass
+del _mod
 
 # Emit touch on indexing into prefetched QuerySet instances
 _original_getitem = query.QuerySet.__getitem__
