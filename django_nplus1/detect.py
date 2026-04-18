@@ -188,6 +188,7 @@ class LazyListener(Listener):
     loaded: set[str]
     ignore: set[str]
     counts: defaultdict[tuple[type, str], int]
+    last_call_id: dict[tuple[type, str], int | None]
     show_all_callers: bool
     call_stacks: defaultdict[tuple[type, str], list[list[tuple[str, int, str]]]]
 
@@ -199,6 +200,7 @@ class LazyListener(Listener):
         self.loaded = set()
         self.ignore = set()
         self.counts = defaultdict(int)
+        self.last_call_id: dict[tuple[type, str], int | None] = {}
         self.threshold = getattr(settings, "NPLUS1_THRESHOLD", 2)
         self.show_all_callers = getattr(settings, "NPLUS1_SHOW_ALL_CALLERS", False)
         self.call_stacks = defaultdict(list)
@@ -275,13 +277,17 @@ class LazyListener(Listener):
         # select_related on one item from a queryset), this is semantically
         # an N+1 pattern, not an unused eager load. We use LazyLoadMessage
         # with label "n_plus_one" intentionally.
-        from django_nplus1.patch import _in_queryset_prefetch
+        from django_nplus1.patch import _in_queryset_prefetch, _prefetch_call_id
 
         if _in_queryset_prefetch.get():
             return
         model, field, keys, _key = parser(args, kwargs, context)
         if len(keys) == 1 and keys[0] in self.loaded and keys[0] not in self.ignore:
             key = (model, field)
+            call_id = _prefetch_call_id.get()
+            if call_id is not None and self.last_call_id.get(key) == call_id:
+                return  # same prefetch_related_objects() call — not N+1
+            self.last_call_id[key] = call_id
             self.counts[key] += 1
             if self.show_all_callers:
                 from django_nplus1.util import get_stack

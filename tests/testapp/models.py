@@ -40,3 +40,31 @@ class Address(models.Model):
 class Hobby(models.Model):
     class Meta:
         app_label = "testapp"
+
+
+class Region(models.Model):
+    class Meta:
+        app_label = "testapp"
+
+
+class Store(models.Model):
+    region = models.ForeignKey(Region, on_delete=models.CASCADE, related_name="stores")
+
+    class Meta:
+        app_label = "testapp"
+
+
+class Company(models.Model):
+    main_store = models.ForeignKey(
+        Store,
+        on_delete=models.CASCADE,
+        related_name="main_companies",
+    )
+    backup_store = models.ForeignKey(
+        Store,
+        on_delete=models.CASCADE,
+        related_name="backup_companies",
+    )
+
+    class Meta:
+        app_label = "testapp"

@@ -1,6 +1,7 @@
 import copy
 import functools
 import importlib
+import itertools
 from contextvars import ContextVar
 from typing import Any
 
@@ -19,6 +20,12 @@ from django_nplus1 import signals
 # is proper queryset-level usage (e.g. ``Model.objects.prefetch_related(...).filter(pk=X)``)
 # and must not be flagged as N+1 even when the queryset returns a single instance.
 _in_queryset_prefetch: ContextVar[bool] = ContextVar("nplus1_in_queryset_prefetch", default=False)
+
+# Unique id for the current prefetch_related_objects() call. Lets handle_eager
+# distinguish repeated eager loads within one call (converging FK chains, not N+1)
+# from cross-call repetition (actual N+1 in a loop).
+_prefetch_call_id: ContextVar[int | None] = ContextVar("nplus1_prefetch_call_id", default=None)
+_prefetch_call_seq = itertools.count()
 
 
 def to_key(instance: Model) -> str:
@@ -441,20 +448,38 @@ query.prefetch_one_level = signals.signalify(
 )
 
 
-# Mark queryset-level prefetch so single-instance prefetches on
-# ``qs.prefetch_related(...).filter(pk=X)`` aren't flagged as N+1.
-_original_prefetch_related_objects = query.QuerySet._prefetch_related_objects  # type: ignore[attr-defined]
+# Mark prefetch calls so single-instance prefetches aren't flagged as N+1.
+# Both the queryset method and the standalone function need wrapping —
+# without it, prefetch_related_objects() with converging FK chains
+# (e.g. "store__region", "warehouse__region") produces false positives.
+_original_qs_prefetch_related_objects = query.QuerySet._prefetch_related_objects  # type: ignore[attr-defined]
 
 
-def _prefetch_related_objects(self: Any) -> None:
+def _qs_prefetch_related_objects(self: Any) -> None:
     token = _in_queryset_prefetch.set(True)
     try:
-        _original_prefetch_related_objects(self)
+        _original_qs_prefetch_related_objects(self)
     finally:
         _in_queryset_prefetch.reset(token)
 
 
-query.QuerySet._prefetch_related_objects = _prefetch_related_objects  # type: ignore[attr-defined]
+query.QuerySet._prefetch_related_objects = _qs_prefetch_related_objects  # type: ignore[attr-defined]
+
+_original_prefetch_related_objects = query.prefetch_related_objects
+
+
+def _standalone_prefetch_related_objects(model_instances: Any, *related_lookups: Any) -> None:
+    token = _prefetch_call_id.set(next(_prefetch_call_seq))
+    try:
+        _original_prefetch_related_objects(model_instances, *related_lookups)
+    finally:
+        _prefetch_call_id.reset(token)
+
+
+# Patch both the defining module and the public re-export so that
+# ``from django.db.models import prefetch_related_objects`` picks up the wrapper.
+query.prefetch_related_objects = _standalone_prefetch_related_objects
+importlib.import_module("django.db.models").prefetch_related_objects = _standalone_prefetch_related_objects  # type: ignore[attr-defined]
 
 # Emit touch on indexing into prefetched QuerySet instances
 _original_getitem = query.QuerySet.__getitem__

@@ -2,7 +2,7 @@ from unittest import mock
 
 import pytest
 from django.conf import settings
-from testapp.models import Address, Allergy, Hobby, Occupation, Pet, User
+from testapp.models import Address, Allergy, Company, Hobby, Occupation, Pet, Region, Store, User
 
 from django_nplus1 import signals
 from django_nplus1.detect import LazyListener
@@ -21,6 +21,15 @@ def objects(db):
     Address.objects.create(user=user)
     hobby = Hobby.objects.create()
     user.hobbies.add(hobby)
+
+
+@pytest.fixture
+def shared_fk_objects(db):
+    r1 = Region.objects.create()
+    r2 = Region.objects.create()
+    main = Store.objects.create(region=r1)
+    backup = Store.objects.create(region=r2)
+    return Company.objects.create(main_store=main, backup_store=backup)
 
 
 @pytest.fixture

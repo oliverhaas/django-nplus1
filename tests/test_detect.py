@@ -1,7 +1,15 @@
 from unittest import mock
 
 import pytest
-from testapp.models import Address, Allergy, Hobby, Occupation, Pet, User
+from testapp.models import (
+    Address,
+    Allergy,
+    Company,
+    Hobby,
+    Occupation,
+    Pet,
+    User,
+)
 
 from django_nplus1.detect import LazyListener, LazyLoadMessage
 from django_nplus1.signals import setup_context, teardown_context
@@ -241,3 +249,31 @@ class TestShowAllCallers:
 @pytest.mark.django_db
 def test_values(objects, lazy_listener):
     list(User.objects.values("id"))
+
+
+@pytest.mark.django_db
+class TestStandalonePrefetch:
+    """prefetch_related_objects() should not false-positive on converging FK chains."""
+
+    def test_converging_fk_chains_not_flagged(self, shared_fk_objects, lazy_listener):
+        """Two chains ending on (Store, "region") within one call: not flagged."""
+        from django.db.models import prefetch_related_objects
+
+        lazy_listener.threshold = 2
+        companies = list(Company.objects.all())
+        prefetch_related_objects(
+            companies,
+            "main_store__region",
+            "backup_store__region",
+        )
+        lazy_listener.parent.notify.assert_not_called()
+
+    def test_loop_still_flagged(self, objects, lazy_listener):
+        """Separate prefetch_related_objects calls in a loop: flagged."""
+        from django.db.models import prefetch_related_objects
+
+        lazy_listener.threshold = 2
+        users = list(User.objects.all())
+        for user in users:
+            prefetch_related_objects([user], "hobbies")
+        lazy_listener.parent.notify.assert_called()
