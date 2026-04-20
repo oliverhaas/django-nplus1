@@ -487,7 +487,7 @@ for _mod in list(sys.modules.values()):
     try:
         if getattr(_mod, "prefetch_related_objects", None) is _original_prefetch_related_objects:
             _mod.prefetch_related_objects = _standalone_prefetch_related_objects  # type: ignore[attr-defined]
-    except AttributeError, TypeError:
+    except Exception:  # noqa: BLE001, S110 — third-party __getattr__ can raise anything
         pass
 del _mod
 

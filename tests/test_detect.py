@@ -298,7 +298,7 @@ class TestStandalonePrefetch:
             try:
                 if getattr(mod, "prefetch_related_objects", None) is _original_prefetch_related_objects:
                     mod.prefetch_related_objects = _standalone_prefetch_related_objects  # type: ignore[attr-defined]
-            except AttributeError, TypeError:
+            except Exception:  # noqa: BLE001, S110
                 pass
 
         try:
