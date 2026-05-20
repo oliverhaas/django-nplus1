@@ -525,13 +525,13 @@ _original_check_parent_chain = DeferredAttribute._check_parent_chain  # type: ig
 def _check_parent_chain(self: Any, instance: Any) -> Any:
     ret = _original_check_parent_chain(self, instance)
     if ret is None:
-        # Field is not loaded - Django will fetch it from DB
+        # deferred=True so LazyListener skips the relation-only self.ignore set.
         signals.send(
             signals.LAZY_LOAD,
             args=(self, instance),
             kwargs={},
             ret=ret,
-            context={},
+            context={"deferred": True},
             parser=parse_deferred_attribute,
         )
     return ret

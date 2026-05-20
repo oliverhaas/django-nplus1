@@ -248,7 +248,10 @@ class LazyListener(Listener):
         parser: Any = None,
     ) -> None:
         model, instance, field = parser(args, kwargs, context)
-        if instance in self.loaded and instance not in self.ignore:
+        # self.ignore suppresses the relation-miss path only. A singleton
+        # fetch says nothing about whether a deferred field was loaded.
+        deferred = bool(context and context.get("deferred"))
+        if instance in self.loaded and (deferred or instance not in self.ignore):
             key = (model, field)
             self.counts[key] += 1
             if self.show_all_callers:

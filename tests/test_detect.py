@@ -158,6 +158,15 @@ class TestDeferred:
         user.name  # should not raise - single instance
         lazy_listener.parent.notify.assert_not_called()
 
+    def test_deferred_flagged_after_incidental_single_fetch(self, objects, lazy_listener):
+        """Deferred-field N+1 must still fire when the row was also fetched as a singleton."""
+        users = list(User.objects.only("id"))
+        for user in users:
+            User.objects.get(pk=user.pk)  # populates self.ignore
+        for user in users:
+            _ = user.name
+        lazy_listener.parent.notify.assert_called()
+
 
 @pytest.mark.django_db
 class TestCallerInfo:
