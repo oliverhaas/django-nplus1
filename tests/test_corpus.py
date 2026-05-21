@@ -1,4 +1,9 @@
+import pytest
+from testapp.models import User
+
+from django_nplus1 import corpus
 from django_nplus1.corpus import CorpusEagerTracker
+from django_nplus1.signals import setup_context, teardown_context
 
 
 def make_site(line=42):
@@ -52,3 +57,47 @@ def test_serialize_merge_round_trip():
 
     b.record_load(model=int, field="pets", instances=["User:3"], site=site)
     assert b.unused() == [(int, "pets", site)]
+
+
+@pytest.fixture
+def fresh_tracker():
+    corpus._corpus_tracker = corpus.CorpusEagerTracker()
+    yield corpus._corpus_tracker
+    corpus._corpus_tracker = None
+
+
+@pytest.mark.django_db
+def test_corpus_listener_records_loads_with_site(fresh_tracker, objects):
+    token = setup_context()
+    listener = corpus.CorpusEagerListener(parent=None)
+    listener.setup()
+    try:
+        list(User.objects.prefetch_related("hobbies").all())
+    finally:
+        listener.teardown()
+        teardown_context(token)
+
+    keys = list(fresh_tracker.data.keys())
+    assert len(keys) == 1
+    model, field, site = keys[0]
+    assert model is User
+    assert field == "hobbies"
+    assert site[0].endswith("test_corpus.py")
+
+
+@pytest.mark.django_db
+def test_corpus_listener_records_touches(fresh_tracker, objects):
+    token = setup_context()
+    listener = corpus.CorpusEagerListener(parent=None)
+    listener.setup()
+    try:
+        users = list(User.objects.prefetch_related("hobbies").all())
+        for u in users:
+            list(u.hobbies.all())  # triggers TOUCH on prefetched manager
+    finally:
+        listener.teardown()
+        teardown_context(token)
+
+    assert (User, "hobbies") in fresh_tracker.touched
+    assert fresh_tracker.touched[(User, "hobbies")]
+    assert fresh_tracker.unused() == []

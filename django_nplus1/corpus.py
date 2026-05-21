@@ -78,3 +78,57 @@ def _resolve_model(dotted: str) -> type:
         obj = getattr(obj, part)
     _model_resolver_cache[dotted] = obj
     return obj
+
+
+from django_nplus1.detect import Listener  # noqa: E402
+
+_corpus_tracker: CorpusEagerTracker | None = None
+
+
+def get_tracker() -> CorpusEagerTracker:
+    """Return the active session tracker, initializing it lazily."""
+    global _corpus_tracker  # noqa: PLW0603
+    if _corpus_tracker is None:
+        _corpus_tracker = CorpusEagerTracker()
+    return _corpus_tracker
+
+
+class CorpusEagerListener(Listener):
+    def setup(self) -> None:
+        from django_nplus1 import signals
+
+        signals.connect(signals.EAGER_LOAD, self.handle_eager)
+        signals.connect(signals.TOUCH, self.handle_touch)
+
+    def teardown(self) -> None:
+        from django_nplus1 import signals
+
+        signals.disconnect(signals.EAGER_LOAD, self.handle_eager)
+        signals.disconnect(signals.TOUCH, self.handle_touch)
+
+    def handle_eager(
+        self,
+        args: Any = None,
+        kwargs: Any = None,
+        context: Any = None,
+        ret: Any = None,
+        parser: Any = None,
+    ) -> None:
+        model, field, instances, _key, site = parser(args, kwargs, context)
+        if site is None:
+            return
+        get_tracker().record_load(model, field, instances, site)
+
+    def handle_touch(
+        self,
+        args: Any = None,
+        kwargs: Any = None,
+        context: Any = None,
+        ret: Any = None,
+        parser: Any = None,
+    ) -> None:
+        parsed = parser(args, kwargs, context)
+        if parsed is None:
+            return
+        model, field, instances = parsed
+        get_tracker().record_touch(model, field, instances)
