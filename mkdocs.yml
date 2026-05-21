@@ -58,6 +58,7 @@ nav:
       - Configuration: user-guide/configuration.md
       - pytest Plugin: user-guide/pytest-plugin.md
       - Whitelisting: user-guide/whitelisting.md
+      - Corpus Mode: user-guide/corpus-mode.md
   - Reference:
       - API: reference/api.md
       - Changelog: reference/changelog.md

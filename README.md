@@ -35,6 +35,16 @@ The middleware can also run in development or production settings to log warning
 
 See [examples/](examples/) for a working project.
 
+## Corpus Mode
+
+Per-request `unused_eager_load` detection can produce false positives on shared prefetch patterns. Corpus mode accumulates events across the full pytest session and only reports prefetches never touched by any test:
+
+```bash
+uv run pytest --nplus1-eager-corpus
+```
+
+See [docs](https://oliverhaas.github.io/django-nplus1/user-guide/corpus-mode/) for suppression markers and pytest-xdist support.
+
 ## Celery Integration
 
 The equivalent of the middleware for Celery tasks — each task execution gets its own detection scope.
