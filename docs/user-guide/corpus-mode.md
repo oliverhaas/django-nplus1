@@ -48,8 +48,12 @@ The corpus marker is distinct from the existing `# nplus1: ignore` marker. Use `
 
 ## pytest-xdist
 
-Workers dump their tracker state to `.nplus1-eager-corpus.<workerid>.json` in the project root. The controller merges all dumps in `pytest_sessionfinish` and reports once.
+Workers dump their tracker state to `.nplus1-eager-corpus.<workerid>.json` in the pytest working directory. The controller merges all dumps in `pytest_sessionfinish` and reports once. Run pytest from the project root for consistent results across xdist invocations.
 
 ## Exit code
 
 Corpus mode reports at session end: pytest exits with code 1 if any untouched prefetches remain after whitelist filtering. The standard pytest exit code for test failures (also 1) is preserved.
+
+## For plugin authors
+
+Custom listeners subscribed to the `EAGER_LOAD` signal must unpack a 5-element tuple as of 0.4.0: `(model, field, instances, key, call_site)`. The fifth element is the declaration call-site as a `(filename, lineno, funcname)` tuple, or `None` if it could not be resolved.
