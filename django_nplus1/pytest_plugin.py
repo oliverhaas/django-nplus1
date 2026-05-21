@@ -52,3 +52,19 @@ def auto_nplus1(request: pytest.FixtureRequest) -> Generator[None]:
             yield
     else:
         yield
+
+
+def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
+    if not _corpus_enabled(session.config):
+        return
+    finds = corpus.report(session.config)
+    if not finds:
+        return
+    text = corpus.format_finds(finds)
+    terminal = session.config.pluginmanager.get_plugin("terminalreporter")
+    if terminal is not None:
+        terminal.write_line(text)
+    else:
+        print(text)  # noqa: T201 - fallback when terminalreporter unavailable
+    if session.exitstatus == 0:
+        session.exitstatus = 1

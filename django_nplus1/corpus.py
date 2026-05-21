@@ -163,3 +163,18 @@ def activate() -> None:
 
 def is_enabled() -> bool:
     return _corpus_enabled
+
+
+def format_finds(finds: list[tuple[type, str, CallSite]]) -> str:
+    if not finds:
+        return ""
+    lines = [f"django-nplus1: corpus-wide unused_eager_load ({len(finds)} finds)"]
+    for model, field, site in finds:
+        filename, lineno, funcname = site
+        label = f"{model.__name__}.{field}"
+        lines.append(f"  {label:30} at {filename}:{lineno} in {funcname}")
+    return "\n".join(lines)
+
+
+def report(config: Any) -> list[tuple[type, str, CallSite]]:
+    return get_tracker().unused()
