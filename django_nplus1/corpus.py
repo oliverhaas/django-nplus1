@@ -103,7 +103,7 @@ _DUMP_PREFIX = ".nplus1-eager-corpus."
 
 def dump_worker(workerid: str) -> None:
     path = Path.cwd() / f"{_DUMP_PREFIX}{workerid}.json"
-    path.write_text(json.dumps(get_tracker().serialize()))
+    path.write_text(json.dumps(get_tracker().serialize()), encoding="utf-8")
 
 
 def merge_worker_dumps() -> None:
@@ -111,7 +111,7 @@ def merge_worker_dumps() -> None:
     tracker = get_tracker()
     for path in sorted(cwd.glob(f"{_DUMP_PREFIX}*.json")):
         try:
-            payload = json.loads(path.read_text())
+            payload = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             continue
         tracker.merge(payload)
