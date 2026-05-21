@@ -101,3 +101,21 @@ def test_corpus_listener_records_touches(fresh_tracker, objects):
     assert (User, "hobbies") in fresh_tracker.touched
     assert fresh_tracker.touched[(User, "hobbies")]
     assert fresh_tracker.unused() == []
+
+
+def test_corpus_context_installs_only_corpus_listener():
+    with corpus.CorpusContext() as ctx:
+        names = set(ctx._listeners.keys())
+    assert names == {"eager_load"}
+
+
+def test_activate_swaps_listener_registry():
+    from django_nplus1 import detect
+
+    original = detect.LISTENERS["eager_load"]
+    corpus.activate()
+    try:
+        assert detect.LISTENERS["eager_load"] is corpus.CorpusEagerListener
+    finally:
+        detect.LISTENERS["eager_load"] = original
+        corpus._corpus_enabled = False

@@ -132,3 +132,43 @@ class CorpusEagerListener(Listener):
             return
         model, field, instances = parsed
         get_tracker().record_touch(model, field, instances)
+
+
+from django_nplus1.scope import DetectionContext  # noqa: E402
+from django_nplus1.signals import setup_context  # noqa: E402
+
+_corpus_enabled: bool = False
+
+
+class CorpusContext(DetectionContext):
+    """DetectionContext variant that installs only CorpusEagerListener.
+
+    Used by the autouse pytest fixture so every test contributes
+    EAGER_LOAD/TOUCH events to the session tracker without enabling
+    lazy/get/duplicate detection for tests that haven't opted in.
+    """
+
+    def __enter__(self) -> CorpusContext:
+        self._token = setup_context()
+        listener = CorpusEagerListener(self)
+        listener.setup()
+        self._listeners["eager_load"] = listener
+        return self
+
+    def notify(self, message: Any) -> None:
+        # Corpus listener never calls notify - reports at session end.
+        pass
+
+
+def activate() -> None:
+    """Enable corpus mode: swap LISTENERS["eager_load"] and reset tracker."""
+    from django_nplus1 import detect
+
+    global _corpus_enabled, _corpus_tracker  # noqa: PLW0603
+    _corpus_enabled = True
+    _corpus_tracker = CorpusEagerTracker()
+    detect.LISTENERS["eager_load"] = CorpusEagerListener
+
+
+def is_enabled() -> bool:
+    return _corpus_enabled
