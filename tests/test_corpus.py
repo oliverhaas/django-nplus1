@@ -63,9 +63,16 @@ def test_serialize_merge_round_trip():
 
 @pytest.fixture
 def fresh_tracker():
+    from django_nplus1 import detect
+
+    original_listener = detect.LISTENERS["eager_load"]
+    original_tracker = corpus._corpus_tracker
+    corpus.activate()
     corpus._corpus_tracker = corpus.CorpusEagerTracker()
     yield corpus._corpus_tracker
-    corpus._corpus_tracker = None
+    detect.LISTENERS["eager_load"] = original_listener
+    corpus._corpus_tracker = original_tracker
+    corpus._corpus_enabled = False
 
 
 @pytest.mark.django_db

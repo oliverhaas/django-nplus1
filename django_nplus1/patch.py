@@ -15,7 +15,7 @@ from django.db.models.fields.related_descriptors import (
 )
 from django.db.models.query_utils import DeferredAttribute
 
-from django_nplus1 import signals
+from django_nplus1 import corpus, signals
 from django_nplus1.util import get_caller
 
 # True while inside QuerySet._prefetch_related_objects. A prefetch that fires here
@@ -561,7 +561,8 @@ _original_prefetch_init = Prefetch.__init__
 
 def _prefetch_init(self: Any, lookup: Any, queryset: Any = None, to_attr: Any = None) -> None:
     _original_prefetch_init(self, lookup, queryset, to_attr)
-    self._nplus1_site = get_caller()
+    if corpus.is_enabled():
+        self._nplus1_site = get_caller()
 
 
 Prefetch.__init__ = _prefetch_init  # type: ignore[method-assign]
@@ -573,6 +574,8 @@ _original_prefetch_related = query.QuerySet.prefetch_related
 def _prefetch_related(self: Any, *lookups: Any) -> Any:
     if lookups == (None,):
         return _original_prefetch_related(self, None)
+    if not corpus.is_enabled():
+        return _original_prefetch_related(self, *lookups)
     site = get_caller()
     normalized = []
     for lookup in lookups:
@@ -596,7 +599,7 @@ def _select_related(self: Any, *fields: Any) -> Any:
     if fields == (None,):
         return _original_select_related(self, None)
     qs = _original_select_related(self, *fields)
-    if fields:
+    if fields and corpus.is_enabled():
         site = get_caller()
         existing = getattr(qs.query, "_nplus1_select_sites", None) or {}
         # Copy so we don't mutate a parent Query's dict
