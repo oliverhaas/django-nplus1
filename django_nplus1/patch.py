@@ -29,6 +29,13 @@ _in_queryset_prefetch: ContextVar[bool] = ContextVar("nplus1_in_queryset_prefetc
 _prefetch_call_id: ContextVar[int | None] = ContextVar("nplus1_prefetch_call_id", default=None)
 _prefetch_call_seq = itertools.count()
 
+# Threaded by _fetch_all so parse_eager_select can recover the
+# Query's _nplus1_select_sites without a direct reference.
+_current_select_sites: ContextVar[dict[str, tuple[str, int, str]] | None] = ContextVar(
+    "nplus1_current_select_sites",
+    default=None,
+)
+
 
 def to_key(instance: Model) -> str:
     pk = instance.pk
@@ -381,7 +388,13 @@ def _fetch_all(self: Any) -> None:
             args=(self,),
             parser=parse_fetch_all,
         )
-    _original_fetch_all(self)
+    sites = getattr(self.query, "_nplus1_select_sites", None)
+    token = _current_select_sites.set(sites) if sites else None
+    try:
+        _original_fetch_all(self)
+    finally:
+        if token is not None:
+            _current_select_sites.reset(token)
     signal = signals.IGNORE_LOAD if is_single(self.query.low_mark, self.query.high_mark) else signals.LOAD
     signals.send(
         signal,
@@ -410,14 +423,16 @@ def parse_eager_select(
     args: Any,
     kwargs: Any,
     context: dict[str, Any],
-) -> tuple[type[Model], str, list[str], int]:
+) -> tuple[type[Model], str, list[str], int, tuple[str, int, str] | None]:
     populator = args[0]
     instance = args[2]
     meta = populator.__nplus1__
     klass_info, select, *_ = meta["args"]
     field = klass_info["field"]
     model, name = parse_field(field) if instance._meta.model != field.model else parse_reverse_field(field)
-    return model, name, [to_key(instance)], id(select)
+    sites = _current_select_sites.get()
+    site = sites.get(name) if sites else None
+    return model, name, [to_key(instance)], id(select), site
 
 
 # Emit eager_load on populating from select_related
@@ -432,12 +447,13 @@ def parse_eager_join(
     args: Any,
     kwargs: Any,
     context: dict[str, Any],
-) -> tuple[type[Model], str, list[str], int]:
+) -> tuple[type[Model], str, list[str], int, tuple[str, int, str] | None]:
     instances, _descriptor, fetcher, level = args
     model = instances[0].__class__
     field, _ = fetcher.get_current_to_attr(level)
     keys = [to_key(instance) for instance in instances]
-    return model, field, keys, id(instances)
+    site = getattr(fetcher, "_nplus1_site", None)
+    return model, field, keys, id(instances), site
 
 
 # Emit eager_load on populating from prefetch_related

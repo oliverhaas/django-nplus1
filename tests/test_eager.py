@@ -80,7 +80,7 @@ class TestEagerListenerCleanup:
         listener = EagerListener(FakeParent())
         listener.setup()
         for _ in range(3):
-            listener.handle_eager(parser=lambda a, k, c: (object, "field", ["inst"], 1))
+            listener.handle_eager(parser=lambda a, k, c: (object, "field", ["inst"], 1, None))
         listener.teardown()
 
         assert len(registry[signals.TOUCH]) == before

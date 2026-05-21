@@ -1,5 +1,9 @@
+import pytest
 from django.db.models import Prefetch
 from testapp.models import User
+
+from django_nplus1 import signals as nplus1_signals
+from django_nplus1.signals import setup_context, teardown_context
 
 
 def test_prefetch_stashes_call_site():
@@ -77,3 +81,25 @@ def test_select_related_successive_calls_accumulate():
 def test_select_related_none_clears_select():
     qs = User.objects.select_related("occupation").select_related(None)
     assert qs.query.select_related is False
+
+
+@pytest.mark.django_db
+def test_eager_load_signal_includes_site_for_prefetch(objects):
+    """parse_eager_join surfaces the Prefetch declaration site."""
+    captured = []
+
+    def subscriber(args=None, kwargs=None, context=None, ret=None, parser=None):
+        _model, _field, _instances, _key, site = parser(args, kwargs, context)
+        captured.append(site)
+
+    token = setup_context()
+    try:
+        nplus1_signals.connect(nplus1_signals.EAGER_LOAD, subscriber)
+        list(User.objects.prefetch_related("hobbies").all())
+    finally:
+        nplus1_signals.disconnect(nplus1_signals.EAGER_LOAD, subscriber)
+        teardown_context(token)
+
+    assert captured, "EAGER_LOAD never fired"
+    site = captured[0]
+    assert site[0].endswith("test_corpus_capture.py")
