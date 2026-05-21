@@ -389,7 +389,7 @@ def _fetch_all(self: Any) -> None:
             parser=parse_fetch_all,
         )
     sites = getattr(self.query, "_nplus1_select_sites", None)
-    token = _current_select_sites.set(sites) if sites else None
+    token = _current_select_sites.set(sites) if sites is not None else None
     try:
         _original_fetch_all(self)
     finally:

@@ -1,6 +1,6 @@
 import pytest
 from django.db.models import Prefetch
-from testapp.models import User
+from testapp.models import Occupation, User
 
 from django_nplus1 import signals as nplus1_signals
 from django_nplus1.signals import setup_context, teardown_context
@@ -103,3 +103,29 @@ def test_eager_load_signal_includes_site_for_prefetch(objects):
     assert captured, "EAGER_LOAD never fired"
     site = captured[0]
     assert site[0].endswith("test_corpus_capture.py")
+    assert site[2] == "test_eager_load_signal_includes_site_for_prefetch"
+
+
+@pytest.mark.django_db
+def test_eager_load_signal_includes_site_for_select_related(objects):
+    """parse_eager_select surfaces the select_related declaration site via ContextVar."""
+    captured = []
+
+    def subscriber(args=None, kwargs=None, context=None, ret=None, parser=None):
+        result = parser(args, kwargs, context)
+        if len(result) == 5:
+            captured.append(result[4])
+
+    token = setup_context()
+    try:
+        nplus1_signals.connect(nplus1_signals.EAGER_LOAD, subscriber)
+        list(Occupation.objects.select_related("user").all())
+    finally:
+        nplus1_signals.disconnect(nplus1_signals.EAGER_LOAD, subscriber)
+        teardown_context(token)
+
+    sites = [s for s in captured if s is not None]
+    assert sites, "EAGER_LOAD fired but no site was captured"
+    site = sites[0]
+    assert site[0].endswith("test_corpus_capture.py")
+    assert site[2] == "test_eager_load_signal_includes_site_for_select_related"
