@@ -47,7 +47,9 @@ def test_select_related_stashes_sites_on_query():
     qs = User.objects.select_related("occupation")
     sites = qs.query._nplus1_select_sites
     assert "occupation" in sites
-    assert sites["occupation"][0].endswith("test_corpus_capture.py")
+    filename, _lineno, funcname = sites["occupation"]
+    assert filename.endswith("test_corpus_capture.py")
+    assert funcname == "test_select_related_stashes_sites_on_query"
 
 
 def test_select_related_multiple_fields_share_site():
@@ -61,6 +63,15 @@ def test_select_related_multiple_fields_share_site():
 def test_select_related_site_survives_filter_clone():
     qs = User.objects.select_related("occupation").filter(pk=1)
     assert "occupation" in qs.query._nplus1_select_sites
+
+
+def test_select_related_successive_calls_accumulate():
+    qs = User.objects.select_related("occupation")
+    qs = qs.select_related("occupation__user")
+    sites = qs.query._nplus1_select_sites
+    assert set(sites.keys()) == {"occupation", "occupation__user"}
+    # Each call is on its own line, so each site records a different line number
+    assert sites["occupation"] != sites["occupation__user"]
 
 
 def test_select_related_none_clears_select():
