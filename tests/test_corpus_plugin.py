@@ -195,3 +195,71 @@ def test_whitelist_label_mismatch_does_not_suppress(settings, restore_listeners)
     )
     finds = corpus.report(mock.Mock())
     assert len(finds) == 1
+
+
+@pytest.mark.django_db
+def test_corpus_two_call_sites_tracked_independently(restore_listeners, objects):
+    """Two different call sites for the same (model, field): touching one
+    does not absolve the other.
+
+    Site A loads only users with hobbies and touches them (used).
+    Site B loads only users without hobbies; none are ever touched (unused).
+    """
+    from testapp.models import User
+
+    # objects fixture: user1 has a hobby, user2 has none
+    pks_with = list(User.objects.filter(hobbies__isnull=False).values_list("pk", flat=True))
+    pks_without = list(User.objects.filter(hobbies__isnull=True).values_list("pk", flat=True))
+    assert pks_with and pks_without, "fixture must provide at least one user with and one without"
+
+    corpus.activate()
+
+    # Site A: load users-with-hobbies and touch all of them (used)
+    with corpus.CorpusContext():
+        users_a = list(User.objects.prefetch_related("hobbies").filter(pk__in=pks_with))  # site A
+        for u in users_a:
+            list(u.hobbies.all())
+
+    # Site B: load users-without-hobbies, never touch (unused)
+    with corpus.CorpusContext():
+        list(User.objects.prefetch_related("hobbies").filter(pk__in=pks_without))  # site B
+
+    finds = [(m.__name__, f, s[1]) for m, f, s in corpus.report(mock.Mock())]
+    # Exactly one find: site B (users-without-hobbies never accessed)
+    assert len(finds) == 1
+    model_name, field, _lineno = finds[0]
+    assert model_name == "User"
+    assert field == "hobbies"
+
+
+@pytest.mark.django_db
+def test_corpus_shared_helper_used_across_sessions(restore_listeners, objects):
+    """A prefetch declared once in a helper, exercised across multiple
+    sessions on different rows: should not be flagged.
+
+    The helper loads the same set of users each session; different sessions
+    touch different rows. Together all loaded instances are touched, so the
+    single call site must NOT appear in the report.
+    """
+    from testapp.models import User
+
+    pks = list(User.objects.values_list("pk", flat=True))
+    assert len(pks) >= 2, "fixture must provide at least two users"
+
+    def shared_helper():
+        return list(User.objects.prefetch_related("hobbies").all())  # shared site
+
+    corpus.activate()
+
+    # Session 1: touch the first user's hobbies
+    with corpus.CorpusContext():
+        users = shared_helper()
+        list(users[0].hobbies.all())
+
+    # Session 2: touch the second user's hobbies
+    with corpus.CorpusContext():
+        users = shared_helper()
+        list(users[1].hobbies.all())
+
+    finds = corpus.report(mock.Mock())
+    assert finds == [], f"Expected no finds, got: {finds}"
