@@ -555,6 +555,8 @@ _original_prefetch_related = query.QuerySet.prefetch_related
 
 
 def _prefetch_related(self: Any, *lookups: Any) -> Any:
+    if lookups == (None,):
+        return _original_prefetch_related(self, None)
     site = get_caller()
     normalized = []
     for lookup in lookups:
@@ -564,7 +566,6 @@ def _prefetch_related(self: Any, *lookups: Any) -> Any:
             normalized.append(lookup)
         else:
             p = Prefetch(lookup)
-            p._nplus1_site = site
             normalized.append(p)
     return _original_prefetch_related(self, *normalized)
 
