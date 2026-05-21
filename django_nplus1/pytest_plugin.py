@@ -44,7 +44,12 @@ def nplus1() -> Generator[Profiler]:
 def auto_nplus1(request: pytest.FixtureRequest) -> Generator[None]:
     if _corpus_enabled(request.config):
         with corpus.CorpusContext():
-            yield
+            marker = request.node.get_closest_marker("nplus1")
+            if marker:
+                with Profiler(whitelist=marker.kwargs.get("whitelist")):
+                    yield
+            else:
+                yield
         return
     marker = request.node.get_closest_marker("nplus1")
     if marker:
