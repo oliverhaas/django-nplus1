@@ -549,3 +549,24 @@ def _prefetch_init(self: Any, lookup: Any, queryset: Any = None, to_attr: Any = 
 
 
 Prefetch.__init__ = _prefetch_init  # type: ignore[method-assign]
+
+
+_original_prefetch_related = query.QuerySet.prefetch_related
+
+
+def _prefetch_related(self: Any, *lookups: Any) -> Any:
+    site = get_caller()
+    normalized = []
+    for lookup in lookups:
+        if isinstance(lookup, Prefetch):
+            if not getattr(lookup, "_nplus1_site", None):
+                lookup._nplus1_site = site
+            normalized.append(lookup)
+        else:
+            p = Prefetch(lookup)
+            p._nplus1_site = site
+            normalized.append(p)
+    return _original_prefetch_related(self, *normalized)
+
+
+query.QuerySet.prefetch_related = _prefetch_related  # type: ignore[method-assign]
