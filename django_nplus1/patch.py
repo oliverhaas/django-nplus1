@@ -6,7 +6,7 @@ import sys
 from contextvars import ContextVar
 from typing import Any
 
-from django.db.models import Model, query
+from django.db.models import Model, Prefetch, query
 from django.db.models.fields.related_descriptors import (
     ForwardManyToOneDescriptor,
     ReverseOneToOneDescriptor,
@@ -16,6 +16,7 @@ from django.db.models.fields.related_descriptors import (
 from django.db.models.query_utils import DeferredAttribute
 
 from django_nplus1 import signals
+from django_nplus1.util import get_caller
 
 # True while inside QuerySet._prefetch_related_objects. A prefetch that fires here
 # is proper queryset-level usage (e.g. ``Model.objects.prefetch_related(...).filter(pk=X)``)
@@ -226,8 +227,6 @@ def _get(self: Any, *args: Any, **kwargs: Any) -> Any:
         signals._listeners.get()
     except LookupError:
         return _original_get(self, *args, **kwargs)
-
-    from django_nplus1.util import get_caller
 
     direct_call = not _is_descriptor_call()
     caller = get_caller() if direct_call else None
@@ -538,3 +537,15 @@ def _check_parent_chain(self: Any, instance: Any) -> Any:
 
 
 DeferredAttribute._check_parent_chain = _check_parent_chain  # type: ignore[attr-defined]
+
+
+# Stash declaration-time call site on each Prefetch instance.
+_original_prefetch_init = Prefetch.__init__
+
+
+def _prefetch_init(self: Any, lookup: Any, queryset: Any = None, to_attr: Any = None) -> None:
+    _original_prefetch_init(self, lookup, queryset, to_attr)
+    self._nplus1_site = get_caller()
+
+
+Prefetch.__init__ = _prefetch_init  # type: ignore[method-assign]
