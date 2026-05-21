@@ -571,3 +571,24 @@ def _prefetch_related(self: Any, *lookups: Any) -> Any:
 
 
 query.QuerySet.prefetch_related = _prefetch_related  # type: ignore[method-assign]
+
+
+_original_select_related = query.QuerySet.select_related
+
+
+def _select_related(self: Any, *fields: Any) -> Any:
+    if fields == (None,):
+        return _original_select_related(self, None)
+    qs = _original_select_related(self, *fields)
+    if fields:
+        site = get_caller()
+        existing = getattr(qs.query, "_nplus1_select_sites", None) or {}
+        # Copy so we don't mutate a parent Query's dict
+        new_sites = dict(existing)
+        for f in fields:
+            new_sites[f] = site
+        qs.query._nplus1_select_sites = new_sites
+    return qs
+
+
+query.QuerySet.select_related = _select_related  # type: ignore[method-assign]

@@ -41,3 +41,28 @@ def test_prefetch_related_site_survives_filter_clone():
 def test_prefetch_related_none_clears_lookups():
     qs = User.objects.prefetch_related("hobbies").prefetch_related(None)
     assert qs._prefetch_related_lookups == ()
+
+
+def test_select_related_stashes_sites_on_query():
+    qs = User.objects.select_related("occupation")
+    sites = qs.query._nplus1_select_sites
+    assert "occupation" in sites
+    assert sites["occupation"][0].endswith("test_corpus_capture.py")
+
+
+def test_select_related_multiple_fields_share_site():
+    qs = User.objects.select_related("occupation", "occupation__user")
+    sites = qs.query._nplus1_select_sites
+    assert set(sites.keys()) == {"occupation", "occupation__user"}
+    # Both fields registered on the same source line
+    assert sites["occupation"] == sites["occupation__user"]
+
+
+def test_select_related_site_survives_filter_clone():
+    qs = User.objects.select_related("occupation").filter(pk=1)
+    assert "occupation" in qs.query._nplus1_select_sites
+
+
+def test_select_related_none_clears_select():
+    qs = User.objects.select_related("occupation").select_related(None)
+    assert qs.query.select_related is False
