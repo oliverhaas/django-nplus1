@@ -1,9 +1,12 @@
 import importlib
+import linecache
+import re
 from collections import defaultdict
 from typing import Any
 
 from django_nplus1 import detect, signals
 from django_nplus1.detect import Listener
+from django_nplus1.middleware import DjangoRule
 from django_nplus1.scope import DetectionContext
 from django_nplus1.signals import setup_context
 
@@ -176,5 +179,32 @@ def format_finds(finds: list[tuple[type, str, CallSite]]) -> str:
     return "\n".join(lines)
 
 
+_INLINE_CORPUS_IGNORE_RE = re.compile(r"#\s*nplus1:\s*corpus-ignore")
+
+
+def _is_inline_corpus_ignored(site: CallSite) -> bool:
+    filename, lineno, _ = site
+    line = linecache.getline(filename, lineno)
+    return bool(line) and bool(_INLINE_CORPUS_IGNORE_RE.search(line))
+
+
+def _whitelist_rules() -> list[DjangoRule]:
+    try:
+        from django.conf import settings
+    except ImportError, AttributeError:
+        return []
+    data = getattr(settings, "NPLUS1_WHITELIST", [])
+    return [DjangoRule(**item) for item in data]
+
+
 def report(config: Any) -> list[tuple[type, str, CallSite]]:
-    return get_tracker().unused()
+    tracker = get_tracker()
+    rules = _whitelist_rules()
+    result = []
+    for model, field, site in tracker.unused():
+        if _is_inline_corpus_ignored(site):
+            continue
+        if any(rule.compare("unused_eager_load", model, field) for rule in rules):
+            continue
+        result.append((model, field, site))
+    return result

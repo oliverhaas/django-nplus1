@@ -127,3 +127,70 @@ def test_sessionfinish_preserves_failed_exit_status(restore_listeners):
     assert terminal.write_line.called
     # But exit status stays at 2 (preserve test failure code)
     assert session.exitstatus == 2
+
+
+def test_inline_corpus_ignore_marker_suppresses(tmp_path, restore_listeners):
+    # Write a source file with the inline marker on the declaration line
+    src = tmp_path / "fake_view.py"
+    src.write_text(
+        "def view():\n    list(User.objects.prefetch_related('hobbies'))  # nplus1: corpus-ignore\n",
+        encoding="utf-8",
+    )
+    corpus.activate()
+    site = (str(src), 2, "view")
+    corpus.get_tracker().record_load(model=int, field="hobbies", instances=["User:1"], site=site)
+    finds = corpus.report(mock.Mock())
+    assert finds == []
+
+
+def test_inline_marker_other_label_does_not_suppress_corpus(tmp_path, restore_listeners):
+    """The corpus-ignore marker is its own label; `# nplus1: ignore` doesn't match it."""
+    src = tmp_path / "fake_view.py"
+    src.write_text(
+        "def view():\n    list(User.objects.prefetch_related('hobbies'))  # nplus1: ignore\n",
+        encoding="utf-8",
+    )
+    corpus.activate()
+    site = (str(src), 2, "view")
+    corpus.get_tracker().record_load(model=int, field="hobbies", instances=["User:1"], site=site)
+    finds = corpus.report(mock.Mock())
+    assert len(finds) == 1
+
+
+def test_whitelist_label_suppresses(settings, restore_listeners):
+    settings.NPLUS1_WHITELIST = [
+        {"label": "unused_eager_load", "model": "testapp.User", "field": "hobbies"},
+    ]
+    corpus.activate()
+    site = ("/app/views.py", 42, "view")
+
+    # Use a real model class so the whitelist matcher can compare model names
+    from testapp.models import User
+
+    corpus.get_tracker().record_load(
+        model=User,
+        field="hobbies",
+        instances=["User:1"],
+        site=site,
+    )
+    finds = corpus.report(mock.Mock())
+    assert finds == []
+
+
+def test_whitelist_label_mismatch_does_not_suppress(settings, restore_listeners):
+    settings.NPLUS1_WHITELIST = [
+        {"label": "n_plus_one", "model": "testapp.User", "field": "hobbies"},  # different label
+    ]
+    corpus.activate()
+    site = ("/app/views.py", 42, "view")
+
+    from testapp.models import User
+
+    corpus.get_tracker().record_load(
+        model=User,
+        field="hobbies",
+        instances=["User:1"],
+        site=site,
+    )
+    finds = corpus.report(mock.Mock())
+    assert len(finds) == 1
