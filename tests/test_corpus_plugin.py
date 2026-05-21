@@ -34,9 +34,11 @@ def test_corpus_disabled_when_neither_set(settings):
 def restore_listeners():
     from django_nplus1 import detect
 
-    original = detect.LISTENERS["eager_load"]
+    original_listener = detect.LISTENERS["eager_load"]
+    original_tracker = corpus._corpus_tracker
     yield
-    detect.LISTENERS["eager_load"] = original
+    detect.LISTENERS["eager_load"] = original_listener
+    corpus._corpus_tracker = original_tracker
     corpus._corpus_enabled = False
 
 

@@ -14,7 +14,7 @@ def _corpus_enabled(config: Any) -> bool:
         return True
     try:
         from django.conf import settings
-    except Exception:  # noqa: BLE001
+    except ImportError, AttributeError:
         return False
     return bool(getattr(settings, "NPLUS1_EAGER_CORPUS", False))
 

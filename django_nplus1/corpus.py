@@ -1,7 +1,11 @@
-from __future__ import annotations
-
+import importlib
 from collections import defaultdict
 from typing import Any
+
+from django_nplus1 import detect, signals
+from django_nplus1.detect import Listener
+from django_nplus1.scope import DetectionContext
+from django_nplus1.signals import setup_context
 
 CallSite = tuple[str, int, str]
 
@@ -70,8 +74,6 @@ def _resolve_model(dotted: str) -> type:
     cached = _model_resolver_cache.get(dotted)
     if cached is not None:
         return cached
-    import importlib
-
     module_name, _, qual = dotted.rpartition(".")
     obj: Any = importlib.import_module(module_name)
     for part in qual.split("."):
@@ -79,8 +81,6 @@ def _resolve_model(dotted: str) -> type:
     _model_resolver_cache[dotted] = obj
     return obj
 
-
-from django_nplus1.detect import Listener  # noqa: E402
 
 _corpus_tracker: CorpusEagerTracker | None = None
 
@@ -95,14 +95,10 @@ def get_tracker() -> CorpusEagerTracker:
 
 class CorpusEagerListener(Listener):
     def setup(self) -> None:
-        from django_nplus1 import signals
-
         signals.connect(signals.EAGER_LOAD, self.handle_eager)
         signals.connect(signals.TOUCH, self.handle_touch)
 
     def teardown(self) -> None:
-        from django_nplus1 import signals
-
         signals.disconnect(signals.EAGER_LOAD, self.handle_eager)
         signals.disconnect(signals.TOUCH, self.handle_touch)
 
@@ -134,9 +130,6 @@ class CorpusEagerListener(Listener):
         get_tracker().record_touch(model, field, instances)
 
 
-from django_nplus1.scope import DetectionContext  # noqa: E402
-from django_nplus1.signals import setup_context  # noqa: E402
-
 _corpus_enabled: bool = False
 
 
@@ -162,8 +155,6 @@ class CorpusContext(DetectionContext):
 
 def activate() -> None:
     """Enable corpus mode: swap LISTENERS["eager_load"] and reset tracker."""
-    from django_nplus1 import detect
-
     global _corpus_enabled, _corpus_tracker  # noqa: PLW0603
     _corpus_enabled = True
     _corpus_tracker = CorpusEagerTracker()
