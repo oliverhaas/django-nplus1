@@ -1,7 +1,9 @@
 import importlib
+import json
 import linecache
 import re
 from collections import defaultdict
+from pathlib import Path
 from typing import Any
 
 from django_nplus1 import detect, signals
@@ -94,6 +96,26 @@ def get_tracker() -> CorpusEagerTracker:
     if _corpus_tracker is None:
         _corpus_tracker = CorpusEagerTracker()
     return _corpus_tracker
+
+
+_DUMP_PREFIX = ".nplus1-eager-corpus."
+
+
+def dump_worker(workerid: str) -> None:
+    path = Path.cwd() / f"{_DUMP_PREFIX}{workerid}.json"
+    path.write_text(json.dumps(get_tracker().serialize()))
+
+
+def merge_worker_dumps() -> None:
+    cwd = Path.cwd()
+    tracker = get_tracker()
+    for path in sorted(cwd.glob(f"{_DUMP_PREFIX}*.json")):
+        try:
+            payload = json.loads(path.read_text())
+        except json.JSONDecodeError:
+            continue
+        tracker.merge(payload)
+        path.unlink(missing_ok=True)
 
 
 class CorpusEagerListener(Listener):

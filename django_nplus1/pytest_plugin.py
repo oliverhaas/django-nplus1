@@ -57,6 +57,11 @@ def auto_nplus1(request: pytest.FixtureRequest) -> Generator[None]:
 def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
     if not _corpus_enabled(session.config):
         return
+    workerinput = getattr(session.config, "workerinput", None)
+    if workerinput is not None:
+        corpus.dump_worker(workerinput["workerid"])
+        return
+    corpus.merge_worker_dumps()
     finds = corpus.report(session.config)
     if not finds:
         return

@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from testapp.models import User
 
@@ -119,3 +121,23 @@ def test_activate_swaps_listener_registry():
     finally:
         detect.LISTENERS["eager_load"] = original
         corpus._corpus_enabled = False
+
+
+def test_dump_worker_and_merge_round_trip(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    site = ("/app/views.py", 1, "fn")
+
+    a = corpus.CorpusEagerTracker()
+    a.record_load(model=int, field="hobbies", instances=["User:1"], site=site)
+    corpus._corpus_tracker = a
+    corpus.dump_worker("gw0")
+    dump_path = tmp_path / ".nplus1-eager-corpus.gw0.json"
+    assert dump_path.exists()
+    payload = json.loads(dump_path.read_text())
+    assert payload["data"][0]["field"] == "hobbies"
+
+    b = corpus.CorpusEagerTracker()
+    corpus._corpus_tracker = b
+    corpus.merge_worker_dumps()
+    assert b.unused() == [(int, "hobbies", site)]
+    assert not dump_path.exists()  # consumed after merge

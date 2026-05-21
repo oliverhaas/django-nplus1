@@ -65,6 +65,7 @@ def test_pytest_configure_noop_when_disabled(restore_listeners):
 def _session(corpus_on: bool = True, exit_status: int = 0):
     config = mock.Mock()
     config.getoption.return_value = corpus_on
+    config.workerinput = None  # simulate non-xdist controller session
     terminal = mock.Mock()
     config.pluginmanager.get_plugin.return_value = terminal
     session = mock.Mock()
