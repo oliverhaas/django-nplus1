@@ -31,7 +31,7 @@ NPLUS1_WHITELIST = [
 ]
 ```
 
-The middleware can also run in development or production settings to log warnings instead of raising — see the [docs](https://oliverhaas.github.io/django-nplus1/) for all options, including the pytest plugin and the `Profiler` context manager.
+The middleware can also run in development or production settings to log warnings instead of raising. See the [docs](https://oliverhaas.github.io/django-nplus1/) for all options, including the pytest plugin and the `Profiler` context manager.
 
 See [examples/](examples/) for a working project.
 
@@ -47,7 +47,7 @@ See [docs](https://oliverhaas.github.io/django-nplus1/user-guide/corpus-mode/) f
 
 ## Celery Integration
 
-The equivalent of the middleware for Celery tasks — each task execution gets its own detection scope.
+The equivalent of the middleware for Celery tasks. Each task execution gets its own detection scope.
 
 ```bash
 pip install django-nplus1[celery]

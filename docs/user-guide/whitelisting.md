@@ -79,7 +79,7 @@ for user in users:
 
 Supported labels: `n_plus_one`, `get_in_loop`, `duplicate_query`.
 
-Inline comments apply to the exact line captured as the detection's call site. They do **not** apply to `unused_eager_load` detections, which happen at teardown without a specific call site — use the global whitelist or `nplus1_allow()` for those.
+Inline comments apply to the exact line captured as the detection's call site. They do **not** apply to `unused_eager_load` detections, which happen at teardown without a specific call site; use the global whitelist or `nplus1_allow()` for those.
 
 ## Profiler Whitelisting
 

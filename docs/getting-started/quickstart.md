@@ -22,7 +22,7 @@ def test_list_authors(client, authors):
 
 ### Why test settings?
 
-Testing actual request paths catches real problems in your views. Helper functions or management commands that intentionally defer prefetching to their callers can produce false positives when wrapped in a detection context — testing through the middleware avoids that.
+Testing actual request paths catches real problems in your views. Helper functions or management commands that intentionally defer prefetching to their callers can produce false positives when wrapped in a detection context; testing through the middleware avoids that.
 
 ### Adopting in an Existing Project
 

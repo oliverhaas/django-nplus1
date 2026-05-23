@@ -56,7 +56,7 @@ NPLUS1_RAISE = True
 
 Adding the middleware to your test settings means every view test that goes through the Django test client will fail on N+1 queries. This catches real problems in actual request paths without false positives from helper functions or scripts that intentionally defer prefetching.
 
-For existing projects, this will likely surface many issues at once. Whitelist them and fix over time — see [Whitelisting](user-guide/whitelisting.md).
+For existing projects, this will likely surface many issues at once. Whitelist them and fix over time; see [Whitelisting](user-guide/whitelisting.md).
 
 The middleware can also run in development or production settings to log warnings. Other options include the [pytest plugin](user-guide/pytest-plugin.md) for per-test control and the [Profiler](reference/api.md#profiler) context manager for scripts and manual use.
 
