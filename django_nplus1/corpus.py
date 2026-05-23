@@ -179,9 +179,9 @@ _corpus_enabled: bool = False
 class CorpusContext(DetectionContext):
     """DetectionContext variant that installs only CorpusEagerListener.
 
-    Used by the autouse pytest fixture so every test contributes
+    Use when you want a block of test or script code to contribute
     EAGER_LOAD/TOUCH events to the session tracker without enabling
-    lazy/get/duplicate detection for tests that haven't opted in.
+    lazy/get/duplicate detection.
     """
 
     def __enter__(self) -> CorpusContext:

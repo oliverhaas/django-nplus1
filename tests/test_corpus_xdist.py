@@ -26,19 +26,22 @@ def test_xdist_reports_unused_prefetch(pytester, monkeypatch):
     pytester.makepyfile(
         test_unused="""
         import pytest
+        from django_nplus1.scope import DetectionContext
         from testapp.models import User
 
         @pytest.mark.django_db
         def test_a():
             User.objects.create()
             User.objects.create()
-            list(User.objects.prefetch_related('hobbies').all())  # unused
+            with DetectionContext():
+                list(User.objects.prefetch_related('hobbies').all())  # unused
 
         @pytest.mark.django_db
         def test_b():
             User.objects.create()
             User.objects.create()
-            list(User.objects.prefetch_related('hobbies').all())  # unused
+            with DetectionContext():
+                list(User.objects.prefetch_related('hobbies').all())  # unused
         """,
     )
     result = pytester.runpytest_subprocess("-n", "2", "--nplus1-eager-corpus")
@@ -56,6 +59,7 @@ def test_xdist_used_prefetch_not_flagged(pytester, monkeypatch):
     pytester.makepyfile(
         test_used="""
         import pytest
+        from django_nplus1.scope import DetectionContext
         from testapp.models import User, Hobby
 
         @pytest.mark.django_db
@@ -63,18 +67,20 @@ def test_xdist_used_prefetch_not_flagged(pytester, monkeypatch):
             user = User.objects.create()
             hobby = Hobby.objects.create()
             user.hobbies.add(hobby)
-            users = list(User.objects.prefetch_related('hobbies').all())
-            for u in users:
-                list(u.hobbies.all())  # touch
+            with DetectionContext():
+                users = list(User.objects.prefetch_related('hobbies').all())
+                for u in users:
+                    list(u.hobbies.all())  # touch
 
         @pytest.mark.django_db
         def test_b():
             user = User.objects.create()
             hobby = Hobby.objects.create()
             user.hobbies.add(hobby)
-            users = list(User.objects.prefetch_related('hobbies').all())
-            for u in users:
-                list(u.hobbies.all())  # touch
+            with DetectionContext():
+                users = list(User.objects.prefetch_related('hobbies').all())
+                for u in users:
+                    list(u.hobbies.all())  # touch
         """,
     )
     result = pytester.runpytest_subprocess("-n", "2", "--nplus1-eager-corpus")
@@ -90,6 +96,7 @@ def test_xdist_one_worker_touches_one_does_not(pytester, monkeypatch):
     pytester.makepyfile(
         test_asymmetric="""
         import pytest
+        from django_nplus1.scope import DetectionContext
         from testapp.models import User, Hobby
 
         def helper():
@@ -100,16 +107,45 @@ def test_xdist_one_worker_touches_one_does_not(pytester, monkeypatch):
             user = User.objects.create()
             hobby = Hobby.objects.create()
             user.hobbies.add(hobby)
-            users = helper()
-            for u in users:
-                list(u.hobbies.all())  # touch
+            with DetectionContext():
+                users = helper()
+                for u in users:
+                    list(u.hobbies.all())  # touch
 
         @pytest.mark.django_db
         def test_b():
             User.objects.create()
             User.objects.create()
-            helper()  # no touch
+            with DetectionContext():
+                helper()  # no touch
         """,
     )
     result = pytester.runpytest_subprocess("-n", "2", "--nplus1-eager-corpus")
     assert result.ret == 0, f"expected exit 0, got {result.ret}\nstdout:\n{result.stdout.str()}"
+
+
+def test_xdist_uninstrumented_tests_produce_no_finds(pytester, monkeypatch):
+    """Tests that run pure ORM code without any DetectionContext (no
+    middleware, no Celery, no explicit wrap) must not contribute to the
+    corpus tracker even when an unused prefetch is plainly visible.
+    """
+    _setup_inner_env(monkeypatch)
+    pytester.makepyfile(
+        test_uninstrumented="""
+        import pytest
+        from testapp.models import User
+
+        @pytest.mark.django_db
+        def test_a():
+            User.objects.create()
+            list(User.objects.prefetch_related('hobbies').all())  # uninstrumented
+
+        @pytest.mark.django_db
+        def test_b():
+            User.objects.create()
+            list(User.objects.prefetch_related('hobbies').all())  # uninstrumented
+        """,
+    )
+    result = pytester.runpytest_subprocess("-n", "2", "--nplus1-eager-corpus")
+    assert result.ret == 0, f"expected exit 0, got {result.ret}\nstdout:\n{result.stdout.str()}"
+    assert "corpus-wide unused_eager_load" not in result.stdout.str()

@@ -23,8 +23,19 @@ Off by default; opt-in only.
 ## What changes
 
 - Per-request `unused_eager_load` detection is suppressed for the whole session.
-- An autouse fixture wraps every test in a slim detection context that records loads and touches.
+- Any `DetectionContext` opened during the run (by `NPlus1Middleware`, the Celery integration, an explicit `Profiler`, or a manual `with DetectionContext()`) contributes EAGER_LOAD and TOUCH events to a shared session tracker.
+- ORM calls outside an instrumented scope (test setup, factories, direct queryset assertions) are ignored.
 - At session end, surviving `(model, field, declaration_call_site)` tuples are printed and pytest exits with code 1.
+
+## What counts as instrumented
+
+Only code executed inside an active `DetectionContext` contributes to the tracker. In practice that means:
+
+- View bodies reached through `NPlus1Middleware` (typical: tests using the Django test client).
+- Celery task bodies when `NPLUS1_CELERY = True` is set and the task signals are connected.
+- Code wrapped in `Profiler()`, `@pytest.mark.nplus1`, or a manual `with DetectionContext():` block.
+
+If a prefetch is declared and consumed entirely in test code (no middleware, no task, no explicit wrap), corpus mode will not flag it. Wrap the code you actually want audited.
 
 ## Suppression
 
