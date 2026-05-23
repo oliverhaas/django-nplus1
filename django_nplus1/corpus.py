@@ -4,7 +4,7 @@ import linecache
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from django_nplus1 import detect, signals
 from django_nplus1.detect import Listener
@@ -83,8 +83,9 @@ def _resolve_model(dotted: str) -> type:
     obj: Any = importlib.import_module(module_name)
     for part in qual.split("."):
         obj = getattr(obj, part)
-    _model_resolver_cache[dotted] = obj
-    return obj
+    resolved = cast("type", obj)
+    _model_resolver_cache[dotted] = resolved
+    return resolved
 
 
 _corpus_tracker: CorpusEagerTracker | None = None

@@ -581,7 +581,7 @@ def _prefetch_related(self: Any, *lookups: Any) -> Any:
     for lookup in lookups:
         if isinstance(lookup, Prefetch):
             if not getattr(lookup, "_nplus1_site", None):
-                lookup._nplus1_site = site
+                lookup._nplus1_site = site  # type: ignore[attr-defined]
             normalized.append(lookup)
         else:
             p = Prefetch(lookup)
