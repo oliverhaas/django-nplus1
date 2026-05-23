@@ -721,6 +721,28 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#035" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.3.5
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#031" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.3.1
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#030" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -796,6 +818,28 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#035" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.3.5
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#031" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.3.1
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#030" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -849,6 +893,17 @@
 
 
 <h1 id="changelog">Changelog<a class="headerlink" href="#changelog" title="Permanent link">&para;</a></h1>
+<h2 id="035">0.3.5<a class="headerlink" href="#035" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Detect deferred-field N+1 even when the row was also fetched as a singleton in the same scope. Previously, an incidental <code>.get()</code> or <code>refresh_from_db()</code> would silently suppress later <code>.only()</code>/<code>.defer()</code> detection on the same instances.</li>
+<li>Suppress false positives from converging FK chains in <code>prefetch_related_objects(...)</code> (e.g. two lookups sharing a tail like <code>store__region</code> / <code>warehouse__region</code>).</li>
+<li>Replace stale <code>from django.db.models import prefetch_related_objects</code> imports captured before <code>AppConfig.ready()</code> ran, so suppression still applies.</li>
+<li>Widen the <code>sys.modules</code> walk's <code>except</code> clause to tolerate any <code>__getattr__</code> error from third-party modules.</li>
+</ul>
+<h2 id="031">0.3.1<a class="headerlink" href="#031" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Fix forward M2M without an explicit <code>related_name</code>: detection now uses the correct field name instead of the auto-generated one.</li>
+</ul>
 <h2 id="030">0.3.0<a class="headerlink" href="#030" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Inline <code># nplus1: ignore</code> suppression. Add a trailing comment to the call site to suppress a detection, optionally scoped to labels (<code># nplus1: ignore[n_plus_one, get_in_loop]</code>).</li>
