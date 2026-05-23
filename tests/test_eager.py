@@ -56,6 +56,16 @@ class TestPrefetchRelated:
         assert any("Pet.user" in call[1] for call in calls)
         assert any("User.occupation" in call[1] for call in calls)
 
+    def test_prefetch_generic_relation(self, objects, client, logger):
+        client.get("/prefetch_generic_relation/")
+        assert not logger.log.called
+
+    def test_prefetch_generic_relation_unused(self, objects, client, logger):
+        client.get("/prefetch_generic_relation_unused/")
+        assert len(logger.log.call_args_list) == 1
+        args = logger.log.call_args[0]
+        assert "User.tags" in args[1]
+
 
 class TestEagerListenerCleanup:
     def test_nested_unused_not_duplicated(self, objects, client, logger):

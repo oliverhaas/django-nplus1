@@ -130,6 +130,18 @@ class TestManyToMany:
         call = calls[0]
         assert call == (Pet, f"Pet:{pet.pk}", "allergy_set")
 
+    def test_generic_relation(self, objects, calls):
+        user = User.objects.first()
+        list(user.tags.all())
+        assert len(calls) == 1
+        call = calls[0]
+        assert call == (User, f"User:{user.pk}", "tags")
+
+    def test_generic_relation_prefetch(self, objects, calls):
+        users = User.objects.all().prefetch_related("tags")
+        list(users[0].tags.all())
+        assert len(calls) == 0
+
 
 @pytest.mark.django_db
 class TestDeferred:

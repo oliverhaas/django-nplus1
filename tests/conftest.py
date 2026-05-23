@@ -2,7 +2,7 @@ from unittest import mock
 
 import pytest
 from django.conf import settings
-from testapp.models import Address, Allergy, Company, Hobby, Occupation, Pet, Region, Store, User
+from testapp.models import Address, Allergy, Company, Hobby, Occupation, Pet, Region, Store, Tag, User
 
 from django_nplus1 import signals
 from django_nplus1.detect import LazyListener
@@ -21,6 +21,8 @@ def objects(db):
     Address.objects.create(user=user)
     hobby = Hobby.objects.create()
     user.hobbies.add(hobby)
+    Tag.objects.create(label="t", content_object=user)
+    Tag.objects.create(label="t2", content_object=user2)
 
 
 @pytest.fixture

@@ -6,6 +6,7 @@ import sys
 from contextvars import ContextVar
 from typing import Any
 
+from django.contrib.contenttypes.fields import create_generic_related_manager
 from django.db.models import Model, Prefetch, query
 from django.db.models.fields.related_descriptors import (
     ForwardManyToOneDescriptor,
@@ -298,6 +299,34 @@ def _create_reverse_many_to_one_manager(superclass: Any, rel: Any) -> Any:
 _patch(create_reverse_many_to_one_manager, _create_reverse_many_to_one_manager)
 
 
+def _create_generic_related_manager(superclass: Any, rel: Any) -> Any:
+    manager = create_generic_related_manager(superclass, rel)
+    manager.get_queryset = signalify_queryset(
+        manager.get_queryset,
+        parser=parse_generic_related_queryset,
+        rel=rel,
+        rel_field=rel.field,
+        rel_model=rel.related_model,
+    )
+    return manager
+
+
+_patch(create_generic_related_manager, _create_generic_related_manager)
+
+
+def parse_generic_related_queryset(
+    args: Any,
+    kwargs: Any,
+    context: dict[str, Any],
+) -> tuple[type[Model], str, str]:
+    manager = context["args"][0]
+    return (
+        manager.instance.__class__,
+        to_key(manager.instance),
+        manager.prefetch_cache_name,
+    )
+
+
 def parse_forward_many_to_one_get(
     args: Any,
     kwargs: Any,
@@ -349,6 +378,12 @@ def parse_fetch_all(
             return (
                 instance.__class__,
                 parse_manager_field(manager, self._context["rel"]),
+                [to_key(instance)],
+            )
+        if manager.__class__.__name__ == "GenericRelatedObjectManager":
+            return (
+                instance.__class__,
+                manager.prefetch_cache_name,
                 [to_key(instance)],
             )
         model, field = parse_related(self._context)

@@ -216,3 +216,18 @@ def many_to_many_forward_no_related(request):
     """Forward M2M without explicit related_name -- triggers N+1."""
     allergies = list(models.Allergy.objects.all())
     return HttpResponse(list(allergies[0].pets.all()))
+
+
+def prefetch_generic_relation(request):
+    users = list(models.User.objects.all().prefetch_related("tags"))
+    return HttpResponse(list(user.tags.all()) for user in users)
+
+
+def prefetch_generic_relation_unused(request):
+    users = models.User.objects.all().prefetch_related("tags")
+    return HttpResponse(users[0])
+
+
+def generic_relation_lazy(request):
+    users = list(models.User.objects.all())
+    return HttpResponse(list(users[0].tags.all()))

@@ -37,4 +37,7 @@ urlpatterns = [
     path("raw_sql_loop/", views.raw_sql_loop),
     path("raw_sql_single/", views.raw_sql_single),
     path("many_to_many_forward_no_related/", views.many_to_many_forward_no_related),
+    path("prefetch_generic_relation/", views.prefetch_generic_relation),
+    path("prefetch_generic_relation_unused/", views.prefetch_generic_relation_unused),
+    path("generic_relation_lazy/", views.generic_relation_lazy),
 ]
