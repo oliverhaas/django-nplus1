@@ -42,16 +42,16 @@ Changelog = "https://oliverhaas.github.io/django-nplus1/reference/changelog/"
 [dependency-groups]
 dev = [
   "celery[redis]>=5.3",
-  "django-stubs==6.0.2",
+  "django-stubs==6.0.4",
   "mypy==1.20.1",
-  "pre-commit==4.5.1",
+  "pre-commit==4.6.0",
   "pytest-cov==7.1.0",
   "pytest-django==4.12.0",
   "pytest-mock==3.15.1",
   "pytest-xdist>=3.8.0",
   "pytest==9.0.3",
-  "ruff==0.15.10",
-  "ty==0.0.29",
+  "ruff==0.15.14",
+  "ty==0.0.39",
 ]
 docs = ["mkdocs==1.6.1", "mkdocs-material==9.7.6", "mike==2.1.4"]
 
