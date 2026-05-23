@@ -61,6 +61,40 @@ def test_serialize_merge_round_trip():
     assert b.unused() == [(int, "pets", site)]
 
 
+def test_merge_skips_unresolvable_model():
+    """Worker dumps may reference transient classes (e.g. Django's __fake__
+    migration models) that the controller can't reimport. Merge must skip
+    them rather than crash.
+    """
+    a = CorpusEagerTracker()
+    site = make_site()
+    a.merge(
+        {
+            "data": [
+                {
+                    "model": "__fake__.User",
+                    "field": "hobbies",
+                    "site": list(site),
+                    "instances": ["User:1"],
+                },
+                {
+                    "model": "builtins.int",
+                    "field": "hobbies",
+                    "site": list(site),
+                    "instances": ["User:1"],
+                },
+            ],
+            "touched": [
+                {"model": "__fake__.User", "field": "hobbies", "instances": ["User:1"]},
+                {"model": "builtins.int", "field": "hobbies", "instances": ["User:1"]},
+            ],
+        },
+    )
+    # Resolvable entry survived, unresolvable was silently dropped.
+    assert list(a.data.keys()) == [(int, "hobbies", site)]
+    assert list(a.touched.keys()) == [(int, "hobbies")]
+
+
 @pytest.fixture
 def fresh_tracker():
     from django_nplus1 import detect

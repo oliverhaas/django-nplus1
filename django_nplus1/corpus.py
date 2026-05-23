@@ -63,12 +63,22 @@ class CorpusEagerTracker:
         }
 
     def merge(self, payload: dict[str, Any]) -> None:
+        # Skip entries whose model can't be re-imported in this process.
+        # Django's migration framework synthesizes transient classes with
+        # ``__module__ == '__fake__'`` during pytest-django's DB setup; a
+        # worker that captured one of these has nothing the controller can
+        # resolve. The same applies to any prefetched class living in a
+        # module the controller's environment doesn't load.
         for entry in payload.get("data", []):
-            model = _resolve_model(entry["model"])
+            model = _resolve_model_or_none(entry["model"])
+            if model is None:
+                continue
             site = tuple(entry["site"])
             self.data[(model, entry["field"], site)].update(entry["instances"])
         for entry in payload.get("touched", []):
-            model = _resolve_model(entry["model"])
+            model = _resolve_model_or_none(entry["model"])
+            if model is None:
+                continue
             self.touched[(model, entry["field"])].update(entry["instances"])
 
 
@@ -86,6 +96,13 @@ def _resolve_model(dotted: str) -> type:
     resolved = cast("type", obj)
     _model_resolver_cache[dotted] = resolved
     return resolved
+
+
+def _resolve_model_or_none(dotted: str) -> type | None:
+    try:
+        return _resolve_model(dotted)
+    except ImportError, AttributeError:
+        return None
 
 
 _corpus_tracker: CorpusEagerTracker | None = None
