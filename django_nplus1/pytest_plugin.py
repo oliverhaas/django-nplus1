@@ -77,4 +77,4 @@ def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
     else:
         print(text)  # noqa: T201 - fallback when terminalreporter unavailable
     if session.exitstatus == 0:
-        session.exitstatus = 1
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
