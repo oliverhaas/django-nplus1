@@ -164,6 +164,24 @@ def test_activate_swaps_listener_registry():
         corpus._corpus_enabled = False
 
 
+def test_activate_is_idempotent():
+    from django_nplus1 import detect
+
+    original = detect.LISTENERS["eager_load"]
+    corpus.activate()
+    try:
+        tracker_before = corpus._corpus_tracker
+        site = ("/app/views.py", 1, "fn")
+        corpus.get_tracker().record_load(model=int, field="hobbies", instances=["X:1"], site=site)
+        corpus.activate()  # second call should NOT reset the tracker
+        assert corpus._corpus_tracker is tracker_before
+        assert corpus.get_tracker().unused() == [(int, "hobbies", site)]
+    finally:
+        detect.LISTENERS["eager_load"] = original
+        corpus._corpus_enabled = False
+        corpus._corpus_tracker = None
+
+
 def test_dump_worker_and_merge_round_trip(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     site = ("/app/views.py", 1, "fn")

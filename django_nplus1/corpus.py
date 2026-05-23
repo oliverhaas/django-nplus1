@@ -197,8 +197,14 @@ class CorpusContext(DetectionContext):
 
 
 def activate() -> None:
-    """Enable corpus mode: swap LISTENERS["eager_load"] and reset tracker."""
+    """Enable corpus mode: swap LISTENERS["eager_load"] and reset tracker.
+
+    Idempotent: a second call is a no-op so accumulated tracker data is
+    preserved (for tests that call activate() per-fixture).
+    """
     global _corpus_enabled, _corpus_tracker  # noqa: PLW0603
+    if _corpus_enabled:
+        return
     _corpus_enabled = True
     _corpus_tracker = CorpusEagerTracker()
     detect.LISTENERS["eager_load"] = CorpusEagerListener
@@ -237,7 +243,7 @@ def _whitelist_rules() -> list[DjangoRule]:
     return [DjangoRule(**item) for item in data]
 
 
-def report(config: Any) -> list[tuple[type, str, CallSite]]:
+def report() -> list[tuple[type, str, CallSite]]:
     tracker = get_tracker()
     rules = _whitelist_rules()
     result = []

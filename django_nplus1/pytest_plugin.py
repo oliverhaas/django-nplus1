@@ -67,7 +67,7 @@ def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
         corpus.dump_worker(workerinput["workerid"])
         return
     corpus.merge_worker_dumps()
-    finds = corpus.report(session.config)
+    finds = corpus.report()
     if not finds:
         return
     text = corpus.format_finds(finds)

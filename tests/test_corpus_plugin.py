@@ -140,7 +140,7 @@ def test_inline_corpus_ignore_marker_suppresses(tmp_path, restore_listeners):
     corpus.activate()
     site = (str(src), 2, "view")
     corpus.get_tracker().record_load(model=int, field="hobbies", instances=["User:1"], site=site)
-    finds = corpus.report(mock.Mock())
+    finds = corpus.report()
     assert finds == []
 
 
@@ -154,7 +154,7 @@ def test_inline_marker_other_label_does_not_suppress_corpus(tmp_path, restore_li
     corpus.activate()
     site = (str(src), 2, "view")
     corpus.get_tracker().record_load(model=int, field="hobbies", instances=["User:1"], site=site)
-    finds = corpus.report(mock.Mock())
+    finds = corpus.report()
     assert len(finds) == 1
 
 
@@ -174,7 +174,7 @@ def test_whitelist_label_suppresses(settings, restore_listeners):
         instances=["User:1"],
         site=site,
     )
-    finds = corpus.report(mock.Mock())
+    finds = corpus.report()
     assert finds == []
 
 
@@ -193,7 +193,7 @@ def test_whitelist_label_mismatch_does_not_suppress(settings, restore_listeners)
         instances=["User:1"],
         site=site,
     )
-    finds = corpus.report(mock.Mock())
+    finds = corpus.report()
     assert len(finds) == 1
 
 
@@ -224,7 +224,7 @@ def test_corpus_two_call_sites_tracked_independently(restore_listeners, objects)
     with corpus.CorpusContext():
         list(User.objects.prefetch_related("hobbies").filter(pk__in=pks_without))  # site B
 
-    finds = [(m.__name__, f, s[1]) for m, f, s in corpus.report(mock.Mock())]
+    finds = [(m.__name__, f, s[1]) for m, f, s in corpus.report()]
     # Exactly one find: site B (users-without-hobbies never accessed)
     assert len(finds) == 1
     model_name, field, _lineno = finds[0]
@@ -261,5 +261,5 @@ def test_corpus_shared_helper_used_across_sessions(restore_listeners, objects):
         users = shared_helper()
         list(users[1].hobbies.all())
 
-    finds = corpus.report(mock.Mock())
+    finds = corpus.report()
     assert finds == [], f"Expected no finds, got: {finds}"

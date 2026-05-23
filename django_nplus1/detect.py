@@ -309,7 +309,7 @@ class LazyListener(Listener):
 
 class EagerListener(Listener):
     tracker: EagerTracker
-    touched: list[tuple[type, str, list[str]] | None]
+    touched: list[tuple[type, str, list[str]]]
 
     def setup(self) -> None:
         from django_nplus1 import signals
@@ -345,10 +345,13 @@ class EagerListener(Listener):
         ret: Any = None,
         parser: Any = None,
     ) -> None:
-        self.touched.append(parser(args, kwargs, context))
+        parsed = parser(args, kwargs, context)
+        if parsed is None:
+            return
+        self.touched.append(parsed)
 
     def log_eager(self) -> None:
-        self.tracker.prune([each for each in self.touched if each])
+        self.tracker.prune(self.touched)
         for model, field in self.tracker.unused:
             message = EagerLoadMessage(model, field)
             self.parent.notify(message)
