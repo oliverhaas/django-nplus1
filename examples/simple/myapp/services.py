@@ -18,9 +18,8 @@ class BookService:
     def book_get_author_names(*, books: list[Book]) -> list[str]:
         """Return author names for a batch of books.
 
-        Uses prefetch_related_objects to fill in any missing author
-        relations, so this is always N+1-safe regardless of what
-        the caller prefetched.
+        Fills in any missing author relations via prefetch_related_objects
+        before the loop, so the caller doesn't need to prefetch.
         """
         prefetch_related_objects(books, "author")
         return [book.author.name for book in books]

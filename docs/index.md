@@ -13,23 +13,28 @@ Several features (deferred field detection, call-site tracking, `.get()`-in-a-lo
 
 ## Features
 
-- **N+1 detection**: Warns when a related object is lazily loaded on an instance that was part of a bulk query
-- **Deferred field detection**: Detects N+1 from `.defer()` / `.only()` field access
-- **`.get()` in a loop detection**: Detects `Model.objects.get()` called repeatedly from the same call-site
-- **Unused eager load detection**: Warns when `select_related` or `prefetch_related` results are never accessed
-- **Call-site tracking**: Error messages include the exact file, line number, and function name
-- **Async support**: Works with both sync and async Django views
-- **Middleware**: Automatically monitors all requests (sync and async)
-- **Celery integration**: Per-task detection via `task_prerun`/`task_postrun` signals
-- **pytest plugin**: `nplus1` fixture and `@pytest.mark.nplus1` marker for test-time detection
-- **Profiler**: Context manager for manual use in scripts or tests
-- **Whitelisting**: Ignore specific model/field combinations with wildcard support and typo detection
-- **Inline suppression**: `# nplus1: ignore` comments for per-line suppression
-- **`nplus1_allow()`**: Context manager to locally suppress detection for specific code blocks
-- **Multiple notification methods**: Logging, exceptions, `warnings.warn_explicit()`, and a Django signal
-- **Duplicate query detection**: Optional SQL-level fallback catches N+1 from raw SQL and `.raw()`
-- **Configurable threshold**: `NPLUS1_THRESHOLD` controls detection sensitivity
-- **Zero dependencies**: Only requires Django
+Detects:
+
+- Lazy loads on bulk-fetched rows (N+1)
+- Deferred-field access from `.defer()` / `.only()`
+- `Model.objects.get()` repeated in a loop
+- Unused `select_related` / `prefetch_related`
+- Duplicate raw SQL (opt-in via `NPLUS1_DETECT_DUPLICATE_QUERIES`)
+
+Activates via:
+
+- Middleware (sync and async)
+- pytest plugin (`nplus1` fixture and `@pytest.mark.nplus1` marker)
+- Celery `task_prerun`/`task_postrun` signals
+- `Profiler` context manager
+
+Suppression:
+
+- Wildcard whitelist with typo detection
+- `# nplus1: ignore` inline comments
+- `nplus1_allow()` context manager
+
+Reports via logging, exceptions, `warnings.warn_explicit()`, and a Django signal. Messages include file, line, and function. Threshold tunable via `NPLUS1_THRESHOLD`. Only depends on Django.
 
 ## Quick Start
 
