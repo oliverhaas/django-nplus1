@@ -1,5 +1,3 @@
-from importlib.metadata import PackageNotFoundError, version
-
 from django_nplus1.detect import nplus1_allow
 from django_nplus1.exceptions import NPlus1Error
 from django_nplus1.middleware import NPlus1Middleware
@@ -7,10 +5,18 @@ from django_nplus1.profiler import Profiler
 from django_nplus1.scope import DetectionContext
 from django_nplus1.signals import nplus1_detected
 
-try:
-    __version__ = version("django-nplus1")
-except PackageNotFoundError:
-    __version__ = "0.0.0+unknown"
+
+def _get_version() -> str:
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("django-nplus1")
+    except PackageNotFoundError:
+        return "0.0.0+unknown"
+
+
+__version__ = _get_version()
+del _get_version
 
 __all__ = [
     "DetectionContext",

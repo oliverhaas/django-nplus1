@@ -289,7 +289,7 @@ class LazyListener(Listener):
             key = (model, field)
             call_id = _prefetch_call_id.get()
             if call_id is not None and self.last_call_id.get(key) == call_id:
-                return  # same prefetch_related_objects() call — not N+1
+                return  # same prefetch_related_objects() call, not N+1
             self.last_call_id[key] = call_id
             self.counts[key] += 1
             if self.show_all_callers:

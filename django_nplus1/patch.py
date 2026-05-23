@@ -209,8 +209,6 @@ def _is_descriptor_call() -> bool:
     Walk from the caller of _get upward. If we reach a Django descriptor
     frame before hitting user code, this is an internal .get() call.
     """
-    import sys
-
     from django_nplus1.util import _is_internal_frame
 
     # frame(0)=here, frame(1)=_get, frame(2)=caller of _get
@@ -465,7 +463,7 @@ query.prefetch_one_level = signals.signalify(
 
 
 # Mark prefetch calls so single-instance prefetches aren't flagged as N+1.
-# Both the queryset method and the standalone function need wrapping —
+# Both the queryset method and the standalone function need wrapping;
 # without it, prefetch_related_objects() with converging FK chains
 # (e.g. "store__region", "warehouse__region") produces false positives.
 _original_qs_prefetch_related_objects = query.QuerySet._prefetch_related_objects  # type: ignore[attr-defined]
@@ -497,14 +495,18 @@ def _standalone_prefetch_related_objects(model_instances: Any, *related_lookups:
 query.prefetch_related_objects = _standalone_prefetch_related_objects
 importlib.import_module("django.db.models").prefetch_related_objects = _standalone_prefetch_related_objects  # type: ignore[attr-defined]
 
-# Fix stale from-imports captured before AppConfig.ready() ran.
-for _mod in list(sys.modules.values()):
-    try:
-        if getattr(_mod, "prefetch_related_objects", None) is _original_prefetch_related_objects:
-            _mod.prefetch_related_objects = _standalone_prefetch_related_objects  # type: ignore[attr-defined]
-    except Exception:  # noqa: BLE001, S110 — third-party __getattr__ can raise anything
-        pass
-del _mod
+
+def _replace_stale_prefetch_imports() -> None:
+    """Fix stale from-imports captured before AppConfig.ready() ran."""
+    for mod in list(sys.modules.values()):
+        try:
+            if getattr(mod, "prefetch_related_objects", None) is _original_prefetch_related_objects:
+                mod.prefetch_related_objects = _standalone_prefetch_related_objects  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001, S110 (third-party __getattr__ can raise anything)
+            pass
+
+
+_replace_stale_prefetch_imports()
 
 # Emit touch on indexing into prefetched QuerySet instances
 _original_getitem = query.QuerySet.__getitem__
