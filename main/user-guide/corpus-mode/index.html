@@ -628,6 +628,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#what-counts-as-instrumented" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What counts as instrumented
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#suppression" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -853,6 +864,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#what-counts-as-instrumented" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What counts as instrumented
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#suppression" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -930,9 +952,18 @@
 <h2 id="what-changes">What changes<a class="headerlink" href="#what-changes" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Per-request <code>unused_eager_load</code> detection is suppressed for the whole session.</li>
-<li>An autouse fixture wraps every test in a slim detection context that records loads and touches.</li>
+<li>Any <code>DetectionContext</code> opened during the run (by <code>NPlus1Middleware</code>, the Celery integration, an explicit <code>Profiler</code>, or a manual <code>with DetectionContext()</code>) contributes EAGER_LOAD and TOUCH events to a shared session tracker.</li>
+<li>ORM calls outside an instrumented scope (test setup, factories, direct queryset assertions) are ignored.</li>
 <li>At session end, surviving <code>(model, field, declaration_call_site)</code> tuples are printed and pytest exits with code 1.</li>
 </ul>
+<h2 id="what-counts-as-instrumented">What counts as instrumented<a class="headerlink" href="#what-counts-as-instrumented" title="Permanent link">&para;</a></h2>
+<p>Only code executed inside an active <code>DetectionContext</code> contributes to the tracker. In practice that means:</p>
+<ul>
+<li>View bodies reached through <code>NPlus1Middleware</code> (typical: tests using the Django test client).</li>
+<li>Celery task bodies when <code>NPLUS1_CELERY = True</code> is set and the task signals are connected.</li>
+<li>Code wrapped in <code>Profiler()</code>, <code>@pytest.mark.nplus1</code>, or a manual <code>with DetectionContext():</code> block.</li>
+</ul>
+<p>If a prefetch is declared and consumed entirely in test code (no middleware, no task, no explicit wrap), corpus mode will not flag it. Wrap the code you actually want audited.</p>
 <h2 id="suppression">Suppression<a class="headerlink" href="#suppression" title="Permanent link">&para;</a></h2>
 <p>Use the existing <code>NPLUS1_WHITELIST</code> setting:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">NPLUS1_WHITELIST</span> <span class="o">=</span> <span class="p">[</span>
