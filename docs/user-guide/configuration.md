@@ -115,6 +115,22 @@ NPLUS1_WHITELIST = [
 ]
 ```
 
+### `NPLUS1_CELERY`
+
+Enable per-task N+1 detection inside Celery workers. Default: `False`. Requires the `celery` extra (`pip install django-nplus1[celery]`). See [Celery integration](../reference/api.md) for details.
+
+```python
+NPLUS1_CELERY = True
+```
+
+### `NPLUS1_EAGER_CORPUS`
+
+Enable corpus-wide `unused_eager_load` detection during pytest runs. Default: `False`. Equivalent to passing `--nplus1-eager-corpus` on the command line. See [Corpus Mode](corpus-mode.md).
+
+```python
+NPLUS1_EAGER_CORPUS = True
+```
+
 ## Recommended Test Configuration
 
 ```python

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.5
+
+- Detect deferred-field N+1 even when the row was also fetched as a singleton in the same scope. Previously, an incidental `.get()` or `refresh_from_db()` would silently suppress later `.only()`/`.defer()` detection on the same instances.
+- Suppress false positives from converging FK chains in `prefetch_related_objects(...)` (e.g. two lookups sharing a tail like `store__region` / `warehouse__region`).
+- Replace stale `from django.db.models import prefetch_related_objects` imports captured before `AppConfig.ready()` ran, so suppression still applies.
+- Widen the `sys.modules` walk's `except` clause to tolerate any `__getattr__` error from third-party modules.
+
+## 0.3.1
+
+- Fix forward M2M without an explicit `related_name`: detection now uses the correct field name instead of the auto-generated one.
+
 ## 0.3.0
 
 - Inline `# nplus1: ignore` suppression. Add a trailing comment to the call site to suppress a detection, optionally scoped to labels (`# nplus1: ignore[n_plus_one, get_in_loop]`).

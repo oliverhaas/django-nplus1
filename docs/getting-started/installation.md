@@ -35,7 +35,7 @@ Then add the middleware to your **test settings** and enable raising on detectio
 # settings/testing.py
 MIDDLEWARE = [
     ...,
-    "django_nplus1.NPlus1Middleware",  # should be last
+    "django_nplus1.NPlus1Middleware",
 ]
 NPLUS1_RAISE = True
 ```
