@@ -1077,7 +1077,7 @@
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">response</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/authors/&quot;</span><span class="p">)</span>  <span class="c1"># raises NPlus1Error if view has N+1</span>
 </span></code></pre></div>
 <h3 id="why-test-settings">Why test settings?<a class="headerlink" href="#why-test-settings" title="Permanent link">&para;</a></h3>
-<p>Testing actual request paths catches real problems in your views. Helper functions or management commands that intentionally defer prefetching to their callers can produce false positives when wrapped in a detection context — testing through the middleware avoids that.</p>
+<p>Testing actual request paths catches real problems in your views. Helper functions or management commands that intentionally defer prefetching to their callers can produce false positives when wrapped in a detection context; testing through the middleware avoids that.</p>
 <h3 id="adopting-in-an-existing-project">Adopting in an Existing Project<a class="headerlink" href="#adopting-in-an-existing-project" title="Permanent link">&para;</a></h3>
 <p>Introducing django-nplus1 to a project with existing N+1 queries will likely fail many tests at once. Whitelist the known issues and fix them over time:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># settings/testing.py</span>
