@@ -284,7 +284,7 @@ class LazyListener(Listener):
 
         if _in_queryset_prefetch.get():
             return
-        model, field, keys, _key = parser(args, kwargs, context)
+        model, field, keys, _key, _site = parser(args, kwargs, context)
         if len(keys) == 1 and keys[0] in self.loaded and keys[0] not in self.ignore:
             key = (model, field)
             call_id = _prefetch_call_id.get()
@@ -334,7 +334,8 @@ class EagerListener(Listener):
         ret: Any = None,
         parser: Any = None,
     ) -> None:
-        self.tracker.track(*parser(args, kwargs, context))
+        model, field, instances, key, _site = parser(args, kwargs, context)
+        self.tracker.track(model, field, instances, key)
 
     def handle_touch(
         self,

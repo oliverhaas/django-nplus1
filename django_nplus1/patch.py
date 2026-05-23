@@ -6,7 +6,7 @@ import sys
 from contextvars import ContextVar
 from typing import Any
 
-from django.db.models import Model, query
+from django.db.models import Model, Prefetch, query
 from django.db.models.fields.related_descriptors import (
     ForwardManyToOneDescriptor,
     ReverseOneToOneDescriptor,
@@ -15,7 +15,8 @@ from django.db.models.fields.related_descriptors import (
 )
 from django.db.models.query_utils import DeferredAttribute
 
-from django_nplus1 import signals
+from django_nplus1 import corpus, signals
+from django_nplus1.util import get_caller
 
 # True while inside QuerySet._prefetch_related_objects. A prefetch that fires here
 # is proper queryset-level usage (e.g. ``Model.objects.prefetch_related(...).filter(pk=X)``)
@@ -27,6 +28,13 @@ _in_queryset_prefetch: ContextVar[bool] = ContextVar("nplus1_in_queryset_prefetc
 # from cross-call repetition (actual N+1 in a loop).
 _prefetch_call_id: ContextVar[int | None] = ContextVar("nplus1_prefetch_call_id", default=None)
 _prefetch_call_seq = itertools.count()
+
+# Threaded by _fetch_all so parse_eager_select can recover the
+# Query's _nplus1_select_sites without a direct reference.
+_current_select_sites: ContextVar[dict[str, tuple[str, int, str]] | None] = ContextVar(
+    "nplus1_current_select_sites",
+    default=None,
+)
 
 
 def to_key(instance: Model) -> str:
@@ -227,8 +235,6 @@ def _get(self: Any, *args: Any, **kwargs: Any) -> Any:
     except LookupError:
         return _original_get(self, *args, **kwargs)
 
-    from django_nplus1.util import get_caller
-
     direct_call = not _is_descriptor_call()
     caller = get_caller() if direct_call else None
     ret = _original_get(self, *args, **kwargs)
@@ -382,7 +388,13 @@ def _fetch_all(self: Any) -> None:
             args=(self,),
             parser=parse_fetch_all,
         )
-    _original_fetch_all(self)
+    sites = getattr(self.query, "_nplus1_select_sites", None)
+    token = _current_select_sites.set(sites) if sites is not None else None
+    try:
+        _original_fetch_all(self)
+    finally:
+        if token is not None:
+            _current_select_sites.reset(token)
     signal = signals.IGNORE_LOAD if is_single(self.query.low_mark, self.query.high_mark) else signals.LOAD
     signals.send(
         signal,
@@ -411,14 +423,16 @@ def parse_eager_select(
     args: Any,
     kwargs: Any,
     context: dict[str, Any],
-) -> tuple[type[Model], str, list[str], int]:
+) -> tuple[type[Model], str, list[str], int, tuple[str, int, str] | None]:
     populator = args[0]
     instance = args[2]
     meta = populator.__nplus1__
     klass_info, select, *_ = meta["args"]
     field = klass_info["field"]
     model, name = parse_field(field) if instance._meta.model != field.model else parse_reverse_field(field)
-    return model, name, [to_key(instance)], id(select)
+    sites = _current_select_sites.get()
+    site = sites.get(name) if sites else None
+    return model, name, [to_key(instance)], id(select), site
 
 
 # Emit eager_load on populating from select_related
@@ -433,12 +447,13 @@ def parse_eager_join(
     args: Any,
     kwargs: Any,
     context: dict[str, Any],
-) -> tuple[type[Model], str, list[str], int]:
+) -> tuple[type[Model], str, list[str], int, tuple[str, int, str] | None]:
     instances, _descriptor, fetcher, level = args
     model = instances[0].__class__
     field, _ = fetcher.get_current_to_attr(level)
     keys = [to_key(instance) for instance in instances]
-    return model, field, keys, id(instances)
+    site = getattr(fetcher, "_nplus1_site", None)
+    return model, field, keys, id(instances), site
 
 
 # Emit eager_load on populating from prefetch_related
@@ -538,3 +553,61 @@ def _check_parent_chain(self: Any, instance: Any) -> Any:
 
 
 DeferredAttribute._check_parent_chain = _check_parent_chain  # type: ignore[attr-defined]
+
+
+# Stash declaration-time call site on each Prefetch instance.
+_original_prefetch_init = Prefetch.__init__
+
+
+def _prefetch_init(self: Any, lookup: Any, queryset: Any = None, to_attr: Any = None) -> None:
+    _original_prefetch_init(self, lookup, queryset, to_attr)
+    if corpus.is_enabled():
+        self._nplus1_site = get_caller()
+
+
+Prefetch.__init__ = _prefetch_init  # type: ignore[method-assign]
+
+
+_original_prefetch_related = query.QuerySet.prefetch_related
+
+
+def _prefetch_related(self: Any, *lookups: Any) -> Any:
+    if lookups == (None,):
+        return _original_prefetch_related(self, None)
+    if not corpus.is_enabled():
+        return _original_prefetch_related(self, *lookups)
+    site = get_caller()
+    normalized = []
+    for lookup in lookups:
+        if isinstance(lookup, Prefetch):
+            if not getattr(lookup, "_nplus1_site", None):
+                lookup._nplus1_site = site  # type: ignore[attr-defined]
+            normalized.append(lookup)
+        else:
+            p = Prefetch(lookup)
+            normalized.append(p)
+    return _original_prefetch_related(self, *normalized)
+
+
+query.QuerySet.prefetch_related = _prefetch_related  # type: ignore[method-assign]
+
+
+_original_select_related = query.QuerySet.select_related
+
+
+def _select_related(self: Any, *fields: Any) -> Any:
+    if fields == (None,):
+        return _original_select_related(self, None)
+    qs = _original_select_related(self, *fields)
+    if fields and corpus.is_enabled():
+        site = get_caller()
+        existing = getattr(qs.query, "_nplus1_select_sites", None) or {}
+        # Copy so we don't mutate a parent Query's dict
+        new_sites = dict(existing)
+        for f in fields:
+            new_sites[f] = site
+        qs.query._nplus1_select_sites = new_sites
+    return qs
+
+
+query.QuerySet.select_related = _select_related  # type: ignore[method-assign]
