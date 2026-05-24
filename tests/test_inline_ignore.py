@@ -1,4 +1,5 @@
 import inspect
+import linecache
 
 import pytest
 from testapp.models import Occupation, User
@@ -44,12 +45,16 @@ def test_corpus_ignore_suppresses_field_find():
     from django_nplus1 import corpus
 
     corpus._corpus_field_tracker = corpus.CorpusFieldTracker()
-    # Use this exact file's path and the line number of the marker below.
     frame = inspect.currentframe()
     assert frame is not None
     fn = frame.f_code.co_filename
-    # The marker line is the next statement after this comment.
-    site = (fn, frame.f_lineno + 1, "test_corpus_ignore_suppresses_field_find")
+    # Offset jumps past the assertion and site= line to land on record_load.
+    # The assertion below fails loudly if the layout changes and the offset drifts.
+    marker_line = frame.f_lineno + 5
+    assert "corpus-ignore" in linecache.getline(fn, marker_line), (
+        "stale line offset: marker_line must point at the record_load call below"
+    )
+    site = (fn, marker_line, "test_corpus_ignore_suppresses_field_find")
     corpus._corpus_field_tracker.record_load(int, "bio", ["X:1"], site)  # nplus1: corpus-ignore
     try:
         assert corpus.field_report() == []
