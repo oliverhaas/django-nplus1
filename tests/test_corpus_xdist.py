@@ -70,7 +70,8 @@ def test_xdist_used_prefetch_not_flagged(pytester, monkeypatch):
             with DetectionContext():
                 users = list(User.objects.prefetch_related('hobbies').all())
                 for u in users:
-                    list(u.hobbies.all())  # touch
+                    _ = u.name  # touch concrete field
+                    list(u.hobbies.all())  # touch relation
 
         @pytest.mark.django_db
         def test_b():
@@ -80,7 +81,8 @@ def test_xdist_used_prefetch_not_flagged(pytester, monkeypatch):
             with DetectionContext():
                 users = list(User.objects.prefetch_related('hobbies').all())
                 for u in users:
-                    list(u.hobbies.all())  # touch
+                    _ = u.name  # touch concrete field
+                    list(u.hobbies.all())  # touch relation
         """,
     )
     result = pytester.runpytest_subprocess("-n", "2", "--nplus1-eager-corpus")
@@ -110,14 +112,17 @@ def test_xdist_one_worker_touches_one_does_not(pytester, monkeypatch):
             with DetectionContext():
                 users = helper()
                 for u in users:
-                    list(u.hobbies.all())  # touch
+                    _ = u.name  # touch concrete field
+                    list(u.hobbies.all())  # touch relation
 
         @pytest.mark.django_db
         def test_b():
             User.objects.create()
             User.objects.create()
             with DetectionContext():
-                helper()  # no touch
+                users = helper()  # no relation touch, but read name
+                for u in users:
+                    _ = u.name  # touch concrete field to avoid field find
         """,
     )
     result = pytester.runpytest_subprocess("-n", "2", "--nplus1-eager-corpus")

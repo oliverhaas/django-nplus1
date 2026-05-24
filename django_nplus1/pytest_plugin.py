@@ -58,11 +58,17 @@ def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
         corpus.dump_worker(workerinput["workerid"])
         return
     corpus.merge_worker_dumps()
-    finds = corpus.report()
-    if not finds:
-        return
-    text = corpus.format_finds(finds)
+    eager_finds = corpus.report()
+    field_finds = corpus.field_report()
     terminal = session.config.pluginmanager.get_plugin("terminalreporter")
+    text_blocks = []
+    if eager_finds:
+        text_blocks.append(corpus.format_finds(eager_finds))
+    if field_finds:
+        text_blocks.append(corpus.format_field_finds(field_finds))
+    if not text_blocks:
+        return
+    text = "\n".join(text_blocks)
     if terminal is not None:
         terminal.write_line(text)
     else:
