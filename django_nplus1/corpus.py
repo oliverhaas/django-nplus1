@@ -284,7 +284,10 @@ class CorpusFieldListener(Listener):
         ret: Any = None,
         parser: Any = None,
     ) -> None:
-        model, field, instances = parser(args, kwargs, context)
+        parsed = parser(args, kwargs, context)
+        if parsed is None:
+            return
+        model, field, instances = parsed
         get_field_tracker().record_touch(model, field, instances)
 
 
