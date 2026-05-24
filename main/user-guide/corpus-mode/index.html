@@ -78,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#corpus-wide-unused_eager_load" class="md-skip">
+        <a href="#corpus-mode" class="md-skip">
           Skip to content
         </a>
       
@@ -650,6 +650,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#unused-field-loads" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unused field loads
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#pytest-xdist" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -886,6 +897,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#unused-field-loads" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unused field loads
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#pytest-xdist" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -938,9 +960,10 @@
   
 
 
-<h1 id="corpus-wide-unused_eager_load">Corpus-wide unused_eager_load<a class="headerlink" href="#corpus-wide-unused_eager_load" title="Permanent link">&para;</a></h1>
-<p><code>unused_eager_load</code> is request-scoped by default: a prefetch with no in-request touches gets flagged. In real codebases that fires on patterns that are correct at suite scope: shared prefetch tuples consumed by many paths, <code>{% if %}</code> branches where the empty path flags the prefetch, <code>select_related</code> to sparse FKs.</p>
-<p>Corpus mode accumulates EAGER_LOAD/TOUCH events across the entire pytest session and only reports prefetches that were never touched by any test in the suite.</p>
+<h1 id="corpus-mode">Corpus mode<a class="headerlink" href="#corpus-mode" title="Permanent link">&para;</a></h1>
+<p>Corpus mode accumulates load and touch events across the entire pytest session and reports two classes of finding once at session end: prefetches that were never read (<code>unused_eager_load</code>) and concrete fields that were never read (<code>unused_field_load</code>).</p>
+<p>The per-request <code>unused_eager_load</code> detector flags prefetches with no in-request touches. In real codebases that fires on patterns that are correct at suite scope: shared prefetch tuples consumed by many paths, <code>{% if %}</code> branches where the empty path flags the prefetch, <code>select_related</code> to sparse FKs. Corpus mode aggregates across the whole session, so a prefetch survives if any test touched it.</p>
+<p>Field detection has no per-request equivalent. It is only available in corpus mode.</p>
 <h2 id="enable">Enable<a class="headerlink" href="#enable" title="Permanent link">&para;</a></h2>
 <p>CLI flag:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>--nplus1-eager-corpus
@@ -952,9 +975,10 @@
 <h2 id="what-changes">What changes<a class="headerlink" href="#what-changes" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Per-request <code>unused_eager_load</code> detection is suppressed for the whole session.</li>
-<li>Any <code>DetectionContext</code> opened during the run (by <code>NPlus1Middleware</code>, the Celery integration, an explicit <code>Profiler</code>, or a manual <code>with DetectionContext()</code>) contributes EAGER_LOAD and TOUCH events to a shared session tracker.</li>
+<li>Any <code>DetectionContext</code> opened during the run (by <code>NPlus1Middleware</code>, the Celery integration, an explicit <code>Profiler</code>, or a manual <code>with DetectionContext()</code>) contributes EAGER_LOAD / TOUCH / FIELD_LOAD / FIELD_TOUCH events to a shared session tracker.</li>
+<li><code>DeferredAttribute</code> is patched into a data descriptor so every concrete-field read passes through the touch hook, regardless of whether the value was loaded by the SELECT.</li>
 <li>ORM calls outside an instrumented scope (test setup, factories, direct queryset assertions) are ignored.</li>
-<li>At session end, surviving <code>(model, field, declaration_call_site)</code> tuples are printed and pytest exits with code 1.</li>
+<li>At session end, surviving <code>(model, field, call_site)</code> tuples are printed for both detectors and pytest exits with code 1 if any remain.</li>
 </ul>
 <h2 id="what-counts-as-instrumented">What counts as instrumented<a class="headerlink" href="#what-counts-as-instrumented" title="Permanent link">&para;</a></h2>
 <p>Only code executed inside an active <code>DetectionContext</code> contributes to the tracker. In practice that means:</p>
@@ -976,12 +1000,33 @@
 </span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="o">...</span>
 </span></code></pre></div>
 <p>The corpus marker is distinct from the existing <code># nplus1: ignore</code> marker. Use <code>corpus-ignore</code> for prefetches exercised only outside the test suite (management commands, error handlers).</p>
+<h2 id="unused-field-loads">Unused field loads<a class="headerlink" href="#unused-field-loads" title="Permanent link">&para;</a></h2>
+<p>A field is counted as "touched" when accessing it would have triggered a database fetch had the field been deferred. Concretely, the read must be routed through <code>DeferredAttribute.__get__</code>. Fields that are loaded by the SELECT but never accessed in this way across the full pytest session are reported as <code>unused_field_load</code>. The suggested fix is to add <code>.only()</code> or <code>.defer()</code> at the call site so the column is not fetched at all.</p>
+<p>Note on <code>model.save()</code>: every field on a re-saved instance is counted as touched, because deferring any field would force a refetch inside <code>save()</code>. Use <code>save(update_fields=[...])</code> or <code>.update()</code> to avoid touching unrelated fields.</p>
+<p>Exclude noisy models with <code>NPLUS1_FIELD_EXCLUDE</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">NPLUS1_FIELD_EXCLUDE</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="s2">&quot;auth.User&quot;</span><span class="p">,</span>        <span class="c1"># exact match</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="s2">&quot;contenttypes.*&quot;</span><span class="p">,</span>   <span class="c1"># wildcard: all models in the app</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="p">]</span>
+</span></code></pre></div>
+<p>Patterns are fnmatch'd against <code>app_label.ModelName</code>. Setting <code>["*"]</code> short-circuits field tracking entirely.</p>
+<p>Add <code>unused_field_load</code> to <code>NPLUS1_WHITELIST</code> to suppress individual fields:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">NPLUS1_WHITELIST</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="p">{</span><span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="s2">&quot;unused_field_load&quot;</span><span class="p">,</span> <span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;myapp.Article&quot;</span><span class="p">,</span> <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="s2">&quot;body&quot;</span><span class="p">},</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="p">]</span>
+</span></code></pre></div>
+<p>A <code># nplus1: corpus-ignore</code> comment at the queryset call site suppresses both <code>unused_eager_load</code> and <code>unused_field_load</code> for that queryset.</p>
 <h2 id="pytest-xdist">pytest-xdist<a class="headerlink" href="#pytest-xdist" title="Permanent link">&para;</a></h2>
 <p>Workers dump their tracker state to <code>.nplus1-eager-corpus.&lt;workerid&gt;.json</code> in the pytest working directory. The controller merges all dumps in <code>pytest_sessionfinish</code> and reports once. Run pytest from the project root for consistent results across xdist invocations.</p>
 <h2 id="exit-code">Exit code<a class="headerlink" href="#exit-code" title="Permanent link">&para;</a></h2>
-<p>Corpus mode reports at session end: pytest exits with code 1 if any untouched prefetches remain after whitelist filtering. The standard pytest exit code for test failures (also 1) is preserved.</p>
+<p>Corpus mode reports at session end: pytest exits with code 1 if any untouched prefetches or untouched field loads remain after whitelist filtering. The standard pytest exit code for test failures (also 1) is preserved.</p>
 <h2 id="for-plugin-authors">For plugin authors<a class="headerlink" href="#for-plugin-authors" title="Permanent link">&para;</a></h2>
 <p>Custom listeners subscribed to the <code>EAGER_LOAD</code> signal must unpack a 5-element tuple as of 0.4.0: <code>(model, field, instances, key, call_site)</code>. The fifth element is the declaration call-site as a <code>(filename, lineno, funcname)</code> tuple, or <code>None</code> if it could not be resolved.</p>
+<p>Two new signals back the field detector:</p>
+<ul>
+<li><code>FIELD_LOAD</code> carries <code>(model, field, instance_keys, call_site)</code>. Fired once per non-deferred concrete field on each fetched row when corpus mode is active. <code>call_site</code> may be <code>None</code> if the queryset call site could not be resolved.</li>
+<li><code>FIELD_TOUCH</code> carries <code>(model, field, instance_keys)</code>. Fired on every read routed through the patched <code>DeferredAttribute.__get__</code>, which (during corpus mode) is every concrete-field read on a loaded instance.</li>
+</ul>
 
 
 

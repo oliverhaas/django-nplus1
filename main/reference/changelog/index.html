@@ -721,6 +721,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#unreleased" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unreleased
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#035" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -818,6 +829,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#unreleased" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unreleased
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#035" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -893,6 +915,10 @@
 
 
 <h1 id="changelog">Changelog<a class="headerlink" href="#changelog" title="Permanent link">&para;</a></h1>
+<h2 id="unreleased">Unreleased<a class="headerlink" href="#unreleased" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Corpus mode now also flags concrete fields loaded by the SELECT but never read across the suite. Reports as <code>unused_field_load</code>; suggested fix is <code>.only()</code> / <code>.defer()</code>. Suppress noisy models with <code>NPLUS1_FIELD_EXCLUDE</code>.</li>
+</ul>
 <h2 id="035">0.3.5<a class="headerlink" href="#035" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Detect deferred-field N+1 even when the row was also fetched as a singleton in the same scope. Previously, an incidental <code>.get()</code> or <code>refresh_from_db()</code> would silently suppress later <code>.only()</code>/<code>.defer()</code> detection on the same instances.</li>
