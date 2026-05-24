@@ -105,6 +105,66 @@ def _resolve_model_or_none(dotted: str) -> type | None:
         return None
 
 
+class CorpusFieldTracker:
+    """Session-lifetime accumulator for unused concrete-field detection.
+
+    Same shape as ``CorpusEagerTracker`` but kept separate so the report
+    can label finds distinctly and future tuning (e.g. exclude lists)
+    does not entangle the two code paths.
+    """
+
+    def __init__(self) -> None:
+        self.data: dict[tuple[type, str, CallSite], set[str]] = defaultdict(set)
+        self.touched: dict[tuple[type, str], set[str]] = defaultdict(set)
+
+    def record_load(self, model: type, field: str, instances: list[str], site: CallSite) -> None:
+        self.data[(model, field, site)].update(instances)
+
+    def record_touch(self, model: type, field: str, instance_keys: list[str]) -> None:
+        self.touched[(model, field)].update(instance_keys)
+
+    def unused(self) -> list[tuple[type, str, CallSite]]:
+        result = []
+        for (model, field, site), insts in self.data.items():
+            if not insts & self.touched.get((model, field), set()):
+                result.append((model, field, site))
+        return result
+
+    def serialize(self) -> dict[str, Any]:
+        return {
+            "data": [
+                {
+                    "model": f"{m.__module__}.{m.__qualname__}",
+                    "field": f,
+                    "site": list(s),
+                    "instances": sorted(insts),
+                }
+                for (m, f, s), insts in self.data.items()
+            ],
+            "touched": [
+                {
+                    "model": f"{m.__module__}.{m.__qualname__}",
+                    "field": f,
+                    "instances": sorted(insts),
+                }
+                for (m, f), insts in self.touched.items()
+            ],
+        }
+
+    def merge(self, payload: dict[str, Any]) -> None:
+        for entry in payload.get("data", []):
+            model = _resolve_model_or_none(entry["model"])
+            if model is None:
+                continue
+            site = tuple(entry["site"])
+            self.data[(model, entry["field"], site)].update(entry["instances"])
+        for entry in payload.get("touched", []):
+            model = _resolve_model_or_none(entry["model"])
+            if model is None:
+                continue
+            self.touched[(model, entry["field"])].update(entry["instances"])
+
+
 _corpus_tracker: CorpusEagerTracker | None = None
 
 
@@ -114,6 +174,17 @@ def get_tracker() -> CorpusEagerTracker:
     if _corpus_tracker is None:
         _corpus_tracker = CorpusEagerTracker()
     return _corpus_tracker
+
+
+_corpus_field_tracker: CorpusFieldTracker | None = None
+
+
+def get_field_tracker() -> CorpusFieldTracker:
+    """Return the active session field tracker, initializing it lazily."""
+    global _corpus_field_tracker  # noqa: PLW0603
+    if _corpus_field_tracker is None:
+        _corpus_field_tracker = CorpusFieldTracker()
+    return _corpus_field_tracker
 
 
 _DUMP_PREFIX = ".nplus1-eager-corpus."
