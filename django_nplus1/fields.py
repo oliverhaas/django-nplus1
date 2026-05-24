@@ -113,7 +113,7 @@ def _excluded(model: type) -> bool:
     if not patterns:
         return False
     try:
-        dotted = f"{model._meta.app_label}.{model.__name__}"
+        dotted = f"{model._meta.app_label}.{model.__name__}"  # type: ignore[attr-defined]
     except AttributeError:
         return False
     return any(fnmatch.fnmatch(dotted, pat) for pat in patterns)

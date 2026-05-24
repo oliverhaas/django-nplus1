@@ -142,10 +142,14 @@ python-version = "3.14"
 respect-type-ignore-comments = false
 
 [[tool.ty.overrides]]
-include = ["django_nplus1/patch.py", "django_nplus1/middleware.py"]
+include = [
+  "django_nplus1/fields.py",
+  "django_nplus1/middleware.py",
+  "django_nplus1/patch.py",
+]
 
 [tool.ty.overrides.rules]
-# patch.py monkeypatches Django internals; middleware.py accesses _meta on type
+# patch.py and fields.py monkeypatch Django internals; middleware.py and fields.py access _meta on type
 unresolved-attribute = "ignore"
 invalid-assignment = "ignore"
 
