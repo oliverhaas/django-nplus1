@@ -67,3 +67,74 @@ def test_merge_skips_unresolvable_model():
     )
     assert list(a.data.keys()) == [(int, "bio", site)]
     assert list(a.touched.keys()) == [(int, "bio")]
+
+
+import pytest
+
+from django_nplus1 import signals
+from django_nplus1.signals import setup_context, teardown_context
+
+
+@pytest.fixture
+def deferred_patch():
+    from django_nplus1 import fields
+
+    fields._patch_deferred_attribute()
+    yield fields
+    fields._unpatch_deferred_attribute()
+
+
+@pytest.fixture
+def field_events():
+    token = setup_context()
+    events = []
+
+    def receiver(args=None, kwargs=None, context=None, ret=None, parser=None):
+        events.append(("touch", args, kwargs))
+
+    signals.connect(signals.FIELD_TOUCH, receiver)
+    yield events
+    signals.disconnect(signals.FIELD_TOUCH, receiver)
+    teardown_context(token)
+
+
+@pytest.mark.django_db
+def test_set_routes_field_into_side_cache(deferred_patch, db):
+    from testapp.models import User
+
+    u = User(name="Alice")
+    cache = u.__dict__.get("_nplus1_field_cache", {})
+    assert cache.get("name") == "Alice"
+    assert "name" not in {k for k in u.__dict__ if k != "_nplus1_field_cache"}
+
+
+@pytest.mark.django_db
+def test_get_returns_cached_value(deferred_patch, db):
+    from testapp.models import User
+
+    u = User(name="Alice")
+    assert u.name == "Alice"
+
+
+@pytest.mark.django_db
+def test_get_fires_field_touch_signal(deferred_patch, field_events, db):
+    from testapp.models import User
+
+    u = User(name="Alice")
+    _ = u.name
+    touch_events = [e for e in field_events if e[0] == "touch"]
+    assert touch_events, "expected at least one FIELD_TOUCH"
+    # parsers run with args=(model, field, instance_keys) shape
+    _, args, _ = touch_events[-1]
+    assert args[0] is User
+    assert args[1] == "name"
+
+
+def test_patch_is_idempotent(deferred_patch):
+    from django.db.models.query_utils import DeferredAttribute
+
+    from django_nplus1 import fields
+
+    has_set_before = hasattr(DeferredAttribute, "__set__")
+    fields._patch_deferred_attribute()  # second call
+    assert hasattr(DeferredAttribute, "__set__") == has_set_before
