@@ -448,7 +448,7 @@ class DuplicateQueryListener(Listener):
         super().__init__(parent)
         self.enabled = False
         self.counts: defaultdict[tuple[str, str, int, str], int] = defaultdict(int)
-        self._connection: Any = None
+        self._wrapper_cm: Any = None
 
     def setup(self) -> None:
         from django.conf import settings
@@ -459,16 +459,14 @@ class DuplicateQueryListener(Listener):
             return
         self.counts = defaultdict(int)
         self.threshold = getattr(settings, "NPLUS1_DUPLICATE_QUERY_THRESHOLD", 2)
-        self._connection = connection
-        self._connection.execute_wrappers.append(self._wrapper)
+        self._wrapper_cm = connection.execute_wrapper(self._wrapper)
+        self._wrapper_cm.__enter__()
 
     def teardown(self) -> None:
-        if not self.enabled:
+        if not self.enabled or self._wrapper_cm is None:
             return
-        try:
-            self._connection.execute_wrappers.remove(self._wrapper)
-        except ValueError:
-            pass
+        self._wrapper_cm.__exit__(None, None, None)
+        self._wrapper_cm = None
 
     def _wrapper(self, execute: Any, sql: str, params: Any, many: bool, context: Any) -> Any:
         result = execute(sql, params, many, context)
