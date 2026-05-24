@@ -292,11 +292,11 @@ _corpus_enabled: bool = False
 
 
 class CorpusContext(DetectionContext):
-    """DetectionContext variant that installs only CorpusEagerListener.
+    """DetectionContext variant that installs CorpusEagerListener and CorpusFieldListener.
 
     Use when you want a block of test or script code to contribute
-    EAGER_LOAD/TOUCH events to the session tracker without enabling
-    lazy/get/duplicate detection.
+    EAGER_LOAD / TOUCH / FIELD_LOAD / FIELD_TOUCH events to the session
+    trackers without enabling lazy/get/duplicate detection.
     """
 
     def __enter__(self) -> CorpusContext:

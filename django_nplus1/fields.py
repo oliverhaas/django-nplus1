@@ -156,10 +156,10 @@ def emit_field_loads(
     model = type(instances[0])
     if _excluded(model):
         return
+    # All instances in a plain QuerySet result cache share the same model
+    # and deferred-field set, so sampling the first row is sufficient.
     loaded = _get_loaded_attnames(instances[0])
-    from django_nplus1.patch import to_key
-
-    keys = [to_key(i) for i in instances]
+    keys = [_safe_key(i) for i in instances]
     for attname in loaded:
         signals.send(
             signals.FIELD_LOAD,

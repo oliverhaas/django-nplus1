@@ -425,3 +425,20 @@ def test_format_field_finds_empty_returns_empty_string():
     from django_nplus1 import corpus
 
     assert corpus.format_field_finds([]) == ""
+
+
+@pytest.mark.django_db
+def test_emit_field_loads_does_not_touch_pk(db):
+    """_safe_key must not fire a FIELD_TOUCH for the pk before user code runs."""
+    from testapp.models import User
+
+    from django_nplus1 import corpus, fields
+
+    fields._patch_deferred_attribute()
+    User.objects.create(name="pk-touch-check")
+    try:
+        with corpus.CorpusContext():
+            list(User.objects.all())  # load without reading pk in user code
+            assert (User, "id") not in corpus.get_field_tracker().touched
+    finally:
+        fields._unpatch_deferred_attribute()
