@@ -368,3 +368,27 @@ def report() -> list[tuple[type, str, CallSite]]:
             continue
         result.append((model, field, site))
     return result
+
+
+def field_report() -> list[tuple[type, str, CallSite]]:
+    tracker = get_field_tracker()
+    rules = _whitelist_rules()
+    result = []
+    for model, field, site in tracker.unused():
+        if _is_inline_corpus_ignored(site):
+            continue
+        if any(rule.compare("unused_field_load", model, field) for rule in rules):
+            continue
+        result.append((model, field, site))
+    return result
+
+
+def format_field_finds(finds: list[tuple[type, str, CallSite]]) -> str:
+    if not finds:
+        return ""
+    lines = [f"django-nplus1: corpus-wide unused_field_load ({len(finds)} finds)"]
+    for model, field, site in finds:
+        filename, lineno, funcname = site
+        label = f"{model.__name__}.{field}"
+        lines.append(f"  {label:30} at {filename}:{lineno} in {funcname}")
+    return "\n".join(lines)

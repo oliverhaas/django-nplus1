@@ -1,3 +1,5 @@
+import inspect
+
 import pytest
 from testapp.models import Occupation, User
 
@@ -36,3 +38,20 @@ class TestInlineIgnore:
         with pytest.raises(NPlus1Error, match="Occupation.user"), Profiler():
             occupations = list(Occupation.objects.all())
             occupations[0].user  # regular comment, not a suppression
+
+
+def test_corpus_ignore_suppresses_field_find():
+    from django_nplus1 import corpus
+
+    corpus._corpus_field_tracker = corpus.CorpusFieldTracker()
+    # Use this exact file's path and the line number of the marker below.
+    frame = inspect.currentframe()
+    assert frame is not None
+    fn = frame.f_code.co_filename
+    # The marker line is the next statement after this comment.
+    site = (fn, frame.f_lineno + 1, "test_corpus_ignore_suppresses_field_find")
+    corpus._corpus_field_tracker.record_load(int, "bio", ["X:1"], site)  # nplus1: corpus-ignore
+    try:
+        assert corpus.field_report() == []
+    finally:
+        corpus._corpus_field_tracker = None

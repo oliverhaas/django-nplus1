@@ -381,3 +381,47 @@ def test_field_load_message_shape():
     assert msg.label == "unused_field_load"
     assert "`int.bio`" in msg.message
     assert ".only()" in msg.message or ".defer()" in msg.message
+
+
+@pytest.mark.django_db
+def test_field_report_filters_whitelist(settings):
+    from testapp.models import User
+
+    from django_nplus1 import corpus
+
+    corpus._corpus_field_tracker = corpus.CorpusFieldTracker()
+    site = ("/app/views.py", 42, "view_fn")
+    corpus._corpus_field_tracker.record_load(User, "bio", ["X:1"], site)
+    settings.NPLUS1_WHITELIST = [{"label": "unused_field_load", "model": "testapp.User", "field": "bio"}]
+    try:
+        assert corpus.field_report() == []
+    finally:
+        corpus._corpus_field_tracker = None
+
+
+def test_field_report_passes_through_unwhitelisted():
+    from django_nplus1 import corpus
+
+    corpus._corpus_field_tracker = corpus.CorpusFieldTracker()
+    site = ("/app/views.py", 42, "view_fn")
+    corpus._corpus_field_tracker.record_load(int, "bio", ["X:1"], site)
+    try:
+        assert corpus.field_report() == [(int, "bio", site)]
+    finally:
+        corpus._corpus_field_tracker = None
+
+
+def test_format_field_finds_renders_header():
+    from django_nplus1 import corpus
+
+    site = ("/app/views.py", 42, "view_fn")
+    text = corpus.format_field_finds([(int, "bio", site)])
+    assert "unused_field_load" in text
+    assert "int.bio" in text
+    assert "/app/views.py:42" in text
+
+
+def test_format_field_finds_empty_returns_empty_string():
+    from django_nplus1 import corpus
+
+    assert corpus.format_field_finds([]) == ""
