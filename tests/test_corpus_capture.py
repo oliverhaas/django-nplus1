@@ -9,14 +9,24 @@ from django_nplus1.signals import setup_context, teardown_context
 @pytest.fixture(autouse=True)
 def _enable_corpus_mode():
     from django_nplus1 import corpus, detect
+    from django_nplus1 import fields as _fields
 
     original_listener = detect.LISTENERS["eager_load"]
+    had_field_listener = "field_load" in detect.LISTENERS
+    original_field_listener = detect.LISTENERS.get("field_load")
     original_tracker = corpus._corpus_tracker
+    original_field_tracker = corpus._corpus_field_tracker
     corpus.activate()
     yield
     detect.LISTENERS["eager_load"] = original_listener
+    if had_field_listener:
+        detect.LISTENERS["field_load"] = original_field_listener
+    else:
+        detect.LISTENERS.pop("field_load", None)
     corpus._corpus_tracker = original_tracker
+    corpus._corpus_field_tracker = original_field_tracker
     corpus._corpus_enabled = False
+    _fields._unpatch_deferred_attribute()
 
 
 def test_prefetch_stashes_call_site():
@@ -142,3 +152,21 @@ def test_eager_load_signal_includes_site_for_select_related(objects):
     site = sites[0]
     assert site[0].endswith("test_corpus_capture.py")
     assert site[2] == "test_eager_load_signal_includes_site_for_select_related"
+
+
+@pytest.mark.django_db
+def test_field_detection_flags_unread_field(db):
+    """End-to-end: iterating users and reading only pk leaves 'name' in unused()."""
+    from django_nplus1 import corpus
+
+    # Create the row BEFORE activating the corpus context so the INSERT
+    # does not pollute the field tracker.
+    User.objects.create(name="alice")
+
+    with corpus.CorpusContext():
+        users = list(User.objects.all())
+        for u in users:
+            _ = u.pk  # touch pk only; leave name untouched
+
+    unused_pairs = [(model, field) for model, field, _site in corpus.get_field_tracker().unused()]
+    assert (User, "name") in unused_pairs
