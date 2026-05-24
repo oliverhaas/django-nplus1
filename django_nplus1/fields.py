@@ -112,10 +112,7 @@ def _excluded(model: type) -> bool:
     patterns = getattr(settings, "NPLUS1_FIELD_EXCLUDE", [])
     if not patterns:
         return False
-    try:
-        dotted = f"{model._meta.app_label}.{model.__name__}"  # type: ignore[attr-defined]
-    except AttributeError:
-        return False
+    dotted = f"{model._meta.app_label}.{model.__name__}"  # type: ignore[attr-defined]
     return any(fnmatch.fnmatch(dotted, pat) for pat in patterns)
 
 
