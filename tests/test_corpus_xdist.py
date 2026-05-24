@@ -149,3 +149,57 @@ def test_xdist_uninstrumented_tests_produce_no_finds(pytester, monkeypatch):
     result = pytester.runpytest_subprocess("-n", "2", "--nplus1-eager-corpus")
     assert result.ret == 0, f"expected exit 0, got {result.ret}\nstdout:\n{result.stdout.str()}"
     assert "corpus-wide unused_eager_load" not in result.stdout.str()
+
+
+def test_dump_worker_and_merge_round_trip_field_tracker(tmp_path, monkeypatch):
+    import json
+
+    from django_nplus1 import corpus
+
+    monkeypatch.chdir(tmp_path)
+    site = ("/app/views.py", 1, "fn")
+
+    eager = corpus.CorpusEagerTracker()
+    eager.record_load(int, "hobbies", ["User:1"], site)
+    field = corpus.CorpusFieldTracker()
+    field.record_load(int, "bio", ["User:1"], site)
+    corpus._corpus_tracker = eager
+    corpus._corpus_field_tracker = field
+    corpus.dump_worker("gw0")
+
+    dump_path = tmp_path / ".nplus1-eager-corpus.gw0.json"
+    payload = json.loads(dump_path.read_text())
+    assert "eager" in payload
+    assert "field" in payload
+    assert payload["field"]["data"][0]["field"] == "bio"
+
+    eager2 = corpus.CorpusEagerTracker()
+    field2 = corpus.CorpusFieldTracker()
+    corpus._corpus_tracker = eager2
+    corpus._corpus_field_tracker = field2
+    corpus.merge_worker_dumps()
+    assert eager2.unused() == [(int, "hobbies", site)]
+    assert field2.unused() == [(int, "bio", site)]
+    assert not dump_path.exists()
+
+
+def test_merge_tolerates_legacy_eager_only_payload(tmp_path, monkeypatch):
+    import json
+
+    from django_nplus1 import corpus
+
+    monkeypatch.chdir(tmp_path)
+    site = ("/app/views.py", 1, "fn")
+    legacy = {
+        "data": [{"model": "builtins.int", "field": "hobbies", "site": list(site), "instances": ["U:1"]}],
+        "touched": [],
+    }
+    (tmp_path / ".nplus1-eager-corpus.gw0.json").write_text(json.dumps(legacy))
+
+    eager = corpus.CorpusEagerTracker()
+    field = corpus.CorpusFieldTracker()
+    corpus._corpus_tracker = eager
+    corpus._corpus_field_tracker = field
+    corpus.merge_worker_dumps()
+    assert eager.unused() == [(int, "hobbies", site)]
+    assert field.unused() == []

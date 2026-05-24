@@ -192,18 +192,28 @@ _DUMP_PREFIX = ".nplus1-eager-corpus."
 
 def dump_worker(workerid: str) -> None:
     path = Path.cwd() / f"{_DUMP_PREFIX}{workerid}.json"
-    path.write_text(json.dumps(get_tracker().serialize()), encoding="utf-8")
+    payload = {
+        "eager": get_tracker().serialize(),
+        "field": get_field_tracker().serialize(),
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
 
 
 def merge_worker_dumps() -> None:
     cwd = Path.cwd()
-    tracker = get_tracker()
+    eager_tracker = get_tracker()
+    field_tracker = get_field_tracker()
     for path in sorted(cwd.glob(f"{_DUMP_PREFIX}*.json")):
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             continue
-        tracker.merge(payload)
+        if "eager" in payload or "field" in payload:
+            eager_tracker.merge(payload.get("eager", {}))
+            field_tracker.merge(payload.get("field", {}))
+        else:
+            # Legacy single-tracker payload from a pre-field-detection worker.
+            eager_tracker.merge(payload)
         path.unlink(missing_ok=True)
 
 
