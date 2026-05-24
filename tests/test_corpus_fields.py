@@ -204,3 +204,59 @@ def test_field_listener_records_unused_when_never_touched(db):
         corpus._corpus_field_tracker = None
 
     assert tracker.unused() == [(User, "bio", site)]
+
+
+@pytest.fixture
+def field_load_events():
+    token = setup_context()
+    events = []
+
+    def receiver(args=None, kwargs=None, context=None, ret=None, parser=None):
+        events.append(parser(args, kwargs, context))
+
+    signals.connect(signals.FIELD_LOAD, receiver)
+    yield events
+    signals.disconnect(signals.FIELD_LOAD, receiver)
+    teardown_context(token)
+
+
+@pytest.mark.django_db
+def test_field_load_emits_when_corpus_enabled(deferred_patch, field_load_events, db):
+    from testapp.models import User
+
+    from django_nplus1 import corpus
+
+    User.objects.create(name="A")
+    corpus._corpus_enabled = True
+    try:
+        list(User.objects.all())
+    finally:
+        corpus._corpus_enabled = False
+
+    assert any(model is User and field == "name" for (model, field, _instances, _site) in field_load_events)
+
+
+@pytest.mark.django_db
+def test_field_load_includes_call_site(deferred_patch, field_load_events, db):
+    from testapp.models import User
+
+    from django_nplus1 import corpus
+
+    User.objects.create(name="A")
+    corpus._corpus_enabled = True
+    try:
+        list(User.objects.all())  # ← attribution should point at this line
+    finally:
+        corpus._corpus_enabled = False
+
+    sites = [site for (*_, site) in field_load_events if site is not None]
+    assert any(s[0].endswith("test_corpus_fields.py") for s in sites)
+
+
+@pytest.mark.django_db
+def test_field_load_silent_when_corpus_disabled(deferred_patch, field_load_events, db):
+    from testapp.models import User
+
+    User.objects.create(name="A")
+    list(User.objects.all())  # corpus disabled, no events
+    assert field_load_events == []

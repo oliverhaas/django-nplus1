@@ -13,6 +13,7 @@ The fall-through path (cache miss) preserves Django's original
 fields still trigger LAZY_LOAD detection unchanged.
 """
 
+import fnmatch
 from typing import Any
 
 from django.db.models.query_utils import DeferredAttribute
@@ -97,3 +98,74 @@ def _unpatch_deferred_attribute() -> None:
     del DeferredAttribute.__set__  # type: ignore[attr-defined]
     _original_get = None
     _patched = False
+
+
+def _excluded(model: type) -> bool:
+    """Return True if NPLUS1_FIELD_EXCLUDE suppresses the given model.
+
+    Patterns are fnmatch'd against ``"app_label.ModelName"``.
+    """
+    try:
+        from django.conf import settings
+    except ImportError, AttributeError:
+        return False
+    patterns = getattr(settings, "NPLUS1_FIELD_EXCLUDE", [])
+    if not patterns:
+        return False
+    try:
+        dotted = f"{model._meta.app_label}.{model.__name__}"
+    except AttributeError:
+        return False
+    return any(fnmatch.fnmatch(dotted, pat) for pat in patterns)
+
+
+def _parse_field_load(
+    args: Any,
+    kwargs: Any,
+    context: Any,
+) -> tuple[type, str, list[str], tuple[str, int, str] | None]:
+    model, field, keys, site = args
+    return model, field, keys, site
+
+
+def _get_loaded_attnames(instance: Any) -> set[str]:
+    """Return the set of attnames that are populated on *instance*.
+
+    Django's ``get_deferred_fields()`` only inspects ``instance.__dict__``.
+    When the deferred-attribute patch is active, field values live in the
+    side cache (``_nplus1_field_cache``) instead, so ``get_deferred_fields``
+    incorrectly reports every field as deferred.  We check both locations.
+    """
+    populated = set(instance.__dict__)
+    side_cache = instance.__dict__.get(_FIELD_CACHE_KEY)
+    if side_cache:
+        populated |= set(side_cache)
+    return {f.attname for f in type(instance)._meta.concrete_fields if f.attname in populated}
+
+
+def emit_field_loads(
+    instances: list[Any],
+    site: tuple[str, int, str] | None,
+) -> None:
+    """Emit one FIELD_LOAD per non-deferred concrete field on each instance.
+
+    Caller guarantees the corpus mode flag is on and ``instances`` is non-empty.
+    """
+    if not instances:
+        return
+    model = type(instances[0])
+    if _excluded(model):
+        return
+    loaded = _get_loaded_attnames(instances[0])
+    from django_nplus1.patch import to_key
+
+    keys = [to_key(i) for i in instances]
+    for attname in loaded:
+        signals.send(
+            signals.FIELD_LOAD,
+            args=(model, attname, keys, site),
+            kwargs={},
+            ret=None,
+            context={},
+            parser=_parse_field_load,
+        )

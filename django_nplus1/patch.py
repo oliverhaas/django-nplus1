@@ -435,6 +435,14 @@ def _fetch_all(self: Any) -> None:
         ret=self._result_cache,
         parser=parse_load,
     )
+    if corpus.is_enabled() and self._result_cache:
+        from django.db.models import Model
+
+        from django_nplus1.fields import emit_field_loads
+
+        model_instances = [r for r in self._result_cache if isinstance(r, Model)]
+        if model_instances:
+            emit_field_loads(model_instances, get_caller())
 
 
 query.QuerySet._fetch_all = _fetch_all  # type: ignore[method-assign]
