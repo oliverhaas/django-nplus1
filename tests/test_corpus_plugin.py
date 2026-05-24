@@ -32,14 +32,23 @@ def test_corpus_disabled_when_neither_set(settings):
 
 @pytest.fixture
 def restore_listeners():
-    from django_nplus1 import detect
+    from django_nplus1 import detect, fields
 
-    original_listener = detect.LISTENERS["eager_load"]
+    original_eager = detect.LISTENERS["eager_load"]
+    had_field = "field_load" in detect.LISTENERS
+    original_field = detect.LISTENERS.get("field_load")
     original_tracker = corpus._corpus_tracker
+    original_field_tracker = corpus._corpus_field_tracker
     yield
-    detect.LISTENERS["eager_load"] = original_listener
+    detect.LISTENERS["eager_load"] = original_eager
+    if had_field:
+        detect.LISTENERS["field_load"] = original_field
+    else:
+        detect.LISTENERS.pop("field_load", None)
     corpus._corpus_tracker = original_tracker
+    corpus._corpus_field_tracker = original_field_tracker
     corpus._corpus_enabled = False
+    fields._unpatch_deferred_attribute()
 
 
 def test_pytest_configure_activates_corpus(restore_listeners):

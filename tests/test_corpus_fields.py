@@ -294,3 +294,81 @@ def test_field_exclude_wildcard_skips_all(deferred_patch, field_load_events, db,
         corpus._corpus_enabled = False
 
     assert field_load_events == []
+
+
+def test_activate_registers_field_listener():
+    from django.db.models.query_utils import DeferredAttribute
+
+    from django_nplus1 import corpus, detect
+
+    original_eager = detect.LISTENERS["eager_load"]
+    had_field = "field_load" in detect.LISTENERS
+    original_field = detect.LISTENERS.get("field_load")
+    try:
+        corpus.activate()
+        assert detect.LISTENERS["field_load"] is corpus.CorpusFieldListener
+        assert hasattr(DeferredAttribute, "__set__")
+    finally:
+        detect.LISTENERS["eager_load"] = original_eager
+        if had_field:
+            detect.LISTENERS["field_load"] = original_field
+        else:
+            detect.LISTENERS.pop("field_load", None)
+        corpus._corpus_enabled = False
+        corpus._corpus_tracker = None
+        corpus._corpus_field_tracker = None
+        from django_nplus1 import fields as _fields
+
+        _fields._unpatch_deferred_attribute()
+
+
+def test_activate_resets_field_tracker_on_first_call():
+    from django_nplus1 import corpus, detect
+
+    original_eager = detect.LISTENERS["eager_load"]
+    original_field = detect.LISTENERS.get("field_load")
+    try:
+        corpus._corpus_field_tracker = corpus.CorpusFieldTracker()
+        site = ("/x.py", 1, "f")
+        corpus._corpus_field_tracker.record_load(int, "bio", ["X:1"], site)
+        corpus.activate()
+        assert corpus.get_field_tracker().unused() == []
+    finally:
+        detect.LISTENERS["eager_load"] = original_eager
+        if original_field is None:
+            detect.LISTENERS.pop("field_load", None)
+        else:
+            detect.LISTENERS["field_load"] = original_field
+        corpus._corpus_enabled = False
+        corpus._corpus_tracker = None
+        corpus._corpus_field_tracker = None
+        from django_nplus1 import fields as _fields
+
+        _fields._unpatch_deferred_attribute()
+
+
+def test_activate_is_idempotent_for_field_tracker():
+    from django_nplus1 import corpus, detect
+
+    original_eager = detect.LISTENERS["eager_load"]
+    original_field = detect.LISTENERS.get("field_load")
+    try:
+        corpus.activate()
+        site = ("/x.py", 1, "f")
+        corpus.get_field_tracker().record_load(int, "bio", ["X:1"], site)
+        tracker_before = corpus._corpus_field_tracker
+        corpus.activate()  # second call must not reset
+        assert corpus._corpus_field_tracker is tracker_before
+        assert corpus.get_field_tracker().unused() == [(int, "bio", site)]
+    finally:
+        detect.LISTENERS["eager_load"] = original_eager
+        if original_field is None:
+            detect.LISTENERS.pop("field_load", None)
+        else:
+            detect.LISTENERS["field_load"] = original_field
+        corpus._corpus_enabled = False
+        corpus._corpus_tracker = None
+        corpus._corpus_field_tracker = None
+        from django_nplus1 import fields as _fields
+
+        _fields._unpatch_deferred_attribute()

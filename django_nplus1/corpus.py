@@ -302,17 +302,23 @@ class CorpusContext(DetectionContext):
 
 
 def activate() -> None:
-    """Enable corpus mode: swap LISTENERS["eager_load"] and reset tracker.
+    """Enable corpus mode: swap LISTENERS["eager_load"], register field listener,
+    patch DeferredAttribute, reset both trackers.
 
     Idempotent: a second call is a no-op so accumulated tracker data is
     preserved (for tests that call activate() per-fixture).
     """
-    global _corpus_enabled, _corpus_tracker  # noqa: PLW0603
+    global _corpus_enabled, _corpus_tracker, _corpus_field_tracker  # noqa: PLW0603
     if _corpus_enabled:
         return
     _corpus_enabled = True
     _corpus_tracker = CorpusEagerTracker()
+    _corpus_field_tracker = CorpusFieldTracker()
     detect.LISTENERS["eager_load"] = CorpusEagerListener
+    detect.LISTENERS["field_load"] = CorpusFieldListener
+    from django_nplus1 import fields
+
+    fields._patch_deferred_attribute()
 
 
 def is_enabled() -> bool:
