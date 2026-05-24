@@ -168,6 +168,11 @@ class EagerLoadMessage(Message):
     formatter = "Potential unnecessary eager load detected on `{model}.{field}`"
 
 
+class FieldLoadMessage(Message):
+    label = "unused_field_load"
+    formatter = "Potential unused field load on `{model}.{field}`. Consider `.only()` or `.defer()`."
+
+
 class GetLoopMessage(Message):
     label = "get_in_loop"
     formatter = "Potential n+1 query detected on `{model}.{field}`"

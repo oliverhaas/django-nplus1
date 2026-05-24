@@ -372,3 +372,12 @@ def test_activate_is_idempotent_for_field_tracker():
         from django_nplus1 import fields as _fields
 
         _fields._unpatch_deferred_attribute()
+
+
+def test_field_load_message_shape():
+    from django_nplus1.detect import FieldLoadMessage
+
+    msg = FieldLoadMessage(int, "bio")
+    assert msg.label == "unused_field_load"
+    assert "`int.bio`" in msg.message
+    assert ".only()" in msg.message or ".defer()" in msg.message
