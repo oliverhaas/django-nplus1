@@ -1,4 +1,8 @@
+import pytest
+
+from django_nplus1 import signals
 from django_nplus1.corpus import CorpusFieldTracker
+from django_nplus1.signals import setup_context, teardown_context
 
 
 def make_site(line=42):
@@ -69,19 +73,13 @@ def test_merge_skips_unresolvable_model():
     assert list(a.touched.keys()) == [(int, "bio")]
 
 
-import pytest
-
-from django_nplus1 import signals
-from django_nplus1.signals import setup_context, teardown_context
-
-
 @pytest.fixture
 def deferred_patch():
     from django_nplus1 import fields
 
-    fields._patch_deferred_attribute()
+    fields.patch_deferred_attribute()
     yield fields
-    fields._unpatch_deferred_attribute()
+    fields.unpatch_deferred_attribute()
 
 
 @pytest.fixture
@@ -136,7 +134,7 @@ def test_patch_is_idempotent(deferred_patch):
     from django_nplus1 import fields
 
     has_set_before = hasattr(DeferredAttribute, "__set__")
-    fields._patch_deferred_attribute()  # second call
+    fields.patch_deferred_attribute()  # second call
     assert hasattr(DeferredAttribute, "__set__") == has_set_before
 
 
@@ -319,7 +317,7 @@ def test_activate_registers_field_listener():
         corpus._corpus_field_tracker = None
         from django_nplus1 import fields as _fields
 
-        _fields._unpatch_deferred_attribute()
+        _fields.unpatch_deferred_attribute()
 
 
 def test_activate_resets_field_tracker_on_first_call():
@@ -344,7 +342,7 @@ def test_activate_resets_field_tracker_on_first_call():
         corpus._corpus_field_tracker = None
         from django_nplus1 import fields as _fields
 
-        _fields._unpatch_deferred_attribute()
+        _fields.unpatch_deferred_attribute()
 
 
 def test_activate_is_idempotent_for_field_tracker():
@@ -371,7 +369,7 @@ def test_activate_is_idempotent_for_field_tracker():
         corpus._corpus_field_tracker = None
         from django_nplus1 import fields as _fields
 
-        _fields._unpatch_deferred_attribute()
+        _fields.unpatch_deferred_attribute()
 
 
 def test_field_load_message_shape():
@@ -434,11 +432,11 @@ def test_emit_field_loads_does_not_touch_pk(db):
 
     from django_nplus1 import corpus, fields
 
-    fields._patch_deferred_attribute()
+    fields.patch_deferred_attribute()
     User.objects.create(name="pk-touch-check")
     try:
         with corpus.CorpusContext():
             list(User.objects.all())  # load without reading pk in user code
             assert (User, "id") not in corpus.get_field_tracker().touched
     finally:
-        fields._unpatch_deferred_attribute()
+        fields.unpatch_deferred_attribute()

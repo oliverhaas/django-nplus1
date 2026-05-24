@@ -48,7 +48,7 @@ def restore_listeners():
     corpus._corpus_tracker = original_tracker
     corpus._corpus_field_tracker = original_field_tracker
     corpus._corpus_enabled = False
-    fields._unpatch_deferred_attribute()
+    fields.unpatch_deferred_attribute()
 
 
 def test_pytest_configure_activates_corpus(restore_listeners):

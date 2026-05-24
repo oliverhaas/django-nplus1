@@ -334,7 +334,7 @@ def activate() -> None:
     detect.LISTENERS["field_load"] = CorpusFieldListener
     from django_nplus1 import fields
 
-    fields._patch_deferred_attribute()
+    fields.patch_deferred_attribute()
 
 
 def is_enabled() -> bool:

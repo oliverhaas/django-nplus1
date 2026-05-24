@@ -78,7 +78,7 @@ def _parse_field_touch(
     return model, field, keys
 
 
-def _patch_deferred_attribute() -> None:
+def patch_deferred_attribute() -> None:
     """Convert DeferredAttribute into a data descriptor. Idempotent."""
     global _original_get, _patched  # noqa: PLW0603
     if _patched:
@@ -89,7 +89,7 @@ def _patch_deferred_attribute() -> None:
     _patched = True
 
 
-def _unpatch_deferred_attribute() -> None:
+def unpatch_deferred_attribute() -> None:
     """Restore the original DeferredAttribute (test-only helper)."""
     global _original_get, _patched  # noqa: PLW0603
     if not _patched:

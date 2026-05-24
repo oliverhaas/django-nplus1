@@ -26,7 +26,7 @@ def _enable_corpus_mode():
     corpus._corpus_tracker = original_tracker
     corpus._corpus_field_tracker = original_field_tracker
     corpus._corpus_enabled = False
-    _fields._unpatch_deferred_attribute()
+    _fields.unpatch_deferred_attribute()
 
 
 def test_prefetch_stashes_call_site():
