@@ -93,6 +93,11 @@ def test_xdist_one_worker_touches_one_does_not(pytester, monkeypatch):
     """Asymmetric case: one worker touches the prefetched relation, the
     other doesn't. The shared prefetch declaration must NOT be flagged,
     because some test in the suite did touch it.
+
+    Note: both tests read ``u.name`` to silence the field-load detector
+    (the new ``unused_field_load`` find would otherwise fail the suite).
+    Relation-touch coverage is unchanged: only ``test_a`` calls
+    ``u.hobbies.all()``.
     """
     _setup_inner_env(monkeypatch)
     pytester.makepyfile(
