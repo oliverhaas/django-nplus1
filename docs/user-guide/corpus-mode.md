@@ -1,8 +1,10 @@
-# Corpus-wide unused_eager_load
+# Corpus mode
 
-`unused_eager_load` is request-scoped by default: a prefetch with no in-request touches gets flagged. In real codebases that fires on patterns that are correct at suite scope: shared prefetch tuples consumed by many paths, `{% if %}` branches where the empty path flags the prefetch, `select_related` to sparse FKs.
+Corpus mode accumulates load and touch events across the entire pytest session and reports two classes of finding once at session end: prefetches that were never read (`unused_eager_load`) and concrete fields that were never read (`unused_field_load`).
 
-Corpus mode accumulates EAGER_LOAD/TOUCH events across the entire pytest session and only reports prefetches that were never touched by any test in the suite.
+The per-request `unused_eager_load` detector flags prefetches with no in-request touches. In real codebases that fires on patterns that are correct at suite scope: shared prefetch tuples consumed by many paths, `{% if %}` branches where the empty path flags the prefetch, `select_related` to sparse FKs. Corpus mode aggregates across the whole session, so a prefetch survives if any test touched it.
+
+Field detection has no per-request equivalent. It is only available in corpus mode.
 
 ## Enable
 
@@ -23,9 +25,10 @@ Off by default; opt-in only.
 ## What changes
 
 - Per-request `unused_eager_load` detection is suppressed for the whole session.
-- Any `DetectionContext` opened during the run (by `NPlus1Middleware`, the Celery integration, an explicit `Profiler`, or a manual `with DetectionContext()`) contributes EAGER_LOAD and TOUCH events to a shared session tracker.
+- Any `DetectionContext` opened during the run (by `NPlus1Middleware`, the Celery integration, an explicit `Profiler`, or a manual `with DetectionContext()`) contributes EAGER_LOAD / TOUCH / FIELD_LOAD / FIELD_TOUCH events to a shared session tracker.
+- `DeferredAttribute` is patched into a data descriptor so every concrete-field read passes through the touch hook, regardless of whether the value was loaded by the SELECT.
 - ORM calls outside an instrumented scope (test setup, factories, direct queryset assertions) are ignored.
-- At session end, surviving `(model, field, declaration_call_site)` tuples are printed and pytest exits with code 1.
+- At session end, surviving `(model, field, call_site)` tuples are printed for both detectors and pytest exits with code 1 if any remain.
 
 ## What counts as instrumented
 
@@ -90,8 +93,13 @@ Workers dump their tracker state to `.nplus1-eager-corpus.<workerid>.json` in th
 
 ## Exit code
 
-Corpus mode reports at session end: pytest exits with code 1 if any untouched prefetches remain after whitelist filtering. The standard pytest exit code for test failures (also 1) is preserved.
+Corpus mode reports at session end: pytest exits with code 1 if any untouched prefetches or untouched field loads remain after whitelist filtering. The standard pytest exit code for test failures (also 1) is preserved.
 
 ## For plugin authors
 
 Custom listeners subscribed to the `EAGER_LOAD` signal must unpack a 5-element tuple as of 0.4.0: `(model, field, instances, key, call_site)`. The fifth element is the declaration call-site as a `(filename, lineno, funcname)` tuple, or `None` if it could not be resolved.
+
+Two new signals back the field detector:
+
+- `FIELD_LOAD` carries `(model, field, instance_keys, call_site)`. Fired once per non-deferred concrete field on each fetched row when corpus mode is active. `call_site` may be `None` if the queryset call site could not be resolved.
+- `FIELD_TOUCH` carries `(model, field, instance_keys)`. Fired on every read routed through the patched `DeferredAttribute.__get__`, which (during corpus mode) is every concrete-field read on a loaded instance.
