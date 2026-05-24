@@ -244,6 +244,40 @@ class CorpusEagerListener(Listener):
         get_tracker().record_touch(model, field, instances)
 
 
+class CorpusFieldListener(Listener):
+    def setup(self) -> None:
+        signals.connect(signals.FIELD_LOAD, self.handle_load)
+        signals.connect(signals.FIELD_TOUCH, self.handle_touch)
+
+    def teardown(self) -> None:
+        signals.disconnect(signals.FIELD_LOAD, self.handle_load)
+        signals.disconnect(signals.FIELD_TOUCH, self.handle_touch)
+
+    def handle_load(
+        self,
+        args: Any = None,
+        kwargs: Any = None,
+        context: Any = None,
+        ret: Any = None,
+        parser: Any = None,
+    ) -> None:
+        model, field, instances, site = parser(args, kwargs, context)
+        if site is None:
+            return
+        get_field_tracker().record_load(model, field, instances, site)
+
+    def handle_touch(
+        self,
+        args: Any = None,
+        kwargs: Any = None,
+        context: Any = None,
+        ret: Any = None,
+        parser: Any = None,
+    ) -> None:
+        model, field, instances = parser(args, kwargs, context)
+        get_field_tracker().record_touch(model, field, instances)
+
+
 _corpus_enabled: bool = False
 
 

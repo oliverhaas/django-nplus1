@@ -138,3 +138,69 @@ def test_patch_is_idempotent(deferred_patch):
     has_set_before = hasattr(DeferredAttribute, "__set__")
     fields._patch_deferred_attribute()  # second call
     assert hasattr(DeferredAttribute, "__set__") == has_set_before
+
+
+@pytest.mark.django_db
+def test_field_listener_records_load_and_touch(deferred_patch, db):
+    from testapp.models import User
+
+    from django_nplus1 import corpus
+
+    token = setup_context()
+    listener = corpus.CorpusFieldListener(parent=None)
+    listener.setup()
+    tracker = corpus.CorpusFieldTracker()
+    corpus._corpus_field_tracker = tracker
+    try:
+        site = ("/app/views.py", 42, "view")
+        signals.send(
+            signals.FIELD_LOAD,
+            args=(User, "name", ["User:1"], site),
+            kwargs={},
+            ret=None,
+            context={},
+            parser=lambda a, k, c: (a[0], a[1], a[2], a[3]),
+        )
+        signals.send(
+            signals.FIELD_TOUCH,
+            args=(User, "name", ["User:1"]),
+            kwargs={},
+            ret=None,
+            context={},
+            parser=lambda a, k, c: (a[0], a[1], a[2]),
+        )
+    finally:
+        listener.teardown()
+        teardown_context(token)
+        corpus._corpus_field_tracker = None
+
+    assert tracker.unused() == []
+
+
+@pytest.mark.django_db
+def test_field_listener_records_unused_when_never_touched(db):
+    from testapp.models import User
+
+    from django_nplus1 import corpus
+
+    token = setup_context()
+    listener = corpus.CorpusFieldListener(parent=None)
+    listener.setup()
+    tracker = corpus.CorpusFieldTracker()
+    corpus._corpus_field_tracker = tracker
+    try:
+        site = ("/app/views.py", 42, "view")
+        signals.send(
+            signals.FIELD_LOAD,
+            args=(User, "bio", ["User:1"], site),
+            kwargs={},
+            ret=None,
+            context={},
+            parser=lambda a, k, c: (a[0], a[1], a[2], a[3]),
+        )
+    finally:
+        listener.teardown()
+        teardown_context(token)
+        corpus._corpus_field_tracker = None
+
+    assert tracker.unused() == [(User, "bio", site)]
