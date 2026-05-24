@@ -291,9 +291,12 @@ class CorpusContext(DetectionContext):
 
     def __enter__(self) -> CorpusContext:
         self._token = setup_context()
-        listener = CorpusEagerListener(self)
-        listener.setup()
-        self._listeners["eager_load"] = listener
+        eager = CorpusEagerListener(self)
+        eager.setup()
+        self._listeners["eager_load"] = eager
+        field = CorpusFieldListener(self)
+        field.setup()
+        self._listeners["field_load"] = field
         return self
 
     def notify(self, message: Any) -> None:

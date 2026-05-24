@@ -146,10 +146,10 @@ def test_corpus_listener_records_touches(fresh_tracker, objects):
     assert fresh_tracker.unused() == []
 
 
-def test_corpus_context_installs_only_corpus_listener():
+def test_corpus_context_installs_corpus_listeners():
     with corpus.CorpusContext() as ctx:
         names = set(ctx._listeners.keys())
-    assert names == {"eager_load"}
+    assert names == {"eager_load", "field_load"}
 
 
 def test_activate_swaps_listener_registry():
