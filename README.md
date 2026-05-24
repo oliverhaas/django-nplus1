@@ -43,6 +43,8 @@ Per-request `unused_eager_load` detection can produce false positives on shared 
 uv run pytest --nplus1-eager-corpus
 ```
 
+The same flag also flags concrete fields that were loaded but never read across the suite, reported as `unused_field_load`. Suppress noisy models with `NPLUS1_FIELD_EXCLUDE = ["auth.User", "contenttypes.*"]`.
+
 See [docs](https://oliverhaas.github.io/django-nplus1/user-guide/corpus-mode/) for suppression markers and pytest-xdist support.
 
 ## Celery Integration

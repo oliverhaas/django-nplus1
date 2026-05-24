@@ -123,6 +123,17 @@ Enable per-task N+1 detection inside Celery workers. Default: `False`. Requires 
 NPLUS1_CELERY = True
 ```
 
+### `NPLUS1_FIELD_EXCLUDE`
+
+List of `app_label.ModelName` patterns (fnmatch wildcards) excluded from corpus-mode field tracking. Default: `[]`.
+
+```python
+NPLUS1_FIELD_EXCLUDE = [
+    "auth.User",
+    "contenttypes.*",
+]
+```
+
 ### `NPLUS1_EAGER_CORPUS`
 
 Enable corpus-wide `unused_eager_load` detection during pytest runs. Default: `False`. Equivalent to passing `--nplus1-eager-corpus` on the command line. See [Corpus Mode](corpus-mode.md).

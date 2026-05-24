@@ -57,6 +57,33 @@ def view(request):
 
 The corpus marker is distinct from the existing `# nplus1: ignore` marker. Use `corpus-ignore` for prefetches exercised only outside the test suite (management commands, error handlers).
 
+## Unused field loads
+
+A field is counted as "touched" when accessing it would have triggered a database fetch had the field been deferred. Concretely, the read must be routed through `DeferredAttribute.__get__`. Fields that are loaded by the SELECT but never accessed in this way across the full pytest session are reported as `unused_field_load`. The suggested fix is to add `.only()` or `.defer()` at the call site so the column is not fetched at all.
+
+Note on `model.save()`: every field on a re-saved instance is counted as touched, because deferring any field would force a refetch inside `save()`. Use `save(update_fields=[...])` or `.update()` to avoid touching unrelated fields.
+
+Exclude noisy models with `NPLUS1_FIELD_EXCLUDE`:
+
+```python
+NPLUS1_FIELD_EXCLUDE = [
+    "auth.User",        # exact match
+    "contenttypes.*",   # wildcard: all models in the app
+]
+```
+
+Patterns are fnmatch'd against `app_label.ModelName`. Setting `["*"]` short-circuits field tracking entirely.
+
+Add `unused_field_load` to `NPLUS1_WHITELIST` to suppress individual fields:
+
+```python
+NPLUS1_WHITELIST = [
+    {"label": "unused_field_load", "model": "myapp.Article", "field": "body"},
+]
+```
+
+A `# nplus1: corpus-ignore` comment at the queryset call site suppresses both `unused_eager_load` and `unused_field_load` for that queryset.
+
 ## pytest-xdist
 
 Workers dump their tracker state to `.nplus1-eager-corpus.<workerid>.json` in the pytest working directory. The controller merges all dumps in `pytest_sessionfinish` and reports once. Run pytest from the project root for consistent results across xdist invocations.

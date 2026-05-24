@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Corpus mode now also flags concrete fields loaded by the SELECT but never read across the suite. Reports as `unused_field_load`; suggested fix is `.only()` / `.defer()`. Suppress noisy models with `NPLUS1_FIELD_EXCLUDE`.
+
 ## 0.3.5
 
 - Detect deferred-field N+1 even when the row was also fetched as a singleton in the same scope. Previously, an incidental `.get()` or `refresh_from_db()` would silently suppress later `.only()`/`.defer()` detection on the same instances.
