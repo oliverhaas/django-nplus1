@@ -260,3 +260,37 @@ def test_field_load_silent_when_corpus_disabled(deferred_patch, field_load_event
     User.objects.create(name="A")
     list(User.objects.all())  # corpus disabled, no events
     assert field_load_events == []
+
+
+@pytest.mark.django_db
+def test_field_exclude_skips_emission(deferred_patch, field_load_events, db, settings):
+    from testapp.models import User
+
+    from django_nplus1 import corpus
+
+    settings.NPLUS1_FIELD_EXCLUDE = ["testapp.User"]
+    User.objects.create(name="A")
+    corpus._corpus_enabled = True
+    try:
+        list(User.objects.all())
+    finally:
+        corpus._corpus_enabled = False
+
+    assert all(model is not User for (model, *_) in field_load_events)
+
+
+@pytest.mark.django_db
+def test_field_exclude_wildcard_skips_all(deferred_patch, field_load_events, db, settings):
+    from testapp.models import User
+
+    from django_nplus1 import corpus
+
+    settings.NPLUS1_FIELD_EXCLUDE = ["testapp.*"]
+    User.objects.create(name="A")
+    corpus._corpus_enabled = True
+    try:
+        list(User.objects.all())
+    finally:
+        corpus._corpus_enabled = False
+
+    assert field_load_events == []
