@@ -52,15 +52,22 @@ class DetectionContext:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
+        # Tear down every listener even if one raises; a skipped one keeps checking
+        # queries after the scope. The body's exception outranks teardown detections.
+        error: Exception | None = None
         try:
-            for name in list(LISTENERS.keys()):
-                listener = self._listeners.pop(name, None)
-                if listener:
+            for listener in self._listeners.values():
+                try:
                     listener.teardown()
+                except Exception as exc:  # noqa: BLE001
+                    error = error or exc
         finally:
+            self._listeners.clear()
             if self._token is not None:
                 teardown_context(self._token)
                 self._token = None
+        if error is not None and exc_type is None:
+            raise error
 
     def notify(self, message: Message) -> None:
         if message.match(self._whitelist) or is_allowed(message) or is_inline_ignored(message):

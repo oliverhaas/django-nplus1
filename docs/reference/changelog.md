@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Corpus mode now also flags concrete fields loaded by the SELECT but never read across the suite. Reports as `unused_field_load`; suggested fix is `.only()` / `.defer()`. Suppress noisy models with `NPLUS1_FIELD_EXCLUDE`.
+- A detection raised when a `Profiler` or `DetectionContext` exits no longer replaces an exception from its body, and no longer skips tearing down the remaining listeners. Previously an unused eager load at exit left duplicate query detection attached to the connection.
 
 ## 0.3.5
 

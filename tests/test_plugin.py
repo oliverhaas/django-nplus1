@@ -199,3 +199,19 @@ class TestNplus1Marker:
     def test_marker_clean(self, objects):
         occupation = Occupation.objects.first()
         occupation.user
+
+
+@pytest.mark.django_db
+def test_profiler_keeps_body_exception_over_unused_eager_load(objects):
+    with pytest.raises(RuntimeError, match="body failed"), Profiler():
+        list(User.objects.select_related("occupation"))
+        raise RuntimeError("body failed")
+
+
+@pytest.mark.django_db
+def test_unused_eager_load_error_still_removes_duplicate_detection(objects, settings):
+    settings.NPLUS1_DETECT_DUPLICATE_QUERIES = True
+    with pytest.raises(NPlus1Error, match="unnecessary eager load"), Profiler():
+        list(User.objects.select_related("occupation"))
+    for _ in range(2):
+        list(User.objects.all())
