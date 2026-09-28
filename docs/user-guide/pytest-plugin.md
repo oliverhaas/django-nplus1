@@ -37,6 +37,10 @@ def test_with_whitelist(client):
     client.get("/my-view/")
 ```
 
+## Whitelisting
+
+The marker and the `nplus1` fixture apply `NPLUS1_WHITELIST` from your settings, plus the marker's own `whitelist`. See [Whitelisting](whitelisting.md) for the pattern format.
+
 ## Disabling the Plugin
 
 If you need to disable the plugin for specific tests, you can use the `-p` flag:

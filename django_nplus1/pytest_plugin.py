@@ -34,7 +34,9 @@ def pytest_configure(config: Any) -> None:
 
 @pytest.fixture
 def nplus1() -> Generator[Profiler]:
-    with Profiler() as p:
+    from django.conf import settings
+
+    with Profiler(whitelist=getattr(settings, "NPLUS1_WHITELIST", [])) as p:
         yield p
 
 
@@ -43,7 +45,10 @@ def pytest_runtest_call(item: pytest.Item) -> Generator[None]:
     marker = item.get_closest_marker("nplus1")
     if marker is None:
         return (yield)
-    with Profiler(whitelist=marker.kwargs.get("whitelist")):
+    from django.conf import settings
+
+    whitelist = [*getattr(settings, "NPLUS1_WHITELIST", []), *(marker.kwargs.get("whitelist") or [])]
+    with Profiler(whitelist=whitelist):
         return (yield)
 
 

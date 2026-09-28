@@ -219,9 +219,27 @@ def test_unused_eager_load_error_still_removes_duplicate_detection(objects, sett
         list(User.objects.all())
 
 
+@pytest.fixture
+def occupation_whitelisted_in_settings(settings):
+    settings.NPLUS1_WHITELIST = [{"model": "testapp.Occupation"}]
+
+
 @pytest.mark.nplus1(whitelist=[{"model": "testapp.Occupation"}])
 @pytest.mark.django_db
 def test_marker_whitelist_matches_app_label_pattern(objects):
+    occupations = list(Occupation.objects.all())
+    occupations[0].user
+
+
+@pytest.mark.nplus1
+@pytest.mark.django_db
+def test_marker_applies_settings_whitelist(occupation_whitelisted_in_settings, objects):
+    occupations = list(Occupation.objects.all())
+    occupations[0].user
+
+
+@pytest.mark.django_db
+def test_nplus1_fixture_applies_settings_whitelist(occupation_whitelisted_in_settings, objects, nplus1):
     occupations = list(Occupation.objects.all())
     occupations[0].user
 

@@ -92,4 +92,4 @@ with Profiler(whitelist=[{"model": "User", "field": "profile"}]):
     ...
 ```
 
-`Profiler`, `nplus1_allow()`, and the pytest marker match a `model` pattern against both the class name (`"User"`) and `"app_label.ModelName"` (`"auth.User"`), so patterns copied from `NPLUS1_WHITELIST` work unchanged.
+`Profiler`, `nplus1_allow()`, and the pytest marker match a `model` pattern against both the class name (`"User"`) and `"app_label.ModelName"` (`"auth.User"`), so patterns copied from `NPLUS1_WHITELIST` work unchanged. The pytest marker and `nplus1` fixture also apply `NPLUS1_WHITELIST` itself.

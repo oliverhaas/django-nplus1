@@ -106,7 +106,7 @@ NPLUS1_DUPLICATE_QUERY_THRESHOLD = 3
 
 ### `NPLUS1_WHITELIST`
 
-List of patterns to ignore. See [Whitelisting](whitelisting.md) for details.
+List of patterns to ignore. Applied by the middleware, the Celery integration, corpus mode, and the pytest marker and `nplus1` fixture. See [Whitelisting](whitelisting.md) for details.
 
 ```python
 NPLUS1_WHITELIST = [

@@ -140,9 +140,9 @@ setup_celery_detection()
 
 ### Fixtures
 
-- `nplus1`: Yields a `Profiler` instance, active from the fixture's setup to its teardown. Test fails on N+1 detection.
+- `nplus1`: Yields a `Profiler` instance, active from the fixture's setup to its teardown. Test fails on N+1 detection. Applies `NPLUS1_WHITELIST`.
 
 ### Markers
 
-- `@pytest.mark.nplus1`: Auto-detect N+1 in the marked test's body. Fixtures run outside the profiler.
-- `@pytest.mark.nplus1(whitelist=[...])`: With whitelisting.
+- `@pytest.mark.nplus1`: Auto-detect N+1 in the marked test's body. Fixtures run outside the profiler. Applies `NPLUS1_WHITELIST`.
+- `@pytest.mark.nplus1(whitelist=[...])`: With extra whitelist entries.
