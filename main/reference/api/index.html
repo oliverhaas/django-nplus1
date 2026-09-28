@@ -1205,7 +1205,7 @@
 </span></code></pre></div>
 <p><strong>Parameters:</strong></p>
 <ul>
-<li><code>whitelist</code> (optional): List of dicts with <code>model</code>, <code>field</code>, and/or <code>label</code> keys.</li>
+<li><code>whitelist</code> (optional): List of dicts, each with any of <code>model</code>, <code>field</code>, and <code>label</code>. A <code>model</code> pattern matches the class name (<code>"User"</code>) or <code>"app_label.ModelName"</code> (<code>"auth.User"</code>).</li>
 </ul>
 <h2 id="nplus1_allow"><code>nplus1_allow</code><a class="headerlink" href="#nplus1_allow" title="Permanent link">&para;</a></h2>
 <p>Context manager to locally suppress N+1 detection for specific code blocks. Useful for incrementally adopting detection in existing projects.</p>
@@ -1234,7 +1234,7 @@
 </ul>
 <p>With no arguments, all detections are suppressed within the block. Supports nesting: inner <code>nplus1_allow</code> calls add to the outer rules; exiting restores the previous state.</p>
 <p>Works in both middleware and profiler contexts.</p>
-<p><strong>Note:</strong> <code>nplus1_allow()</code> and <code>Profiler</code> match model names without app label (e.g. <code>"User"</code>), while <code>NPLUS1_WHITELIST</code> in the middleware matches the full <code>app_label.ModelName</code> format (e.g. <code>"auth.User"</code>). Keep this in mind when copying patterns between the two.</p>
+<p><strong>Note:</strong> <code>nplus1_allow()</code> and <code>Profiler</code> match a <code>model</code> pattern against both the class name (<code>"User"</code>) and <code>"app_label.ModelName"</code> (<code>"auth.User"</code>), so patterns copied from <code>NPLUS1_WHITELIST</code> work unchanged.</p>
 <h2 id="signals">Signals<a class="headerlink" href="#signals" title="Permanent link">&para;</a></h2>
 <h3 id="nplus1_detected"><code>nplus1_detected</code><a class="headerlink" href="#nplus1_detected" title="Permanent link">&para;</a></h3>
 <p>Django signal emitted on every detection (after whitelist and <code>nplus1_allow</code> filtering). Useful for custom reporting (e.g., sending to Sentry).</p>
@@ -1256,6 +1256,7 @@
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">NPLUS1_DUPLICATE_QUERY_THRESHOLD</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># default</span>
 </span></code></pre></div>
 <p>When enabled, all SQL queries are fingerprinted (literals replaced with <code>?</code>) and repeated identical queries from the same call-site are flagged. Detected via the <code>Profiler</code>, <code>@pytest.mark.nplus1</code>, and <code>NPlus1Middleware</code>.</p>
+<p>The call site is the innermost frame of your code. Frames from the standard library, installed packages, and console-script launchers such as <code>bin/pytest</code> don't count. Queries with no frame of your code on the stack aren't counted, nor are queries Django runs while opening a connection (backend setup and <code>connection_created</code> receivers such as <code>django.contrib.postgres</code>' type lookups).</p>
 <h2 id="exceptions">Exceptions<a class="headerlink" href="#exceptions" title="Permanent link">&para;</a></h2>
 <h3 id="nplus1error"><code>NPlus1Error</code><a class="headerlink" href="#nplus1error" title="Permanent link">&para;</a></h3>
 <p>Raised when an N+1 query or unused eager load is detected (when <code>NPLUS1_RAISE=True</code> or using <code>Profiler</code>).</p>
@@ -1281,12 +1282,12 @@
 <h2 id="pytest-plugin">pytest Plugin<a class="headerlink" href="#pytest-plugin" title="Permanent link">&para;</a></h2>
 <h3 id="fixtures">Fixtures<a class="headerlink" href="#fixtures" title="Permanent link">&para;</a></h3>
 <ul>
-<li><code>nplus1</code>: Yields a <code>Profiler</code> instance. Test fails on N+1 detection.</li>
+<li><code>nplus1</code>: Yields a <code>Profiler</code> instance, active from the fixture's setup to its teardown. Test fails on N+1 detection. Applies <code>NPLUS1_WHITELIST</code>.</li>
 </ul>
 <h3 id="markers">Markers<a class="headerlink" href="#markers" title="Permanent link">&para;</a></h3>
 <ul>
-<li><code>@pytest.mark.nplus1</code>: Auto-detect N+1 in the marked test.</li>
-<li><code>@pytest.mark.nplus1(whitelist=[...])</code>: With whitelisting.</li>
+<li><code>@pytest.mark.nplus1</code>: Auto-detect N+1 in the marked test's body. Fixtures run outside the profiler. Applies <code>NPLUS1_WHITELIST</code>.</li>
+<li><code>@pytest.mark.nplus1(whitelist=[...])</code>: With extra whitelist entries.</li>
 </ul>
 
 

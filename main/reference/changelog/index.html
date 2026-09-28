@@ -918,6 +918,11 @@
 <h2 id="unreleased">Unreleased<a class="headerlink" href="#unreleased" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Corpus mode now also flags concrete fields loaded by the SELECT but never read across the suite. Reports as <code>unused_field_load</code>; suggested fix is <code>.only()</code> / <code>.defer()</code>. Suppress noisy models with <code>NPLUS1_FIELD_EXCLUDE</code>.</li>
+<li><code>@pytest.mark.nplus1</code> checks only the test body. Previously its profiler also covered fixtures, including pytest-django's test database setup, so <code>post_migrate</code> handlers and data fixtures could fail the test at setup, and the failure stayed cached for later database tests on the same worker. The autouse <code>auto_nplus1</code> fixture is replaced by a <code>pytest_runtest_call</code> hook.</li>
+<li>The pytest marker and <code>nplus1</code> fixture apply <code>NPLUS1_WHITELIST</code>.</li>
+<li><code>Profiler</code>, <code>nplus1_allow()</code>, and the marker's <code>whitelist</code> match <code>model</code> patterns against <code>"app_label.ModelName"</code> as well as the class name, so <code>{"model": "auth.User"}</code> works there too.</li>
+<li>Duplicate query detection skips queries Django runs while opening a connection, such as <code>django.contrib.postgres</code>' hstore and citext type lookups, and queries with no frame of your code on the stack. Call sites no longer fall back to the standard library or a launcher line such as <code>.venv/bin/pytest:10</code>, which merged unrelated library queries into one call site. Async ORM calls run in a worker thread without your frames, so <code>aget()</code> loops are no longer reported as <code>get_in_loop</code>.</li>
+<li>A detection raised when a <code>Profiler</code> or <code>DetectionContext</code> exits no longer replaces an exception from its body, and no longer skips tearing down the remaining listeners. Previously an unused eager load at exit left duplicate query detection attached to the connection.</li>
 </ul>
 <h2 id="035">0.3.5<a class="headerlink" href="#035" title="Permanent link">&para;</a></h2>
 <ul>
