@@ -1,3 +1,5 @@
+import os
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -66,3 +68,16 @@ def logger(monkeypatch):
     mock_logger = mock.Mock()
     monkeypatch.setattr(settings, "NPLUS1_LOGGER", mock_logger)
     return mock_logger
+
+
+@pytest.fixture
+def django_pytester(pytester, monkeypatch):
+    """pytester whose subprocess runs can import testapp and settings.base.
+
+    Modules using it declare ``pytest_plugins = ["pytester"]``.
+    """
+    tests_dir = str(Path(__file__).parent.resolve())
+    existing = os.environ.get("PYTHONPATH")
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join([tests_dir, existing]) if existing else tests_dir)
+    monkeypatch.setenv("DJANGO_SETTINGS_MODULE", "settings.base")
+    return pytester

@@ -280,24 +280,10 @@ def test_corpus_shared_helper_used_across_sessions(restore_listeners, objects):
 
 pytest_plugins = ["pytester"]
 
-import os
-from pathlib import Path
 
-_OUTER_TESTS_DIR = Path(__file__).parent.resolve()
-
-
-def _setup_inner_env(monkeypatch):
-    """Push the outer tests/ dir onto PYTHONPATH and set DJANGO_SETTINGS_MODULE."""
-    existing = os.environ.get("PYTHONPATH", "")
-    new_path = os.pathsep.join([str(_OUTER_TESTS_DIR), existing]) if existing else str(_OUTER_TESTS_DIR)
-    monkeypatch.setenv("PYTHONPATH", new_path)
-    monkeypatch.setenv("DJANGO_SETTINGS_MODULE", "settings.base")
-
-
-def test_sessionfinish_reports_unused_field_load(pytester, monkeypatch):
+def test_sessionfinish_reports_unused_field_load(django_pytester):
     """corpus.field_report() finds should appear in output and make exit non-zero."""
-    _setup_inner_env(monkeypatch)
-    pytester.makepyfile(
+    django_pytester.makepyfile(
         test_field_unused="""
         import pytest
         from django_nplus1.scope import DetectionContext
@@ -310,15 +296,14 @@ def test_sessionfinish_reports_unused_field_load(pytester, monkeypatch):
                 list(User.objects.all())  # loads 'name'; never read -> unused_field_load
         """,
     )
-    result = pytester.runpytest_subprocess("--nplus1-eager-corpus")
+    result = django_pytester.runpytest_subprocess("--nplus1-eager-corpus")
     assert result.ret != 0, f"expected non-zero exit, got {result.ret}\nstdout:\n{result.stdout.str()}"
     result.stdout.fnmatch_lines(["*unused_field_load*"])
 
 
-def test_sessionfinish_field_exclude_suppresses_report(pytester, monkeypatch):
+def test_sessionfinish_field_exclude_suppresses_report(django_pytester):
     """NPLUS1_FIELD_EXCLUDE suppresses field finds; suite exits 0."""
-    _setup_inner_env(monkeypatch)
-    pytester.makeconftest(
+    django_pytester.makeconftest(
         """
         import django
         from django.conf import settings as django_settings
@@ -327,7 +312,7 @@ def test_sessionfinish_field_exclude_suppresses_report(pytester, monkeypatch):
             django_settings.NPLUS1_FIELD_EXCLUDE = ["testapp.*"]
         """,
     )
-    pytester.makepyfile(
+    django_pytester.makepyfile(
         test_field_excluded="""
         import pytest
         from django_nplus1.scope import DetectionContext
@@ -340,6 +325,6 @@ def test_sessionfinish_field_exclude_suppresses_report(pytester, monkeypatch):
                 list(User.objects.all())  # loads 'name'; excluded -> no find
         """,
     )
-    result = pytester.runpytest_subprocess("--nplus1-eager-corpus")
+    result = django_pytester.runpytest_subprocess("--nplus1-eager-corpus")
     assert result.ret == 0, f"expected exit 0, got {result.ret}\nstdout:\n{result.stdout.str()}"
     assert "unused_field_load" not in result.stdout.str()
