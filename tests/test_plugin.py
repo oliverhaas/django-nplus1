@@ -8,6 +8,8 @@ from django_nplus1.detect import nplus1_allow
 from django_nplus1.exceptions import NPlus1Error
 from django_nplus1.profiler import Profiler
 
+pytest_plugins = ["pytester"]
+
 
 @pytest.mark.django_db
 class TestProfiler:
@@ -215,3 +217,77 @@ def test_unused_eager_load_error_still_removes_duplicate_detection(objects, sett
         list(User.objects.select_related("occupation"))
     for _ in range(2):
         list(User.objects.all())
+
+
+def test_marker_skips_test_database_setup(django_pytester):
+    django_pytester.makeconftest(
+        """
+        from django.db.models.signals import post_migrate
+
+
+        def ensure_groups(sender, **kwargs):
+            from django.contrib.auth.models import Group
+
+            for name in ("editors", "viewers"):
+                Group.objects.get_or_create(name=name)
+
+
+        post_migrate.connect(ensure_groups)
+        """,
+    )
+    django_pytester.makepyfile(
+        """
+        import pytest
+
+
+        @pytest.mark.nplus1
+        @pytest.mark.django_db
+        def test_first_database_test():
+            pass
+        """,
+    )
+    result = django_pytester.runpytest_subprocess()
+    result.assert_outcomes(passed=1)
+
+
+def test_marker_checks_only_the_test_body(django_pytester):
+    django_pytester.makepyfile(
+        """
+        import pytest
+        from testapp.models import Occupation, User
+
+
+        def touch_users():
+            for occupation in Occupation.objects.all():
+                occupation.user
+
+
+        @pytest.fixture
+        def lazy_loads_around_test(db):
+            for _ in range(2):
+                Occupation.objects.create(user=User.objects.create())
+            touch_users()
+            yield
+            touch_users()
+
+
+        @pytest.mark.nplus1
+        @pytest.mark.django_db
+        def test_setup_and_teardown(lazy_loads_around_test):
+            pass
+
+
+        @pytest.mark.nplus1
+        @pytest.mark.django_db
+        def test_lazy_load_in_body(lazy_loads_around_test):
+            touch_users()
+
+
+        @pytest.mark.nplus1
+        @pytest.mark.django_db
+        def test_unused_eager_load_in_body(lazy_loads_around_test):
+            list(User.objects.select_related("occupation"))
+        """,
+    )
+    result = django_pytester.runpytest_subprocess()
+    result.assert_outcomes(passed=1, failed=2)

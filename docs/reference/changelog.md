@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Corpus mode now also flags concrete fields loaded by the SELECT but never read across the suite. Reports as `unused_field_load`; suggested fix is `.only()` / `.defer()`. Suppress noisy models with `NPLUS1_FIELD_EXCLUDE`.
+- `@pytest.mark.nplus1` checks only the test body. Previously its profiler also covered fixtures, including pytest-django's test database setup, so `post_migrate` handlers and data fixtures could fail the test at setup, and the failure stayed cached for later database tests on the same worker. The autouse `auto_nplus1` fixture is replaced by a `pytest_runtest_call` hook.
 - A detection raised when a `Profiler` or `DetectionContext` exits no longer replaces an exception from its body, and no longer skips tearing down the remaining listeners. Previously an unused eager load at exit left duplicate query detection attached to the connection.
 
 ## 0.3.5

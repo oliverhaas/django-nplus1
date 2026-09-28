@@ -1,12 +1,10 @@
-from typing import TYPE_CHECKING, Any
+from collections.abc import Generator  # noqa: TC003 - pluggy evaluates hook annotations
+from typing import Any
 
 import pytest
 
 from django_nplus1 import corpus
 from django_nplus1.profiler import Profiler
-
-if TYPE_CHECKING:
-    from collections.abc import Generator
 
 
 def _corpus_enabled(config: Any) -> bool:
@@ -40,14 +38,13 @@ def nplus1() -> Generator[Profiler]:
         yield p
 
 
-@pytest.fixture(autouse=True)
-def auto_nplus1(request: pytest.FixtureRequest) -> Generator[None]:
-    marker = request.node.get_closest_marker("nplus1")
-    if marker:
-        with Profiler(whitelist=marker.kwargs.get("whitelist")):
-            yield
-    else:
-        yield
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_call(item: pytest.Item) -> Generator[None]:
+    marker = item.get_closest_marker("nplus1")
+    if marker is None:
+        return (yield)
+    with Profiler(whitelist=marker.kwargs.get("whitelist")):
+        return (yield)
 
 
 def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
