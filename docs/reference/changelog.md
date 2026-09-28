@@ -6,7 +6,7 @@
 - `@pytest.mark.nplus1` checks only the test body. Previously its profiler also covered fixtures, including pytest-django's test database setup, so `post_migrate` handlers and data fixtures could fail the test at setup, and the failure stayed cached for later database tests on the same worker. The autouse `auto_nplus1` fixture is replaced by a `pytest_runtest_call` hook.
 - The pytest marker and `nplus1` fixture apply `NPLUS1_WHITELIST`.
 - `Profiler`, `nplus1_allow()`, and the marker's `whitelist` match `model` patterns against `"app_label.ModelName"` as well as the class name, so `{"model": "auth.User"}` works there too.
-- Duplicate query detection skips queries with no frame of your code on the stack. Call sites no longer fall back to the standard library or a launcher line such as `.venv/bin/pytest:10`, which merged unrelated library queries into one call site. Async ORM calls run in a worker thread without your frames, so `aget()` loops are no longer reported as `get_in_loop`.
+- Duplicate query detection skips queries Django runs while opening a connection, such as `django.contrib.postgres`' hstore and citext type lookups, and queries with no frame of your code on the stack. Call sites no longer fall back to the standard library or a launcher line such as `.venv/bin/pytest:10`, which merged unrelated library queries into one call site. Async ORM calls run in a worker thread without your frames, so `aget()` loops are no longer reported as `get_in_loop`.
 - A detection raised when a `Profiler` or `DetectionContext` exits no longer replaces an exception from its body, and no longer skips tearing down the remaining listeners. Previously an unused eager load at exit left duplicate query detection attached to the connection.
 
 ## 0.3.5

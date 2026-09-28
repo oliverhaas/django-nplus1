@@ -99,7 +99,7 @@ NPLUS1_DUPLICATE_QUERY_THRESHOLD = 2  # default
 
 When enabled, all SQL queries are fingerprinted (literals replaced with `?`) and repeated identical queries from the same call-site are flagged. Detected via the `Profiler`, `@pytest.mark.nplus1`, and `NPlus1Middleware`.
 
-The call site is the innermost frame of your code. Frames from the standard library, installed packages, and console-script launchers such as `bin/pytest` don't count. Queries with no frame of your code on the stack aren't counted.
+The call site is the innermost frame of your code. Frames from the standard library, installed packages, and console-script launchers such as `bin/pytest` don't count. Queries with no frame of your code on the stack aren't counted, nor are queries Django runs while opening a connection (backend setup and `connection_created` receivers such as `django.contrib.postgres`' type lookups).
 
 ## Exceptions
 

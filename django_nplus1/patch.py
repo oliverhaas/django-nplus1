@@ -7,6 +7,7 @@ from contextvars import ContextVar
 from typing import Any
 
 from django.contrib.contenttypes.fields import create_generic_related_manager
+from django.db.backends.base.base import BaseDatabaseWrapper
 from django.db.models import Model, Prefetch, query
 from django.db.models.fields.related_descriptors import (
     ForwardManyToOneDescriptor,
@@ -36,6 +37,10 @@ _current_select_sites: ContextVar[dict[str, tuple[str, int, str]] | None] = Cont
     "nplus1_current_select_sites",
     default=None,
 )
+
+# True while Django opens a connection. Backend setup and connection_created receivers
+# (e.g. django.contrib.postgres' type OID lookups) run per connection, not per caller.
+_in_connection_setup: ContextVar[bool] = ContextVar("nplus1_in_connection_setup", default=False)
 
 
 def to_key(instance: Model) -> str:
@@ -656,3 +661,18 @@ def _select_related(self: Any, *fields: Any) -> Any:
 
 
 query.QuerySet.select_related = _select_related  # type: ignore[method-assign]
+
+
+_original_connect = BaseDatabaseWrapper.connect
+
+
+@functools.wraps(_original_connect)
+def _connect(self: Any, *args: Any, **kwargs: Any) -> Any:
+    token = _in_connection_setup.set(True)
+    try:
+        return _original_connect(self, *args, **kwargs)
+    finally:
+        _in_connection_setup.reset(token)
+
+
+BaseDatabaseWrapper.connect = _connect  # type: ignore[method-assign]

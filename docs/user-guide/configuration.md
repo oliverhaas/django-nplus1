@@ -96,7 +96,7 @@ NPLUS1_DETECT_DUPLICATE_QUERIES = True
 
 Note: duplicate query detection only monitors the default database connection. Multi-database setups won't detect duplicates on secondary connections.
 
-Queries with no frame of your code on the call stack are not counted.
+Queries Django runs while opening a connection, and queries with no frame of your code on the call stack, are not counted.
 
 ### `NPLUS1_DUPLICATE_QUERY_THRESHOLD`
 

@@ -322,6 +322,55 @@ def test_marker_checks_only_the_test_body(django_pytester):
     result.assert_outcomes(passed=1, failed=2)
 
 
+def test_duplicate_detection_skips_connection_setup(django_pytester, monkeypatch):
+    django_pytester.makepyfile(
+        file_db_settings="""
+        from settings.base import *
+
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.sqlite3",
+                "NAME": "db.sqlite3",
+                "TEST": {"NAME": "test_db.sqlite3"},
+            },
+        }
+        """,
+    )
+    monkeypatch.setenv("DJANGO_SETTINGS_MODULE", "file_db_settings")
+    django_pytester.makeconftest(
+        """
+        from django.db.backends.signals import connection_created
+
+
+        def look_up_type_oids(connection, **kwargs):
+            for type_name in ("hstore", "citext"):
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT %s", [type_name])
+
+
+        connection_created.connect(look_up_type_oids)
+        """,
+    )
+    django_pytester.makepyfile(
+        """
+        import pytest
+        from django.db import connection
+
+        from django_nplus1.profiler import Profiler
+
+
+        @pytest.mark.django_db(transaction=True)
+        def test_reconnect(settings):
+            settings.NPLUS1_DETECT_DUPLICATE_QUERIES = True
+            connection.close()
+            with Profiler():
+                connection.ensure_connection()
+        """,
+    )
+    result = django_pytester.runpytest_subprocess()
+    result.assert_outcomes(passed=1)
+
+
 @pytest.mark.parametrize(
     "command",
     [

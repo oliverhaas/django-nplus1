@@ -472,10 +472,11 @@ class DuplicateQueryListener(Listener):
         self._wrapper_cm = None
 
     def _wrapper(self, execute: Any, sql: str, params: Any, many: bool, context: Any) -> Any:
+        from django_nplus1.patch import _in_connection_setup
         from django_nplus1.util import get_caller
 
         result = execute(sql, params, many, context)
-        if many:
+        if many or _in_connection_setup.get():
             return result
         # Without a project frame there is no call site to count per.
         caller = get_caller()
