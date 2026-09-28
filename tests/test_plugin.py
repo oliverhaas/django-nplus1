@@ -1,3 +1,7 @@
+import sys
+import sysconfig
+from pathlib import Path
+
 import pytest
 from django.conf import settings
 from django.db import connection
@@ -316,3 +320,30 @@ def test_marker_checks_only_the_test_body(django_pytester):
     )
     result = django_pytester.runpytest_subprocess()
     result.assert_outcomes(passed=1, failed=2)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        pytest.param([Path(sysconfig.get_path("scripts")) / "pytest"], id="console-script"),
+        pytest.param([sys.executable, "-m", "pytest"], id="python-m"),
+        pytest.param([sys.executable, "-m", "pytest", "-n", "1"], id="xdist"),
+    ],
+)
+def test_duplicate_detection_skips_queries_without_project_caller(django_pytester, command):
+    django_pytester.makepyfile(
+        """
+        import pytest
+
+
+        @pytest.fixture
+        def detect_duplicates(settings):
+            settings.NPLUS1_DETECT_DUPLICATE_QUERIES = True
+
+
+        def test_flush_inside_scope(detect_duplicates, nplus1, transactional_db):
+            pass
+        """,
+    )
+    result = django_pytester.run(*command)
+    result.assert_outcomes(passed=1)

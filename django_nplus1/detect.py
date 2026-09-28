@@ -472,18 +472,22 @@ class DuplicateQueryListener(Listener):
         self._wrapper_cm = None
 
     def _wrapper(self, execute: Any, sql: str, params: Any, many: bool, context: Any) -> Any:
-        result = execute(sql, params, many, context)
-        if not many:
-            from django_nplus1.util import get_caller
+        from django_nplus1.util import get_caller
 
-            fingerprint = _fingerprint_sql(sql)
-            caller = get_caller()
-            key = (fingerprint, *caller)
-            self.counts[key] += 1
-            if self.counts[key] == self.threshold:
-                short_sql = fingerprint[:120] + ("..." if len(fingerprint) > 120 else "")
-                message = DuplicateQueryMessage(_SQL, short_sql, caller=caller)
-                self.parent.notify(message)
+        result = execute(sql, params, many, context)
+        if many:
+            return result
+        # Without a project frame there is no call site to count per.
+        caller = get_caller()
+        if caller is None:
+            return result
+        fingerprint = _fingerprint_sql(sql)
+        key = (fingerprint, *caller)
+        self.counts[key] += 1
+        if self.counts[key] == self.threshold:
+            short_sql = fingerprint[:120] + ("..." if len(fingerprint) > 120 else "")
+            message = DuplicateQueryMessage(_SQL, short_sql, caller=caller)
+            self.parent.notify(message)
         return result
 
 

@@ -216,9 +216,9 @@ def _is_descriptor_call() -> bool:
     frame = sys._getframe(1).f_back  # caller of _get
     try:
         while frame is not None:
-            fn = frame.f_code.co_filename
-            if not _is_internal_frame(fn):
+            if not _is_internal_frame(frame):
                 return False
+            fn = frame.f_code.co_filename
             if "related_descriptors" in fn or "related.py" in fn:
                 return True
             frame = frame.f_back
