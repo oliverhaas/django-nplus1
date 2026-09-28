@@ -28,7 +28,7 @@ with Profiler(whitelist=None) as p:
 
 **Parameters:**
 
-- `whitelist` (optional): List of dicts with `model`, `field`, and/or `label` keys.
+- `whitelist` (optional): List of dicts, each with any of `model`, `field`, and `label`. A `model` pattern matches the class name (`"User"`) or `"app_label.ModelName"` (`"auth.User"`).
 
 ## `nplus1_allow`
 
@@ -66,7 +66,7 @@ With no arguments, all detections are suppressed within the block. Supports nest
 
 Works in both middleware and profiler contexts.
 
-**Note:** `nplus1_allow()` and `Profiler` match model names without app label (e.g. `"User"`), while `NPLUS1_WHITELIST` in the middleware matches the full `app_label.ModelName` format (e.g. `"auth.User"`). Keep this in mind when copying patterns between the two.
+**Note:** `nplus1_allow()` and `Profiler` match a `model` pattern against both the class name (`"User"`) and `"app_label.ModelName"` (`"auth.User"`), so patterns copied from `NPLUS1_WHITELIST` work unchanged.
 
 ## Signals
 

@@ -32,9 +32,12 @@ class Rule:
     def match_model(self, model: type) -> bool:
         if self.model is model:
             return True
-        if isinstance(self.model, str):
-            return fnmatch.fnmatch(model.__name__, self.model)
-        return False
+        if not isinstance(self.model, str):
+            return False
+        if fnmatch.fnmatch(model.__name__, self.model):
+            return True
+        meta = getattr(model, "_meta", None)
+        return meta is not None and fnmatch.fnmatch(f"{meta.app_label}.{model.__name__}", self.model)
 
 
 _allow_rules: ContextVar[list[Rule]] = ContextVar("nplus1_allow_rules")

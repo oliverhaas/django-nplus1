@@ -92,4 +92,4 @@ with Profiler(whitelist=[{"model": "User", "field": "profile"}]):
     ...
 ```
 
-Note: In the profiler context, model matching uses `model.__name__` (no app label prefix), unlike the middleware which uses `app_label.ModelName`.
+`Profiler`, `nplus1_allow()`, and the pytest marker match a `model` pattern against both the class name (`"User"`) and `"app_label.ModelName"` (`"auth.User"`), so patterns copied from `NPLUS1_WHITELIST` work unchanged.

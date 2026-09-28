@@ -219,6 +219,13 @@ def test_unused_eager_load_error_still_removes_duplicate_detection(objects, sett
         list(User.objects.all())
 
 
+@pytest.mark.nplus1(whitelist=[{"model": "testapp.Occupation"}])
+@pytest.mark.django_db
+def test_marker_whitelist_matches_app_label_pattern(objects):
+    occupations = list(Occupation.objects.all())
+    occupations[0].user
+
+
 def test_marker_skips_test_database_setup(django_pytester):
     django_pytester.makeconftest(
         """
