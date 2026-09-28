@@ -19,8 +19,16 @@ Each whitelist entry is a dictionary with optional keys:
 | Key | Description | Example |
 |-----|-------------|---------|
 | `model` | Model class or `"app_label.ModelName"` pattern | `"myapp.User"`, `"auth.*"` |
-| `field` | Field name pattern | `"profile"`, `"*"` |
+| `field` | Field name pattern; for `duplicate_query`, a pattern for the query's SQL | `"profile"`, `"*"` |
 | `label` | Message type: `"n_plus_one"`, `"unused_eager_load"`, `"get_in_loop"`, or `"duplicate_query"` | `"n_plus_one"` |
+
+A `duplicate_query` detection's field is the query with literals replaced by `?`, cut to 120 characters. Match it to suppress one query shape instead of every duplicate:
+
+```python
+NPLUS1_WHITELIST = [
+    {"label": "duplicate_query", "field": '*FROM "django_content_type"*'},
+]
+```
 
 ### Wildcard Support
 
