@@ -35,6 +35,9 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    env:
+      # Overrides .python-version for every uv command in the job.
+      UV_PYTHON: ${{ matrix.python-version }}
     strategy:
       fail-fast: false
       matrix:
@@ -42,11 +45,15 @@ jobs:
           - "3.14"
         django-version:
           - "6.0"
+          - "6.1"
 
         include:
           # Pre-release Django
           - python-version: "3.14"
             django-version: "main"
+          # Pre-release Python
+          - python-version: "3.15"
+            django-version: "6.1"
 
     steps:
       - uses: actions/checkout@v7
@@ -58,7 +65,7 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync --group dev
+        run: uv sync --no-dev --group test
 
       - name: Install Django ${{ matrix.django-version }}
         run: |
@@ -68,11 +75,16 @@ jobs:
             uv pip install "Django~=${{ matrix.django-version }}.0"
           fi
 
+      # --no-sync keeps the Django version installed above.
       - name: Run tests
-        run: uv run pytest
+        run: uv run --no-sync coverage run -m pytest
+
+      - name: Write coverage report
+        if: matrix.python-version == '3.14' && matrix.django-version == '6.1'
+        run: uv run --no-sync coverage xml
 
       - name: Upload coverage to Codecov
-        if: matrix.python-version == '3.14' && matrix.django-version == '6.0'
+        if: matrix.python-version == '3.14' && matrix.django-version == '6.1'
         uses: codecov/codecov-action@v7
         with:
           files: ./coverage.xml

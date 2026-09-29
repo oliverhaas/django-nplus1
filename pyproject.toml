@@ -13,6 +13,7 @@ classifiers = [
   "Environment :: Web Environment",
   "Framework :: Django",
   "Framework :: Django :: 6.0",
+  "Framework :: Django :: 6.1",
   "Framework :: Pytest",
   "Intended Audience :: Developers",
   "Operating System :: OS Independent",
