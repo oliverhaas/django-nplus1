@@ -1,233 +1,39 @@
+from asgiref.sync import sync_to_async
 from django.db import connection
-from django.db.models import prefetch_related_objects
 from django.http import HttpResponse
-from django.template import Context, Template
 from testapp import models
 
-from django_nplus1 import nplus1_allow
 
+def occupation_users():
+    return [occupation.user.name for occupation in models.Occupation.objects.all()]
 
-def one_to_one(request):
-    occupations = list(models.Occupation.objects.all())
-    return HttpResponse(occupations[0].user.id)
 
+def lazy_loop(request):
+    return HttpResponse(occupation_users())
 
-def one_to_one_first(request):
-    occupation = models.Occupation.objects.first()
-    return HttpResponse(occupation.user.id)
 
+async def async_lazy_loop(request):
+    return HttpResponse(await sync_to_async(occupation_users)())
 
-def one_to_many(request):
-    users = models.User.objects.all().prefetch_related("addresses")
-    return HttpResponse(users[0].addresses.all())
 
+def unused_select(request):
+    return HttpResponse(len(models.User.objects.select_related("occupation")))
 
-def many_to_many(request):
-    users = list(models.User.objects.all())
-    return HttpResponse(users[0].hobbies.all())
 
-
-def many_to_many_get(request):
-    user = models.User.objects.get(pk=1)
-    return HttpResponse(user.hobbies.all())
-
-
-def prefetch_one_to_one(request):
-    users = models.User.objects.all().select_related("occupation")
-    return HttpResponse(users[0].occupation)
-
-
-def prefetch_one_to_one_unused(request):
-    users = models.User.objects.all().prefetch_related("occupation")
-    return HttpResponse(users[0])
-
-
-def prefetch_many_to_many(request):
-    users = list(models.User.objects.all().prefetch_related("hobbies"))
-    # Touch class-level descriptors to exercise None instance checks
-    print(models.Occupation.user)
-    print(models.User.occupation)
-    return HttpResponse(list(user.hobbies.all()) for user in users)
-
-
-def many_to_many_impossible(request):
-    user = models.User.objects.first()
-    users = list(models.User.objects.all())
-    return HttpResponse(user.hobbies.all())
-
-
-def many_to_many_impossible_one(request):
-    user = models.User.objects.get(pk=1)
-    users = list(models.User.objects.all())
-    return HttpResponse(user.hobbies.all())
-
-
-def prefetch_many_to_many_render(request):
-    users = models.User.objects.all().prefetch_related("hobbies")
-    template = """
-    {% for user in users %}
-        {% for hobby in user.hobbies.all %}
-            {{ hobby.id }}
-        {% endfor %}
-    {% endfor %}
-    """
-    resp = Template(template).render(Context({"users": users}))
-    return HttpResponse(resp)
-
-
-def prefetch_many_to_many_unused(request):
-    users = models.User.objects.all().prefetch_related("hobbies")
-    return HttpResponse(users[0])
-
-
-def prefetch_many_to_many_single(request):
-    hobbies = models.Hobby.objects.all().prefetch_related("users")
-    return HttpResponse(hobbies[0].users.all()[0])
-
-
-def prefetch_many_to_many_no_related(request):
-    pets = models.Pet.objects.all().prefetch_related("allergy_set")
-    return HttpResponse(pets[0].allergy_set.all()[0])
-
-
-def select_one_to_one(request):
-    users = models.User.objects.all().select_related("occupation")
-    return HttpResponse(users[0].occupation)
-
-
-def select_one_to_one_unused(request):
-    users = models.User.objects.all().select_related("occupation")
-    return HttpResponse(users[0])
-
-
-def select_many_to_one(request):
-    pets = list(models.Pet.objects.all().select_related("user"))
-    return HttpResponse(pets[0].user if pets else None)
-
-
-def select_many_to_one_unused(request):
-    pets = list(models.Pet.objects.all().select_related("user"))
-    return HttpResponse(pets[0])
-
-
-def prefetch_nested(request):
-    pets = list(models.Pet.objects.all().prefetch_related("user__occupation"))
-    return HttpResponse(pets[0].user.occupation)
-
-
-def prefetch_nested_unused(request):
-    pets = list(models.Pet.objects.all().prefetch_related("user__occupation"))
-    return HttpResponse(pets[0])
-
-
-def select_nested(request):
-    pets = list(models.Pet.objects.all().select_related("user__occupation"))
-    return HttpResponse(pets[0].user.occupation)
-
-
-def select_nested_unused(request):
-    pets = list(models.Pet.objects.all().select_related("user__occupation"))
-    return HttpResponse(pets[0])
-
-
-def prefetch_related_objects_loop(request):
-    users = list(models.User.objects.all())
-    for user in users:
-        prefetch_related_objects([user], "hobbies")
-    return HttpResponse([user.hobbies.all() for user in users])
-
-
-def prefetch_related_objects_bulk(request):
-    users = list(models.User.objects.all())
-    prefetch_related_objects(users, "hobbies")
-    return HttpResponse([user.hobbies.all() for user in users])
-
-
-def prefetch_related_objects_get(request):
-    user = models.User.objects.get(pk=1)
-    prefetch_related_objects([user], "hobbies")
-    return HttpResponse(user.hobbies.all())
-
-
-def prefetch_related_objects_first(request):
-    user = models.User.objects.first()
-    prefetch_related_objects([user], "hobbies")
-    return HttpResponse(user.hobbies.all())
-
-
-def deferred_field(request):
-    users = list(models.User.objects.only("id"))
-    return HttpResponse(users[0].name)
-
-
-def deferred_field_first(request):
-    user = models.User.objects.only("id").first()
-    return HttpResponse(user.name)
-
-
-def get_in_loop(request):
-    """Classic .get() in a loop -- should be detected."""
-    pks = list(models.User.objects.values_list("pk", flat=True))
-    for pk in pks:
-        models.User.objects.get(pk=pk)
-    return HttpResponse("ok")
-
-
-def get_single(request):
-    """Single .get() call -- should NOT be detected."""
-    user = models.User.objects.get(pk=1)
-    return HttpResponse(user.pk)
-
-
-def get_different_lines(request):
-    """Multiple .get() calls on different lines -- should NOT be detected."""
-    user1 = models.User.objects.get(pk=1)
-    user2 = models.User.objects.get(pk=2)
-    return HttpResponse(f"{user1.pk},{user2.pk}")
-
-
-def many_to_many_allowed(request):
-    """N+1 that is explicitly allowed via nplus1_allow."""
-    users = list(models.User.objects.all())
-    with nplus1_allow([{"model": "User", "field": "hobbies"}]):
-        return HttpResponse(users[0].hobbies.all())
+def unused_select_then_error(request):
+    list(models.User.objects.select_related("occupation"))
+    raise ValueError("view failed")
 
 
 def raw_sql_loop(request):
-    """Raw SQL in a loop - should be detected by DuplicateQueryListener."""
-    pks = list(models.User.objects.values_list("pk", flat=True))
-    results = []
-    for pk in pks:
+    names = []
+    for pk in models.User.objects.values_list("pk", flat=True):
         with connection.cursor() as cursor:
-            cursor.execute("SELECT id, name FROM testapp_user WHERE id = %s", [pk])
-            results.append(cursor.fetchone())
-    return HttpResponse(str(results))
+            cursor.execute("SELECT name FROM testapp_user WHERE id = %s", [pk])
+            names.append(cursor.fetchone()[0])
+    return HttpResponse(names)
 
 
-def raw_sql_single(request):
-    """Single raw SQL query - should NOT be detected."""
-    with connection.cursor() as cursor:
-        cursor.execute("SELECT id, name FROM testapp_user WHERE id = %s", [1])
-        result = cursor.fetchone()
-    return HttpResponse(str(result))
-
-
-def many_to_many_forward_no_related(request):
-    """Forward M2M without explicit related_name -- triggers N+1."""
-    allergies = list(models.Allergy.objects.all())
-    return HttpResponse(list(allergies[0].pets.all()))
-
-
-def prefetch_generic_relation(request):
-    users = list(models.User.objects.all().prefetch_related("tags"))
-    return HttpResponse(list(user.tags.all()) for user in users)
-
-
-def prefetch_generic_relation_unused(request):
-    users = models.User.objects.all().prefetch_related("tags")
-    return HttpResponse(users[0])
-
-
-def generic_relation_lazy(request):
-    users = list(models.User.objects.all())
-    return HttpResponse(list(users[0].tags.all()))
+def prefetched_hobbies(request):
+    users = models.User.objects.prefetch_related("hobbies")
+    return HttpResponse(len([hobby for user in users for hobby in user.hobbies.all()]))

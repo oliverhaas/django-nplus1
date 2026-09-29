@@ -1,12 +1,19 @@
-import copy
+"""Hooks on Django's ORM that report loads and reads to the active detection scope.
+
+Installed once from ``AppConfig.ready()``. Without an active scope every hook runs Django's own code.
+"""
+
+import contextlib
 import functools
 import importlib
 import itertools
+import operator
 import sys
 from contextvars import ContextVar
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from django.contrib.contenttypes.fields import create_generic_related_manager
+from django.apps import apps
+from django.db import connections
 from django.db.backends.base.base import BaseDatabaseWrapper
 from django.db.models import Model, Prefetch, query
 from django.db.models.fields.related_descriptors import (
@@ -18,36 +25,56 @@ from django.db.models.fields.related_descriptors import (
 from django.db.models.query_utils import DeferredAttribute
 
 from django_nplus1 import corpus, signals
-from django_nplus1.util import get_caller
+from django_nplus1.fields import emit_field_loads
+from django_nplus1.util import CallSite, get_caller, to_key
 
-# True while inside QuerySet._prefetch_related_objects. A prefetch that fires here
-# is proper queryset-level usage (e.g. ``Model.objects.prefetch_related(...).filter(pk=X)``)
-# and must not be flagged as N+1 even when the queryset returns a single instance.
+if TYPE_CHECKING:
+    from collections.abc import Callable, Generator, Iterator, Sequence
+
+# (model, relation name, instance key) of the instance a relation is read on.
+Relation = tuple[type[Model], str, str]
+
+# True inside QuerySet._prefetch_related_objects. Prefetching for a queryset of one
+# row, as in ``prefetch_related(...).get(pk=x)``, is not an N+1.
 _in_queryset_prefetch: ContextVar[bool] = ContextVar("nplus1_in_queryset_prefetch", default=False)
 
-# Unique id for the current prefetch_related_objects() call. Lets handle_eager
-# distinguish repeated eager loads within one call (converging FK chains, not N+1)
-# from cross-call repetition (actual N+1 in a loop).
+# Id of the running prefetch_related_objects() call. Converging lookups load one row
+# twice within a call, which is not an N+1, unlike the same load in every loop pass.
 _prefetch_call_id: ContextVar[int | None] = ContextVar("nplus1_prefetch_call_id", default=None)
 _prefetch_call_seq = itertools.count()
 
-# Threaded by _fetch_all so parse_eager_select can recover the
-# Query's _nplus1_select_sites without a direct reference.
-_current_select_sites: ContextVar[dict[str, tuple[str, int, str]] | None] = ContextVar(
+# The select_related() call sites of the queryset being evaluated, for RelatedPopulator.
+_current_select_sites: ContextVar[dict[str, CallSite] | None] = ContextVar(
     "nplus1_current_select_sites",
     default=None,
 )
+
+# The select_related() path of the RelatedPopulator being built, e.g. "user__occupation".
+_populator_path: ContextVar[str] = ContextVar("nplus1_populator_path", default="")
+
+# The declaration site of the Prefetch whose rows are being fetched.
+_prefetch_site: ContextVar[CallSite | None] = ContextVar("nplus1_prefetch_site", default=None)
+
+# "relation" or "deferred" while a descriptor loads a value that isn't cached. The
+# queries it runs belong to that one lazy load, not to a get() call or an eager load.
+_in_descriptor_load: ContextVar[str | None] = ContextVar("nplus1_in_descriptor_load", default=None)
 
 # True while Django opens a connection. Backend setup and connection_created receivers
 # (e.g. django.contrib.postgres' type OID lookups) run per connection, not per caller.
 _in_connection_setup: ContextVar[bool] = ContextVar("nplus1_in_connection_setup", default=False)
 
+# The rows of one prefetch_one_level() call or one select_related() evaluation form a
+# group. Reading the relation on any row of a group marks the group used.
+_group_seq = itertools.count()
 
-def to_key(instance: Model) -> str:
-    pk = instance.pk
-    if pk is None:
-        return f"{type(instance).__name__}:{id(instance)}"
-    return f"{type(instance).__name__}:{pk}"
+
+@contextlib.contextmanager
+def _setting[T](var: ContextVar[T], value: T) -> Generator[None]:
+    token = var.set(value)
+    try:
+        yield
+    finally:
+        var.reset(token)
 
 
 def _patch(original: Any, patched: Any) -> None:
@@ -55,208 +82,257 @@ def _patch(original: Any, patched: Any) -> None:
     setattr(module, original.__name__, patched)
 
 
-def signalify_queryset(
-    func: Any,
-    parser: Any = None,
-    **context: Any,
-) -> Any:
-    @functools.wraps(func)
-    def wrapped(*args: Any, **kwargs: Any) -> Any:
-        queryset = func(*args, **kwargs)
-        ctx = copy.copy(context)
-        ctx["args"] = context.get("args", args)
-        ctx["kwargs"] = context.get("kwargs", kwargs)
-        queryset._clone = signalify_queryset(queryset._clone, parser=parser, **ctx)
-        queryset._fetch_all = signalify_fetch_all(queryset, parser=parser, **ctx)
-        queryset._context = ctx
-        return queryset
-
-    return wrapped
+def _relation(instance: Model, name: str) -> Relation:
+    return type(instance), name, to_key(instance)
 
 
-def signalify_fetch_all(queryset: Any, parser: Any = None, **context: Any) -> Any:
-    func = queryset._fetch_all
-
-    @functools.wraps(func)
-    def wrapped(*args: Any, **kwargs: Any) -> Any:
-        if queryset._result_cache is None:
-            signals.send(
-                signals.LAZY_LOAD,
-                args=args,
-                kwargs=kwargs,
-                ret=None,
-                context=context,
-                parser=parser,
-            )
-        return func(*args, **kwargs)
-
-    return wrapped
+def _send_lazy(relation: Relation, **context: Any) -> None:
+    model, name, key = relation
+    signals.emit(signals.LAZY_LOAD, model, key, name, **context)
 
 
-def get_related_name(model: type[Model]) -> str:
-    return f"{model._meta.model_name}_set"
+def _send_touch(relation: Relation) -> None:
+    model, name, key = relation
+    signals.emit(signals.TOUCH, model, name, [key])
 
 
-def parse_field(field: Any) -> tuple[type[Model], str]:
-    related_model = field.related_model
-    name = field.remote_field.name or get_related_name(field.related_model)
-    return related_model, name
+def parse_load(args: Any, kwargs: Any, context: Any, ret: Any) -> list[str]:
+    return [to_key(row) for row in ret if isinstance(row, Model)]
 
 
-def parse_reverse_field(field: Any) -> tuple[type[Model], str]:
-    return field.model, field.name
-
-
-def parse_related(context: dict[str, Any]) -> tuple[type[Model], str]:
-    field = context["rel_field"]
-    model = field.related_model
-    related_name = field.remote_field.related_name
-    related_model = context["rel_model"]
-    return parse_related_parts(model, related_name, related_model)
-
-
-def parse_related_parts(
-    model: type[Model],
-    related_name: str | None,
-    related_model: type[Model],
-) -> tuple[type[Model], str]:
-    return (
-        model,
-        related_name or get_related_name(related_model),
-    )
-
-
-def parse_reverse_one_to_one_queryset(
-    args: Any,
-    kwargs: Any,
-    context: dict[str, Any],
-) -> tuple[type[Model], str, str]:
-    descriptor = context["args"][0]
-    field = descriptor.related.field
-    model, name = parse_field(field)
-    instance = context["kwargs"]["instance"]
-    return model, to_key(instance), name
-
-
-def parse_forward_many_to_one_queryset(
-    args: Any,
-    kwargs: Any,
-    context: dict[str, Any],
-) -> tuple[type[Model], str, str]:
-    descriptor = context["args"][0]
-    instance = context["kwargs"]["instance"]
-    return descriptor.field.model, to_key(instance), descriptor.field.name
-
-
-def parse_many_related_queryset(
-    args: Any,
-    kwargs: Any,
-    context: dict[str, Any],
-) -> tuple[type[Model], str, str]:
-    rel = context["rel"]
-    manager = context["args"][0]
-    model = manager.instance.__class__
-    if manager.reverse:
-        related_model = manager.target_field.related_model
-        field = rel.related_name or get_related_name(related_model)
-    else:
-        field = manager.prefetch_cache_name
-    return (
-        model,
-        to_key(manager.instance),
-        field,
-    )
-
-
-def parse_foreign_related_queryset(
-    args: Any,
-    kwargs: Any,
-    context: dict[str, Any],
-) -> tuple[type[Model], str, str]:
-    model, name = parse_related(context)
-    descriptor = context["args"][0]
-    return model, to_key(descriptor.instance), name
-
-
-# Suppress lazy_load signals during prefetch_one_level
-query.prefetch_one_level = signals.designalify(
-    signals.LAZY_LOAD,
-    query.prefetch_one_level,
-)
-
-
-def parse_get(
-    args: Any,
-    kwargs: Any,
-    context: dict[str, Any],
-    ret: Any,
-) -> list[str]:
+def parse_get(args: Any, kwargs: Any, context: Any, ret: Any) -> list[str]:
     return [to_key(ret)] if isinstance(ret, Model) else []
 
 
-def parse_get_call(
-    args: Any,
-    kwargs: Any,
-    context: dict[str, Any],
-    ret: Any,
-) -> tuple[type[Model], tuple[str, int, str]]:
-    qs = args[0]
-    caller = context["caller"]
-    return qs.model, caller
+def parse_get_call(args: Any, kwargs: Any, context: Any, ret: Any) -> tuple[type[Model], CallSite]:
+    return args[0].model, context["caller"]
 
 
-# Emit IGNORE_LOAD (so LazyListener ignores the instance) and GET_CALL (for loop detection)
+def is_single(low: int, high: int | None) -> bool:
+    return high is not None and high - low == 1
+
+
+# A relation's querysets carry a "_nplus1_relation" tag, so evaluating one counts as a
+# lazy load. Plain data in __dict__ pickles and copies like the rest of the queryset.
+def _tag(queryset: Any, instance: Model | None, name: str) -> None:
+    # Querysets built inside prefetch_related_objects() belong to the prefetch.
+    if instance is not None and signals.active() and _prefetch_call_id.get() is None:
+        queryset.__dict__["_nplus1_relation"] = _relation(instance, name)
+
+
+def _patch_to_one_descriptor(descriptor_cls: Any, cache_owner: Callable[[Any], Any]) -> None:
+    """Report reads of a to-one relation: a touch when cached, a lazy load when not."""
+    original_get = descriptor_cls.__get__
+    original_get_queryset = descriptor_cls.get_queryset
+
+    @functools.wraps(original_get)
+    def get(self: Any, instance: Model | None, cls: type | None = None) -> Any:
+        if instance is None or not signals.active():
+            return original_get(self, instance, cls)
+        owner = cache_owner(self)
+        if owner.is_cached(instance):
+            _send_touch(_relation(instance, owner.cache_name))
+            return original_get(self, instance, cls)
+        with _setting(_in_descriptor_load, "relation"):
+            return original_get(self, instance, cls)
+
+    # Django 6.0 passes the instance as a hint, 6.1 as a keyword-only argument.
+    @functools.wraps(original_get_queryset)
+    def get_queryset(self: Any, **kwargs: Any) -> Any:
+        queryset = original_get_queryset(self, **kwargs)
+        _tag(queryset, kwargs.get("instance"), cache_owner(self).cache_name)
+        return queryset
+
+    descriptor_cls.__get__ = get
+    descriptor_cls.get_queryset = get_queryset
+
+
+_patch_to_one_descriptor(ForwardManyToOneDescriptor, operator.attrgetter("field"))
+_patch_to_one_descriptor(ReverseOneToOneDescriptor, operator.attrgetter("related"))
+
+
+def _tag_manager(manager_cls: Any, name: str) -> Any:
+    original = manager_cls.get_queryset
+
+    @functools.wraps(original)
+    def get_queryset(self: Any) -> Any:
+        queryset = original(self)
+        _tag(queryset, self.instance, name)
+        return queryset
+
+    manager_cls.get_queryset = get_queryset
+    return manager_cls
+
+
+def _create_forward_many_to_many_manager(superclass: Any, rel: Any, reverse: bool) -> Any:
+    manager_cls = create_forward_many_to_many_manager(superclass, rel, reverse)
+    return _tag_manager(manager_cls, rel.get_accessor_name() if reverse else rel.field.name)
+
+
+def _create_reverse_many_to_one_manager(superclass: Any, rel: Any) -> Any:
+    return _tag_manager(create_reverse_many_to_one_manager(superclass, rel), rel.get_accessor_name())
+
+
+_patch(create_forward_many_to_many_manager, _create_forward_many_to_many_manager)
+_patch(create_reverse_many_to_one_manager, _create_reverse_many_to_one_manager)
+
+
+def _patch_contenttypes() -> None:
+    from django.contrib.contenttypes import fields as contenttypes_fields
+
+    create_generic_related_manager = contenttypes_fields.create_generic_related_manager
+    generic_foreign_key = contenttypes_fields.GenericForeignKey
+    # Django 6.1 moved GenericForeignKey.__get__ to a separate descriptor class.
+    descriptor_cls: Any = getattr(contenttypes_fields, "GenericForeignKeyDescriptor", generic_foreign_key)
+    original_get = descriptor_cls.__get__
+
+    def _create_generic_related_manager(superclass: Any, rel: Any) -> Any:
+        return _tag_manager(create_generic_related_manager(superclass, rel), rel.field.name)
+
+    @functools.wraps(original_get)
+    def get(self: Any, instance: Model | None, cls: type | None = None) -> Any:
+        if instance is None or not signals.active():
+            return original_get(self, instance, cls)
+        field = self if isinstance(self, generic_foreign_key) else self.field
+        relation = _relation(instance, field.cache_name)
+        if field.is_cached(instance):
+            _send_touch(relation)
+        elif instance.__dict__.get(field.model._meta.get_field(field.ct_field).attname) is not None:
+            _send_lazy(relation)
+        with _setting(_in_descriptor_load, "relation"):
+            return original_get(self, instance, cls)
+
+    _patch(create_generic_related_manager, _create_generic_related_manager)
+    descriptor_cls.__get__ = get
+
+
+if apps.is_installed("django.contrib.contenttypes"):
+    _patch_contenttypes()
+
+
+_original_clone = query.QuerySet._clone  # type: ignore[attr-defined]
+
+
+def _clone(self: query.QuerySet[Any]) -> query.QuerySet[Any]:
+    clone = _original_clone(self)
+    state = self.__dict__
+    if "_nplus1_relation" in state:
+        clone.__dict__["_nplus1_relation"] = state["_nplus1_relation"]
+    # Corpus mode reports unused fields at the line that started the queryset chain.
+    if "_nplus1_site" in state:
+        clone.__dict__["_nplus1_site"] = state["_nplus1_site"]
+    elif corpus.is_enabled():
+        clone.__dict__["_nplus1_site"] = get_caller()
+    return clone
+
+
+query.QuerySet._clone = _clone  # type: ignore[attr-defined]
+
+
+def _send_loads(queryset: query.QuerySet[Any], rows: list[Any]) -> None:
+    single = is_single(queryset.query.low_mark, queryset.query.high_mark)
+    signals.send(
+        signals.IGNORE_LOAD if single else signals.LOAD,
+        args=(queryset,),
+        kwargs={},
+        context={},
+        ret=rows,
+        parser=parse_load,
+    )
+    # Rows a descriptor loads on attribute access have no queryset to add .only() to.
+    if corpus.is_enabled() and _in_descriptor_load.get() is None:
+        instances = [row for row in rows if isinstance(row, Model)]
+        if instances:
+            site = _prefetch_site.get() or queryset.__dict__.get("_nplus1_site") or get_caller()
+            emit_field_loads(instances, site)
+
+
+_original_fetch_all = query.QuerySet._fetch_all
+
+
+def _fetch_all(self: query.QuerySet[Any]) -> None:
+    if not signals.active():
+        _original_fetch_all(self)
+        return
+    was_empty = self._result_cache is None
+    relation = self.__dict__.get("_nplus1_relation")
+    if relation is not None:
+        if was_empty:
+            _send_lazy(relation)
+        elif self._prefetch_done:  # type: ignore[attr-defined]
+            _send_touch(relation)
+    with _setting(_current_select_sites, self.query.__dict__.get("_nplus1_select_sites")):
+        _original_fetch_all(self)
+    if was_empty:
+        _send_loads(self, self._result_cache or [])
+
+
+query.QuerySet._fetch_all = _fetch_all  # type: ignore[method-assign]
+
+_original_iterator = query.QuerySet._iterator  # type: ignore[attr-defined]
+_END = object()
+
+
+def _iterator(self: query.QuerySet[Any], use_chunked_fetch: bool, chunk_size: int | None) -> Iterator[Any]:
+    rows = _original_iterator(self, use_chunked_fetch, chunk_size)
+    if not signals.active():
+        yield from rows
+        return
+    relation = self.__dict__.get("_nplus1_relation")
+    if relation is not None:
+        _send_lazy(relation)
+    sites = self.query.__dict__.get("_nplus1_select_sites")
+    try:
+        while True:
+            with _setting(_current_select_sites, sites):
+                row = next(rows, _END)
+            if row is _END:
+                return
+            _send_loads(self, [row])
+            yield row
+    finally:
+        rows.close()
+
+
+query.QuerySet._iterator = _iterator  # type: ignore[attr-defined]
+
+
+def _touching_prefetched(method: Any) -> Any:
+    """Count reads that a prefetched relation answers from its cache as touches."""
+
+    @functools.wraps(method)
+    def wrapper(self: query.QuerySet[Any], *args: Any, **kwargs: Any) -> Any:
+        if self._result_cache is not None and self._prefetch_done:  # type: ignore[attr-defined]
+            relation = self.__dict__.get("_nplus1_relation")
+            if relation is not None:
+                _send_touch(relation)
+        return method(self, *args, **kwargs)
+
+    return wrapper
+
+
+for _name in ("__getitem__", "contains", "count", "exists"):
+    setattr(query.QuerySet, _name, _touching_prefetched(getattr(query.QuerySet, _name)))
+
 _original_get = query.QuerySet.get
 
 
-def _is_descriptor_call() -> bool:
-    """Check if .get() was called from Django's related descriptor machinery.
-
-    Walk from the caller of _get upward. If we reach a Django descriptor
-    frame before hitting user code, this is an internal .get() call.
-    """
-    from django_nplus1.util import _is_internal_frame
-
-    # frame(0)=here, frame(1)=_get, frame(2)=caller of _get
-    frame = sys._getframe(1).f_back  # caller of _get
-    try:
-        while frame is not None:
-            if not _is_internal_frame(frame):
-                return False
-            fn = frame.f_code.co_filename
-            if "related_descriptors" in fn or "related.py" in fn:
-                return True
-            frame = frame.f_back
-    finally:
-        del frame
-    return False
-
-
-def _get(self: Any, *args: Any, **kwargs: Any) -> Any:
-    # Short-circuit when no detection context is active (zero overhead in production)
-    try:
-        signals._listeners.get()
-    except LookupError:
+def _get(self: query.QuerySet[Any], *args: Any, **kwargs: Any) -> Any:
+    if not signals.active():
         return _original_get(self, *args, **kwargs)
-
-    direct_call = not _is_descriptor_call()
-    caller = get_caller() if direct_call else None
+    mode = _in_descriptor_load.get()
+    caller = get_caller() if mode is None else None
     ret = _original_get(self, *args, **kwargs)
-    signals.send(
-        signals.IGNORE_LOAD,
-        args=(self,),
-        kwargs=kwargs,
-        ret=ret,
-        context={},
-        parser=parse_get,
-    )
-    if direct_call and caller is not None:
+    # A deferred field load refetches the instance itself; it isn't loaded singly.
+    if mode != "deferred":
+        signals.send(signals.IGNORE_LOAD, args=(self,), kwargs=kwargs, context={}, ret=ret, parser=parse_get)
+    if caller is not None:
         signals.send(
             signals.GET_CALL,
             args=(self,),
             kwargs=kwargs,
-            ret=ret,
             context={"caller": caller},
+            ret=ret,
             parser=parse_get_call,
         )
     return ret
@@ -264,265 +340,132 @@ def _get(self: Any, *args: Any, **kwargs: Any) -> Any:
 
 query.QuerySet.get = _get  # type: ignore[method-assign]
 
-# Patch descriptor get_queryset methods
-ReverseOneToOneDescriptor.get_queryset = signalify_queryset(  # type: ignore[method-assign]
-    ReverseOneToOneDescriptor.get_queryset,
-    parser=parse_reverse_one_to_one_queryset,
-)
-ForwardManyToOneDescriptor.get_queryset = signalify_queryset(  # type: ignore[method-assign]
-    ForwardManyToOneDescriptor.get_queryset,
-    parser=parse_forward_many_to_one_queryset,
-)
+_original_deferred_get = DeferredAttribute.__get__
 
 
-def _create_forward_many_to_many_manager(superclass: Any, rel: Any, **kwargs: Any) -> Any:
-    manager = create_forward_many_to_many_manager(superclass, rel, **kwargs)
-    manager.get_queryset = signalify_queryset(  # type: ignore[method-assign]
-        manager.get_queryset,
-        parser=parse_many_related_queryset,
-        rel=rel,
-        rel_field=rel.field,
-        rel_model=rel.related_model,
-    )
-    return manager
-
-
-_patch(create_forward_many_to_many_manager, _create_forward_many_to_many_manager)
-
-
-def _create_reverse_many_to_one_manager(superclass: Any, rel: Any) -> Any:
-    manager = create_reverse_many_to_one_manager(superclass, rel)
-    manager.get_queryset = signalify_queryset(  # type: ignore[method-assign]
-        manager.get_queryset,
-        parser=parse_foreign_related_queryset,
-        rel_field=rel.field,
-        rel_model=rel.related_model,
-    )
-    return manager
-
-
-_patch(create_reverse_many_to_one_manager, _create_reverse_many_to_one_manager)
-
-
-def _create_generic_related_manager(superclass: Any, rel: Any) -> Any:
-    manager = create_generic_related_manager(superclass, rel)
-    manager.get_queryset = signalify_queryset(
-        manager.get_queryset,
-        parser=parse_generic_related_queryset,
-        rel=rel,
-        rel_field=rel.field,
-        rel_model=rel.related_model,
-    )
-    return manager
-
-
-_patch(create_generic_related_manager, _create_generic_related_manager)
-
-
-def parse_generic_related_queryset(
-    args: Any,
-    kwargs: Any,
-    context: dict[str, Any],
-) -> tuple[type[Model], str, str]:
-    manager = context["args"][0]
-    return (
-        manager.instance.__class__,
-        to_key(manager.instance),
-        manager.prefetch_cache_name,
-    )
-
-
-def parse_forward_many_to_one_get(
-    args: Any,
-    kwargs: Any,
-    context: dict[str, Any],
-) -> tuple[type[Model], str, list[str]] | None:
-    descriptor, instance, *_ = args
+def _deferred_get(self: DeferredAttribute, instance: Model | None, cls: type[Model] | None = None) -> Any:
     if instance is None:
-        return None
-    model, field = parse_reverse_field(descriptor.field)
-    return model, field, [to_key(instance)]
+        return self
+    data = instance.__dict__
+    attname = self.field.attname
+    if attname in data:
+        # Loaded fields only reach __get__ for ForeignKey attnames, or for every field
+        # while corpus mode makes DeferredAttribute a data descriptor.
+        if corpus.is_enabled() and signals.active():
+            signals.emit(signals.FIELD_TOUCH, type(instance), attname, [to_key(instance)])
+        return data[attname]
+    if not signals.active():
+        return _original_deferred_get(self, instance, cls)
+    with _setting(_in_descriptor_load, "deferred"):
+        return _original_deferred_get(self, instance, cls)
 
 
-ForwardManyToOneDescriptor.__get__ = signals.signalify(  # type: ignore[method-assign]
-    signals.TOUCH,
-    ForwardManyToOneDescriptor.__get__,
-    parser=parse_forward_many_to_one_get,
-)
+DeferredAttribute.__get__ = _deferred_get  # type: ignore[method-assign]
+
+_original_check_parent_chain = DeferredAttribute._check_parent_chain  # type: ignore[attr-defined]
 
 
-def parse_reverse_one_to_one_get(
-    args: Any,
-    kwargs: Any,
-    context: dict[str, Any],
-) -> tuple[type[Model], str, list[str]] | None:
-    descriptor, instance = args[:2]
-    if instance is None:
-        return None
-    model, field = parse_field(descriptor.related.field)
-    return model, field, [to_key(instance)]
+def _check_parent_chain(self: DeferredAttribute, instance: Model) -> Any:
+    value = _original_check_parent_chain(self, instance)
+    if value is None and signals.active():
+        # deferred=True so LazyListener skips the relation-only self.ignore set.
+        _send_lazy(_relation(instance, self.field.name), deferred=True)
+    return value
 
 
-ReverseOneToOneDescriptor.__get__ = signals.signalify(  # type: ignore[method-assign]
-    signals.TOUCH,
-    ReverseOneToOneDescriptor.__get__,
-    parser=parse_reverse_one_to_one_get,
-)
+DeferredAttribute._check_parent_chain = _check_parent_chain  # type: ignore[attr-defined]
 
 
-def parse_fetch_all(
-    args: Any,
-    kwargs: Any,
-    context: dict[str, Any],
-) -> tuple[type[Model], str, list[str]] | None:
-    self = args[0]
-    if hasattr(self, "_context"):
-        manager = self._context["args"][0]
-        instance = manager.instance
-        if manager.__class__.__name__ == "ManyRelatedManager":
-            return (
-                instance.__class__,
-                parse_manager_field(manager, self._context["rel"]),
-                [to_key(instance)],
-            )
-        if manager.__class__.__name__ == "GenericRelatedObjectManager":
-            return (
-                instance.__class__,
-                manager.prefetch_cache_name,
-                [to_key(instance)],
-            )
-        model, field = parse_related(self._context)
-        return model, field, [to_key(instance)]
-    return None
+class _PrefetchedList(list[Any]):
+    """A ``Prefetch(to_attr=...)`` result that reports reads as touches of its relation."""
+
+    __slots__ = ("_nplus1_relation",)
+
+    def __init__(self, values: list[Any], relation: Relation) -> None:
+        super().__init__(values)
+        self._nplus1_relation = relation
+
+    def __iter__(self) -> Iterator[Any]:
+        _send_touch(self._nplus1_relation)
+        return super().__iter__()
+
+    def __len__(self) -> int:
+        _send_touch(self._nplus1_relation)
+        return super().__len__()
+
+    def __getitem__(self, index: Any) -> Any:
+        _send_touch(self._nplus1_relation)
+        return super().__getitem__(index)
+
+    def __contains__(self, value: object) -> bool:
+        _send_touch(self._nplus1_relation)
+        return super().__contains__(value)
+
+    def __reversed__(self) -> Iterator[Any]:
+        _send_touch(self._nplus1_relation)
+        return super().__reversed__()
+
+    def __reduce__(self) -> tuple[type[list[Any]], tuple[list[Any]]]:
+        # Copies and pickles come back as plain lists.
+        return list, (list.copy(self),)
 
 
-def parse_manager_field(manager: Any, rel: Any) -> str:
-    if manager.reverse:
-        return rel.related_name or get_related_name(rel.related_model)
-    return rel.field.name or get_related_name(rel.model)
-
-
-def parse_load(
-    args: Any,
-    kwargs: Any,
-    context: dict[str, Any],
-    ret: Any,
-) -> list[str]:
-    return [to_key(row) for row in ret if isinstance(row, Model)]
-
-
-def is_single(low: int, high: int | None) -> bool:
-    return high is not None and high - low == 1
-
-
-# Patch _fetch_all to emit load/ignore_load and touch signals
-_original_fetch_all = query.QuerySet._fetch_all
-
-
-def _fetch_all(self: Any) -> None:
-    if self._prefetch_done:
-        signals.send(
-            signals.TOUCH,
-            args=(self,),
-            parser=parse_fetch_all,
-        )
-    sites = getattr(self.query, "_nplus1_select_sites", None)
-    token = _current_select_sites.set(sites) if sites is not None else None
-    try:
-        _original_fetch_all(self)
-    finally:
-        if token is not None:
-            _current_select_sites.reset(token)
-    signal = signals.IGNORE_LOAD if is_single(self.query.low_mark, self.query.high_mark) else signals.LOAD
-    signals.send(
-        signal,
-        args=(self,),
-        ret=self._result_cache,
-        parser=parse_load,
+def _send_prefetch(instances: Sequence[Model], lookup: Prefetch, level: int, site: CallSite | None) -> None:
+    to_attr, as_attr = lookup.get_current_to_attr(level)
+    if as_attr:
+        # Reads of a plain attribute can only be seen through the list stored there. A
+        # single related object can't be wrapped, so it isn't tracked.
+        wrapped = False
+        for instance in instances:
+            value = instance.__dict__.get(to_attr)
+            if type(value) is list:
+                instance.__dict__[to_attr] = _PrefetchedList(value, _relation(instance, to_attr))
+                wrapped = True
+        if not wrapped:
+            return
+    signals.emit(
+        signals.EAGER_LOAD,
+        type(instances[0]),
+        to_attr,
+        [to_key(instance) for instance in instances],
+        next(_group_seq),
+        site,
+        queryset_prefetch=_in_queryset_prefetch.get(),
+        prefetch_call=_prefetch_call_id.get(),
     )
-    if corpus.is_enabled() and self._result_cache:
-        from django.db.models import Model
-
-        from django_nplus1.fields import emit_field_loads
-
-        model_instances = [r for r in self._result_cache if isinstance(r, Model)]
-        if model_instances:
-            emit_field_loads(model_instances, get_caller())
 
 
-query.QuerySet._fetch_all = _fetch_all  # type: ignore[method-assign]
+_original_prefetch_one_level = query.prefetch_one_level
 
 
-# Patch RelatedPopulator.__init__ to capture args for eager load parsing
-_original_related_populator_init = query.RelatedPopulator.__init__
+def _prefetch_one_level(
+    instances: Sequence[Model],
+    prefetcher: Any,
+    lookup: Prefetch,
+    level: int,
+) -> tuple[list[Any], list[Prefetch]]:
+    if not signals.active():
+        return _original_prefetch_one_level(instances, prefetcher, lookup, level)
+    site = lookup.__dict__.get("_nplus1_site")
+    with _setting(_prefetch_site, site), signals.suppress(signals.LAZY_LOAD):
+        result = _original_prefetch_one_level(instances, prefetcher, lookup, level)
+    # Django 6.1 fetch modes prefetch on attribute access. That is a lazy load.
+    if _in_descriptor_load.get() is None:
+        _send_prefetch(instances, lookup, level, site)
+    return result
 
 
-def _related_populator_init(self: Any, *args: Any, **kwargs: Any) -> None:
-    _original_related_populator_init(self, *args, **kwargs)
-    self.__nplus1__ = {"args": args, "kwargs": kwargs}
+query.prefetch_one_level = _prefetch_one_level
 
-
-query.RelatedPopulator.__init__ = _related_populator_init  # type: ignore[method-assign]
-
-
-def parse_eager_select(
-    args: Any,
-    kwargs: Any,
-    context: dict[str, Any],
-) -> tuple[type[Model], str, list[str], int, tuple[str, int, str] | None]:
-    populator = args[0]
-    instance = args[2]
-    meta = populator.__nplus1__
-    klass_info, select, *_ = meta["args"]
-    field = klass_info["field"]
-    model, name = parse_field(field) if instance._meta.model != field.model else parse_reverse_field(field)
-    sites = _current_select_sites.get()
-    site = sites.get(name) if sites else None
-    return model, name, [to_key(instance)], id(select), site
-
-
-# Emit eager_load on populating from select_related
-query.RelatedPopulator.populate = signals.signalify(  # type: ignore[method-assign]
-    signals.EAGER_LOAD,
-    query.RelatedPopulator.populate,
-    parser=parse_eager_select,
-)
-
-
-def parse_eager_join(
-    args: Any,
-    kwargs: Any,
-    context: dict[str, Any],
-) -> tuple[type[Model], str, list[str], int, tuple[str, int, str] | None]:
-    instances, _descriptor, fetcher, level = args
-    model = instances[0].__class__
-    field, _ = fetcher.get_current_to_attr(level)
-    keys = [to_key(instance) for instance in instances]
-    site = getattr(fetcher, "_nplus1_site", None)
-    return model, field, keys, id(instances), site
-
-
-# Emit eager_load on populating from prefetch_related
-query.prefetch_one_level = signals.signalify(
-    signals.EAGER_LOAD,
-    query.prefetch_one_level,
-    parser=parse_eager_join,
-)
-
-
-# Mark prefetch calls so single-instance prefetches aren't flagged as N+1.
-# Both the queryset method and the standalone function need wrapping;
-# without it, prefetch_related_objects() with converging FK chains
-# (e.g. "store__region", "warehouse__region") produces false positives.
 _original_qs_prefetch_related_objects = query.QuerySet._prefetch_related_objects  # type: ignore[attr-defined]
 
 
-def _qs_prefetch_related_objects(self: Any) -> None:
-    token = _in_queryset_prefetch.set(True)
-    try:
+def _qs_prefetch_related_objects(self: query.QuerySet[Any]) -> None:
+    if not signals.active():
         _original_qs_prefetch_related_objects(self)
-    finally:
-        _in_queryset_prefetch.reset(token)
+        return
+    with _setting(_in_queryset_prefetch, True):
+        _original_qs_prefetch_related_objects(self)
 
 
 query.QuerySet._prefetch_related_objects = _qs_prefetch_related_objects  # type: ignore[attr-defined]
@@ -531,11 +474,12 @@ _original_prefetch_related_objects = query.prefetch_related_objects
 
 
 def _standalone_prefetch_related_objects(model_instances: Any, *related_lookups: Any) -> None:
-    token = _prefetch_call_id.set(next(_prefetch_call_seq))
-    try:
+    if not signals.active():
         _original_prefetch_related_objects(model_instances, *related_lookups)
-    finally:
-        _prefetch_call_id.reset(token)
+        return
+    # Django reads relations while it walks the lookups. Only the caller's reads are touches.
+    with _setting(_prefetch_call_id, next(_prefetch_call_seq)), signals.suppress(signals.TOUCH):
+        _original_prefetch_related_objects(model_instances, *related_lookups)
 
 
 # Patch both the defining module and the public re-export so that
@@ -556,123 +500,134 @@ def _replace_stale_prefetch_imports() -> None:
 
 _replace_stale_prefetch_imports()
 
-# Emit touch on indexing into prefetched QuerySet instances
-_original_getitem = query.QuerySet.__getitem__
+_original_populator_init = query.RelatedPopulator.__init__
 
 
-def _getitem_queryset(self: Any, index: Any) -> Any:
-    if self._prefetch_done:
-        signals.send(
-            signals.TOUCH,
-            args=(self,),
-            parser=parse_fetch_all,
-        )
-    return _original_getitem(self, index)
+def _populator_init(self: Any, klass_info: dict[str, Any], *args: Any, **kwargs: Any) -> None:
+    if not signals.active():
+        _original_populator_init(self, klass_info, *args, **kwargs)
+        return
+    field = klass_info["field"]
+    remote_setter = klass_info["remote_setter"]
+    if isinstance(remote_setter, functools.partial):
+        # A FilteredRelation row lands in a plain attribute, where reads can't be seen.
+        name, lookup = None, remote_setter.args[0]
+    elif klass_info["reverse"]:
+        name, lookup = field.remote_field.cache_name, field.related_query_name()
+    else:
+        name = lookup = field.name
+    parent = _populator_path.get()
+    path = f"{parent}__{lookup}" if parent else lookup
+    with _setting(_populator_path, path):
+        _original_populator_init(self, klass_info, *args, **kwargs)
+    self._nplus1 = (name, path, next(_group_seq), _current_select_sites.get())
 
 
-query.QuerySet.__getitem__ = _getitem_queryset  # type: ignore[method-assign]
+query.RelatedPopulator.__init__ = _populator_init  # type: ignore[method-assign]
 
 
-def parse_deferred_attribute(
-    args: Any,
-    kwargs: Any,
-    context: dict[str, Any],
-) -> tuple[type[Model], str, str]:
-    self_attr = args[0]  # the DeferredAttribute instance
-    instance = args[1]  # the model instance
-    return instance.__class__, to_key(instance), self_attr.field.name
+def _select_site(sites: dict[str, CallSite] | None, path: str) -> CallSite | None:
+    if not sites:
+        return None
+    if path in sites:
+        return sites[path]
+    # "user" is loaded as part of select_related("user__occupation").
+    prefix = f"{path}__"
+    return next((site for lookup, site in sites.items() if lookup.startswith(prefix)), None)
 
 
-# Patch DeferredAttribute._check_parent_chain to emit LAZY_LOAD
-_original_check_parent_chain = DeferredAttribute._check_parent_chain  # type: ignore[attr-defined]
+_original_populate = query.RelatedPopulator.populate
 
 
-def _check_parent_chain(self: Any, instance: Any) -> Any:
-    ret = _original_check_parent_chain(self, instance)
-    if ret is None:
-        # deferred=True so LazyListener skips the relation-only self.ignore set.
-        signals.send(
-            signals.LAZY_LOAD,
-            args=(self, instance),
-            kwargs={},
-            ret=ret,
-            context={"deferred": True},
-            parser=parse_deferred_attribute,
-        )
-    return ret
+def _populate(self: Any, row: Any, from_obj: Model) -> None:
+    _original_populate(self, row, from_obj)
+    state = self.__dict__.get("_nplus1")
+    if state is None or state[0] is None:
+        return
+    name, path, group, sites = state
+    site = _select_site(sites, path)
+    signals.emit(signals.EAGER_LOAD, type(from_obj), name, [to_key(from_obj)], group, site, select_related=True)
 
 
-DeferredAttribute._check_parent_chain = _check_parent_chain  # type: ignore[attr-defined]
+query.RelatedPopulator.populate = _populate  # type: ignore[method-assign]
 
-
-# Stash declaration-time call site on each Prefetch instance.
 _original_prefetch_init = Prefetch.__init__
 
 
-def _prefetch_init(self: Any, lookup: Any, queryset: Any = None, to_attr: Any = None) -> None:
-    _original_prefetch_init(self, lookup, queryset, to_attr)
+def _prefetch_init(self: Prefetch, *args: Any, **kwargs: Any) -> None:
+    _original_prefetch_init(self, *args, **kwargs)
     if corpus.is_enabled():
-        self._nplus1_site = get_caller()
+        self.__dict__["_nplus1_site"] = get_caller()
 
 
 Prefetch.__init__ = _prefetch_init  # type: ignore[method-assign]
 
-
 _original_prefetch_related = query.QuerySet.prefetch_related
 
 
-def _prefetch_related(self: Any, *lookups: Any) -> Any:
-    if lookups == (None,):
-        return _original_prefetch_related(self, None)
-    if not corpus.is_enabled():
+def _prefetch_related(self: query.QuerySet[Any], *lookups: Any) -> query.QuerySet[Any]:
+    if lookups == (None,) or not corpus.is_enabled():
         return _original_prefetch_related(self, *lookups)
     site = get_caller()
     normalized = []
     for lookup in lookups:
-        if isinstance(lookup, Prefetch):
-            if not getattr(lookup, "_nplus1_site", None):
-                lookup._nplus1_site = site  # type: ignore[attr-defined]
-            normalized.append(lookup)
-        else:
-            p = Prefetch(lookup)
-            normalized.append(p)
+        prefetch = lookup if isinstance(lookup, Prefetch) else Prefetch(lookup)
+        prefetch.__dict__.setdefault("_nplus1_site", site)
+        normalized.append(prefetch)
     return _original_prefetch_related(self, *normalized)
 
 
-query.QuerySet.prefetch_related = _prefetch_related  # type: ignore[method-assign]
-
+query.QuerySet.prefetch_related = _prefetch_related  # type: ignore[method-assign, assignment]
 
 _original_select_related = query.QuerySet.select_related
 
 
-def _select_related(self: Any, *fields: Any) -> Any:
-    if fields == (None,):
-        return _original_select_related(self, None)
-    qs = _original_select_related(self, *fields)
-    if fields and corpus.is_enabled():
-        site = get_caller()
-        existing = getattr(qs.query, "_nplus1_select_sites", None) or {}
-        # Copy so we don't mutate a parent Query's dict
-        new_sites = dict(existing)
-        for f in fields:
-            new_sites[f] = site
-        qs.query._nplus1_select_sites = new_sites
-    return qs
+def _select_related(self: query.QuerySet[Any], *fields: Any) -> query.QuerySet[Any]:
+    queryset = _original_select_related(self, *fields)
+    if fields and fields != (None,) and corpus.is_enabled():
+        # Copy so the parent queryset's Query keeps its own sites.
+        sites = dict(queryset.query.__dict__.get("_nplus1_select_sites") or {})
+        sites.update(dict.fromkeys(fields, get_caller()))
+        queryset.query.__dict__["_nplus1_select_sites"] = sites
+    return queryset
 
 
-query.QuerySet.select_related = _select_related  # type: ignore[method-assign]
-
+query.QuerySet.select_related = _select_related  # type: ignore[method-assign, assignment]
 
 _original_connect = BaseDatabaseWrapper.connect
 
 
 @functools.wraps(_original_connect)
-def _connect(self: Any, *args: Any, **kwargs: Any) -> Any:
-    token = _in_connection_setup.set(True)
-    try:
+def _connect(self: BaseDatabaseWrapper, *args: Any, **kwargs: Any) -> Any:
+    with _setting(_in_connection_setup, True):
         return _original_connect(self, *args, **kwargs)
-    finally:
-        _in_connection_setup.reset(token)
 
 
 BaseDatabaseWrapper.connect = _connect  # type: ignore[method-assign]
+
+
+def _dispatch_query(execute: Any, sql: Any, params: Any, many: bool, context: dict[str, Any]) -> Any:
+    result = execute(sql, params, many, context)
+    if not many and signals.active() and not _in_connection_setup.get():
+        signals.emit(signals.QUERY, sql, context)
+    return result
+
+
+def _add_query_hook(connection: BaseDatabaseWrapper) -> None:
+    # First in the list is outermost, and connection.execute_wrapper() pops the last.
+    if _dispatch_query not in connection.execute_wrappers:
+        connection.execute_wrappers.insert(0, _dispatch_query)
+
+
+_original_wrapper_init = BaseDatabaseWrapper.__init__
+
+
+@functools.wraps(_original_wrapper_init)
+def _wrapper_init(self: BaseDatabaseWrapper, *args: Any, **kwargs: Any) -> None:
+    _original_wrapper_init(self, *args, **kwargs)
+    _add_query_hook(self)
+
+
+BaseDatabaseWrapper.__init__ = _wrapper_init  # type: ignore[method-assign]
+for _connection in connections.all(initialized_only=True):
+    _add_query_hook(_connection)

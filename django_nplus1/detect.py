@@ -6,11 +6,26 @@ from collections import defaultdict
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
+from django.conf import settings
+
+from django_nplus1 import conf, signals
+from django_nplus1.util import get_caller, get_stack
+
 if TYPE_CHECKING:
-    from collections.abc import Generator, Sequence
+    from collections.abc import Callable, Generator, Sequence
+
+    from django_nplus1.scope import DetectionContext
+    from django_nplus1.util import CallSite
+
+
+def _model_classes(model: type) -> list[type]:
+    """Return the model and the models it inherits from: proxy targets, MTI parents, abstract bases."""
+    return [cls for cls in model.__mro__ if "_meta" in cls.__dict__] or [model]
 
 
 class Rule:
+    """One whitelist entry. Keys left out match anything, but at least one must be given."""
+
     def __init__(self, label: str | None = None, model: str | type | None = None, field: str | None = None) -> None:
         self.label = label
         self.model = model
@@ -21,101 +36,72 @@ class Rule:
             (self.label or self.model or self.field)
             and (self.label is None or self.label == label)
             and (self.model is None or self.match_model(model))
-            and (self.field is None or self.match_field(field)),
+            and (self.field is None or self.match_field(field, label)),
         )
 
-    def match_field(self, field: str) -> bool:
-        if self.field is None:
-            return True
-        return fnmatch.fnmatch(field, self.field)
+    def match_field(self, field: str, label: str) -> bool:
+        pattern = self.field or "*"
+        if label == DuplicateQueryMessage.label:
+            # Brackets in SQL (quoted identifiers, arrays) are literal, not character classes.
+            pattern = pattern.replace("[", "[[]")
+        return fnmatch.fnmatch(field, pattern)
 
     def match_model(self, model: type) -> bool:
-        if self.model is model:
+        return any(self.match_class(cls) for cls in _model_classes(model))
+
+    def match_class(self, cls: type) -> bool:
+        if self.model is cls:
             return True
         if not isinstance(self.model, str):
             return False
-        if fnmatch.fnmatch(model.__name__, self.model):
-            return True
-        meta = getattr(model, "_meta", None)
-        return meta is not None and fnmatch.fnmatch(f"{meta.app_label}.{model.__name__}", self.model)
+        meta = cls.__dict__.get("_meta")
+        return fnmatch.fnmatch(cls.__name__, self.model) or (
+            meta is not None and fnmatch.fnmatch(meta.label, self.model)
+        )
 
 
-_allow_rules: ContextVar[list[Rule]] = ContextVar("nplus1_allow_rules")
+_allow_rules: ContextVar[tuple[Rule, ...]] = ContextVar("nplus1_allow_rules", default=())
+
+_ALLOW_ALL = Rule(model="*")
 
 
 def is_allowed(message: Message) -> bool:
-    """Check if a message is suppressed by nplus1_allow rules."""
-    try:
-        rules = _allow_rules.get()
-    except LookupError:
-        return False
-    return message.match(rules) if rules else False
+    """Check if a message is suppressed by an enclosing ``nplus1_allow()``."""
+    return message.match(_allow_rules.get())
 
 
 _INLINE_IGNORE_RE = re.compile(r"#\s*nplus1:\s*ignore(?:\[([^\]]*)\])?")
 
 
-def _caller_ignores(caller: tuple[str, int, str], label: str) -> bool:
+def _caller_ignores(caller: CallSite, label: str) -> bool:
     filename, lineno, _ = caller
-    line = linecache.getline(filename, lineno)
-    if not line:
-        return False
-    match = _INLINE_IGNORE_RE.search(line)
+    match = _INLINE_IGNORE_RE.search(linecache.getline(filename, lineno))
     if not match:
         return False
     labels = match.group(1)
-    if not labels:
-        return True
-    return label in {s.strip() for s in labels.split(",")}
+    return not labels or label in {part.strip() for part in labels.split(",")}
 
 
 def is_inline_ignored(message: Message) -> bool:
-    """Check if a detection is suppressed by an inline ``# nplus1: ignore`` comment.
+    """Check for ``# nplus1: ignore`` or ``# nplus1: ignore[label, ...]`` at the detection's call site.
 
-    Recognizes ``# nplus1: ignore`` (any label) and ``# nplus1: ignore[label, ...]``
-    (scoped to the listed labels, e.g. ``n_plus_one``, ``get_in_loop``,
-    ``duplicate_query``).
-
-    Does not apply to messages without caller info (e.g. ``EagerLoadMessage``
-    from unused ``select_related`` / ``prefetch_related``, which is detected at
-    teardown without a specific call site).
+    With ``NPLUS1_SHOW_ALL_CALLERS`` a detection is ignored only when every call site ignores it.
     """
     if message.caller:
         return _caller_ignores(message.caller, message.label)
-    if message.callers:
-        return any(_caller_ignores(stack[0], message.label) for stack in message.callers if stack)
-    return False
+    sites = [stack[0] for stack in message.callers or () if stack]
+    return bool(sites) and all(_caller_ignores(site, message.label) for site in sites)
 
 
 @contextlib.contextmanager
-def nplus1_allow(whitelist: list[dict[str, Any]] | None = None) -> Generator[None]:
-    """Context manager to suppress N+1 detection for specific model/field combinations.
+def nplus1_allow(whitelist: Sequence[dict[str, Any]] | None = None) -> Generator[None]:
+    """Suppress detections inside the block.
 
-    With no arguments, suppresses all detections. With a whitelist, suppresses only
-    matching detections. Uses the same format as ``Profiler(whitelist=...)`` and
-    ``@pytest.mark.nplus1(whitelist=...)``.
-
-    Usage::
-
-        # Suppress all detections
-        with nplus1_allow():
-            ...
-
-        # Suppress specific model/field
-        with nplus1_allow([{"model": "User", "field": "hobbies"}]):
-            ...
-
-        # Suppress all fields on a model (supports fnmatch wildcards)
-        with nplus1_allow([{"model": "User"}]):
-            ...
+    Without an argument every detection is suppressed, otherwise only those matching a
+    whitelist entry. Entries use the same format as ``Profiler(whitelist=...)``.
     """
-    rules = [Rule(**item) for item in whitelist] if whitelist else [Rule(model="*", field="*")]
-
-    try:
-        current = _allow_rules.get()
-    except LookupError:
-        current = []
-    token = _allow_rules.set([*current, *rules])
+    rules = [_ALLOW_ALL] if whitelist is None else [Rule(**item) for item in whitelist]
+    token = _allow_rules.set((*_allow_rules.get(), *rules))
     try:
         yield
     finally:
@@ -130,8 +116,8 @@ class Message:
         self,
         model: type,
         field: str,
-        caller: tuple[str, int, str] | None = None,
-        callers: list[list[tuple[str, int, str]]] | None = None,
+        caller: CallSite | None = None,
+        callers: list[list[CallSite]] | None = None,
     ) -> None:
         self.model = model
         self.field = field
@@ -140,17 +126,12 @@ class Message:
 
     @property
     def message(self) -> str:
-        base = self.formatter.format(
-            label=self.label,
-            model=self.model.__name__,
-            field=self.field,
-        )
+        base = self.formatter.format(label=self.label, model=self.model.__name__, field=self.field)
         if self.callers:
             parts = [base, " with calls:"]
             for i, stack in enumerate(self.callers, 1):
                 parts.append(f"\nCALL {i}:")
-                for fn, lineno, funcname in stack:
-                    parts.append(f"\n  {fn}:{lineno} in {funcname}")
+                parts.extend(f"\n  {filename}:{lineno} in {funcname}" for filename, lineno, funcname in stack)
             return "".join(parts)
         if self.caller:
             filename, lineno, funcname = self.caller
@@ -171,254 +152,9 @@ class EagerLoadMessage(Message):
     formatter = "Potential unnecessary eager load detected on `{model}.{field}`"
 
 
-class FieldLoadMessage(Message):
-    label = "unused_field_load"
-    formatter = "Potential unused field load on `{model}.{field}`. Consider `.only()` or `.defer()`."
-
-
 class GetLoopMessage(Message):
     label = "get_in_loop"
     formatter = "Potential n+1 query detected on `{model}.{field}`"
-
-
-class Listener:
-    def __init__(self, parent: Any) -> None:
-        self.parent = parent
-
-    def setup(self) -> None:
-        pass
-
-    def teardown(self) -> None:
-        pass
-
-
-class LazyListener(Listener):
-    loaded: set[str]
-    ignore: set[str]
-    counts: defaultdict[tuple[type, str], int]
-    last_call_id: dict[tuple[type, str], int | None]
-    show_all_callers: bool
-    call_stacks: defaultdict[tuple[type, str], list[list[tuple[str, int, str]]]]
-
-    def setup(self) -> None:
-        from django.conf import settings
-
-        from django_nplus1 import signals
-
-        self.loaded = set()
-        self.ignore = set()
-        self.counts = defaultdict(int)
-        self.last_call_id: dict[tuple[type, str], int | None] = {}
-        self.threshold = getattr(settings, "NPLUS1_THRESHOLD", 2)
-        self.show_all_callers = getattr(settings, "NPLUS1_SHOW_ALL_CALLERS", False)
-        self.call_stacks = defaultdict(list)
-        signals.connect(signals.LOAD, self.handle_load)
-        signals.connect(signals.IGNORE_LOAD, self.handle_ignore)
-        signals.connect(signals.LAZY_LOAD, self.handle_lazy)
-        signals.connect(signals.EAGER_LOAD, self.handle_eager)
-
-    def teardown(self) -> None:
-        from django_nplus1 import signals
-
-        signals.disconnect(signals.LOAD, self.handle_load)
-        signals.disconnect(signals.IGNORE_LOAD, self.handle_ignore)
-        signals.disconnect(signals.LAZY_LOAD, self.handle_lazy)
-        signals.disconnect(signals.EAGER_LOAD, self.handle_eager)
-
-    def handle_load(
-        self,
-        args: tuple[Any, ...] | None = None,
-        kwargs: dict[str, Any] | None = None,
-        context: dict[str, Any] | None = None,
-        ret: Any = None,
-        parser: Any = None,
-    ) -> None:
-        instances = parser(args, kwargs, context, ret)
-        self.loaded.update(instances)
-
-    def handle_ignore(
-        self,
-        args: tuple[Any, ...] | None = None,
-        kwargs: dict[str, Any] | None = None,
-        context: dict[str, Any] | None = None,
-        ret: Any = None,
-        parser: Any = None,
-    ) -> None:
-        instances = parser(args, kwargs, context, ret)
-        self.ignore.update(instances)
-
-    def handle_lazy(
-        self,
-        args: tuple[Any, ...] | None = None,
-        kwargs: dict[str, Any] | None = None,
-        context: dict[str, Any] | None = None,
-        ret: Any = None,
-        parser: Any = None,
-    ) -> None:
-        model, instance, field = parser(args, kwargs, context)
-        # self.ignore suppresses the relation-miss path only. A singleton
-        # fetch says nothing about whether a deferred field was loaded.
-        deferred = bool(context and context.get("deferred"))
-        if instance in self.loaded and (deferred or instance not in self.ignore):
-            key = (model, field)
-            self.counts[key] += 1
-            if self.show_all_callers:
-                from django_nplus1.util import get_stack
-
-                self.call_stacks[key].append(get_stack())
-            if self.counts[key] == self.threshold:
-                if self.show_all_callers:
-                    message = LazyLoadMessage(model, field, callers=self.call_stacks[key])
-                else:
-                    from django_nplus1.util import get_caller
-
-                    caller = get_caller()
-                    message = LazyLoadMessage(model, field, caller=caller)
-                self.parent.notify(message)
-
-    def handle_eager(
-        self,
-        args: tuple[Any, ...] | None = None,
-        kwargs: dict[str, Any] | None = None,
-        context: dict[str, Any] | None = None,
-        ret: Any = None,
-        parser: Any = None,
-    ) -> None:
-        # When a single bulk-loaded instance triggers an eager load (e.g.
-        # select_related on one item from a queryset), this is semantically
-        # an N+1 pattern, not an unused eager load. We use LazyLoadMessage
-        # with label "n_plus_one" intentionally.
-        from django_nplus1.patch import _in_queryset_prefetch, _prefetch_call_id
-
-        if _in_queryset_prefetch.get():
-            return
-        model, field, keys, _key, _site = parser(args, kwargs, context)
-        if len(keys) == 1 and keys[0] in self.loaded and keys[0] not in self.ignore:
-            key = (model, field)
-            call_id = _prefetch_call_id.get()
-            if call_id is not None and self.last_call_id.get(key) == call_id:
-                return  # same prefetch_related_objects() call, not N+1
-            self.last_call_id[key] = call_id
-            self.counts[key] += 1
-            if self.show_all_callers:
-                from django_nplus1.util import get_stack
-
-                self.call_stacks[key].append(get_stack())
-            if self.counts[key] == self.threshold:
-                if self.show_all_callers:
-                    message = LazyLoadMessage(model, field, callers=self.call_stacks[key])
-                else:
-                    from django_nplus1.util import get_caller
-
-                    caller = get_caller()
-                    message = LazyLoadMessage(model, field, caller=caller)
-                self.parent.notify(message)
-
-
-class EagerListener(Listener):
-    tracker: EagerTracker
-    touched: list[tuple[type, str, list[str]]]
-
-    def setup(self) -> None:
-        from django_nplus1 import signals
-
-        self.tracker = EagerTracker()
-        self.touched = []
-        signals.connect(signals.EAGER_LOAD, self.handle_eager)
-        signals.connect(signals.TOUCH, self.handle_touch)
-
-    def teardown(self) -> None:
-        from django_nplus1 import signals
-
-        signals.disconnect(signals.EAGER_LOAD, self.handle_eager)
-        signals.disconnect(signals.TOUCH, self.handle_touch)
-        self.log_eager()
-
-    def handle_eager(
-        self,
-        args: tuple[Any, ...] | None = None,
-        kwargs: dict[str, Any] | None = None,
-        context: dict[str, Any] | None = None,
-        ret: Any = None,
-        parser: Any = None,
-    ) -> None:
-        model, field, instances, key, _site = parser(args, kwargs, context)
-        self.tracker.track(model, field, instances, key)
-
-    def handle_touch(
-        self,
-        args: tuple[Any, ...] | None = None,
-        kwargs: dict[str, Any] | None = None,
-        context: dict[str, Any] | None = None,
-        ret: Any = None,
-        parser: Any = None,
-    ) -> None:
-        parsed = parser(args, kwargs, context)
-        if parsed is None:
-            return
-        self.touched.append(parsed)
-
-    def log_eager(self) -> None:
-        self.tracker.prune(self.touched)
-        for model, field in self.tracker.unused:
-            message = EagerLoadMessage(model, field)
-            self.parent.notify(message)
-
-
-class EagerTracker:
-    def __init__(self) -> None:
-        self.data: defaultdict[tuple[type, str], defaultdict[int, set[str]]] = defaultdict(
-            lambda: defaultdict(set),
-        )
-
-    def track(self, model: type, field: str, instances: list[str], key: int) -> None:
-        self.data[(model, field)][key].update(instances)
-
-    def prune(self, touched: list[tuple[type, str, list[str]]]) -> None:
-        for model, field, touch_instances in touched:
-            group = self.data[(model, field)]
-            for key, fetch_instances in list(group.items()):
-                if touch_instances and fetch_instances.intersection(touch_instances):
-                    group.pop(key, None)
-
-    @property
-    def unused(self) -> list[tuple[type, str]]:
-        return [(model, field) for (model, field), group in self.data.items() if group]
-
-
-class GetLoopListener(Listener):
-    """Detects Model.objects.get() called repeatedly from the same call-site."""
-
-    counts: defaultdict[tuple[Any, ...], int]
-
-    def setup(self) -> None:
-        from django.conf import settings
-
-        from django_nplus1 import signals
-
-        self.counts = defaultdict(int)
-        self.threshold = getattr(settings, "NPLUS1_GET_THRESHOLD", 2)
-        signals.connect(signals.GET_CALL, self.handle_get)
-
-    def teardown(self) -> None:
-        from django_nplus1 import signals
-
-        signals.disconnect(signals.GET_CALL, self.handle_get)
-
-    def handle_get(
-        self,
-        args: tuple[Any, ...] | None = None,
-        kwargs: dict[str, Any] | None = None,
-        context: dict[str, Any] | None = None,
-        ret: Any = None,
-        parser: Any = None,
-    ) -> None:
-        model, caller = parser(args, kwargs, context, ret)
-        key = (model, *caller)
-        self.counts[key] += 1
-        if self.counts[key] == self.threshold:
-            message = GetLoopMessage(model, "get()", caller=caller)
-            self.parent.notify(message)
 
 
 class DuplicateQueryMessage(Message):
@@ -426,11 +162,180 @@ class DuplicateQueryMessage(Message):
     formatter = "Potential n+1 query detected: duplicate query `{field}`"
 
 
+class Listener:
+    def __init__(self, parent: DetectionContext) -> None:
+        self.parent = parent
+
+    def handlers(self) -> dict[str, Callable[..., None]]:
+        return {}
+
+    def setup(self) -> None:
+        for signal_name, handler in self.handlers().items():
+            signals.connect(signal_name, handler)
+
+    def teardown(self) -> None:
+        for signal_name, handler in self.handlers().items():
+            signals.disconnect(signal_name, handler)
+
+
+class LazyListener(Listener):
+    """Reports a relation or deferred field loaded one row at a time from a multi-row result."""
+
+    def setup(self) -> None:
+        self.threshold = conf.threshold(settings, "NPLUS1_THRESHOLD")
+        self.show_all_callers = bool(getattr(settings, "NPLUS1_SHOW_ALL_CALLERS", False))
+        self.loaded: set[str] = set()
+        self.ignore: set[str] = set()
+        self.counts: defaultdict[tuple[type, str], int] = defaultdict(int)
+        self.stacks: defaultdict[tuple[type, str], list[list[CallSite]]] = defaultdict(list)
+        self.reported: set[tuple[type, str]] = set()
+        self.prefetch_calls: dict[tuple[type, str], int | None] = {}
+        super().setup()
+
+    def handlers(self) -> dict[str, Callable[..., None]]:
+        return {
+            signals.LOAD: self.handle_load,
+            signals.IGNORE_LOAD: self.handle_ignore,
+            signals.LAZY_LOAD: self.handle_lazy,
+            signals.EAGER_LOAD: self.handle_eager,
+        }
+
+    def handle_load(self, args: Any, kwargs: Any, context: Any, ret: Any, parser: Any) -> None:
+        self.loaded.update(parser(args, kwargs, context, ret))
+
+    def handle_ignore(self, args: Any, kwargs: Any, context: Any, ret: Any, parser: Any) -> None:
+        self.ignore.update(parser(args, kwargs, context, ret))
+
+    def handle_lazy(self, args: Any, kwargs: Any, context: Any, ret: Any, parser: Any) -> None:
+        model, key, field = parser(args, kwargs, context)
+        # self.ignore only covers relations. A row fetched on its own still loads each
+        # deferred field in a query of its own.
+        if key in self.loaded and (context.get("deferred") or key not in self.ignore):
+            self.hit(model, field)
+
+    def handle_eager(self, args: Any, kwargs: Any, context: Any, ret: Any, parser: Any) -> None:
+        # Prefetching for one row of a larger result, once per loop pass, is an N+1 too.
+        if context.get("select_related") or context.get("queryset_prefetch"):
+            return
+        model, field, keys, _group, _site = parser(args, kwargs, context)
+        if len(keys) != 1 or keys[0] not in self.loaded or keys[0] in self.ignore:
+            return
+        call = context.get("prefetch_call")
+        if call is not None and self.prefetch_calls.get((model, field)) == call:
+            return
+        self.prefetch_calls[(model, field)] = call
+        self.hit(model, field)
+
+    def hit(self, model: type, field: str) -> None:
+        key = (model, field)
+        if key in self.reported:
+            return
+        # Rules need no call site, so check them before walking the stack.
+        message = LazyLoadMessage(model, field)
+        if self.parent.suppresses(message):
+            return
+        message.caller = get_caller()
+        if is_inline_ignored(message):
+            return
+        self.counts[key] += 1
+        if self.show_all_callers:
+            self.stacks[key].append(get_stack())
+        if self.counts[key] < self.threshold:
+            return
+        self.reported.add(key)
+        if self.show_all_callers:
+            message = LazyLoadMessage(model, field, callers=self.stacks.pop(key))
+        self.parent.notify(message)
+
+
+class EagerListener(Listener):
+    """Reports eager loads whose rows never had the relation read before the scope ended."""
+
+    def setup(self) -> None:
+        # (model, field) -> group -> (row keys, declaration site). A read of any row
+        # of a group uses the group.
+        self.groups: defaultdict[tuple[type, str], dict[int, tuple[set[str], CallSite | None]]] = defaultdict(dict)
+        self.allowed: set[int] = set()
+        super().setup()
+
+    def handlers(self) -> dict[str, Callable[..., None]]:
+        return {signals.EAGER_LOAD: self.handle_eager, signals.TOUCH: self.handle_touch}
+
+    def teardown(self) -> None:
+        super().teardown()
+        for (model, field), groups in self.groups.items():
+            if groups:
+                _keys, site = next(iter(groups.values()))
+                self.parent.notify(EagerLoadMessage(model, field, caller=site))
+
+    def handle_eager(self, args: Any, kwargs: Any, context: Any, ret: Any, parser: Any) -> None:
+        model, field, keys, group, site = parser(args, kwargs, context)
+        if group in self.allowed:
+            return
+        groups = self.groups[(model, field)]
+        entry = groups.get(group)
+        if entry is not None:
+            entry[0].update(keys)
+        elif is_allowed(EagerLoadMessage(model, field)):
+            self.allowed.add(group)
+        else:
+            groups[group] = (set(keys), site)
+
+    def handle_touch(self, args: Any, kwargs: Any, context: Any, ret: Any, parser: Any) -> None:
+        model, field, keys = parser(args, kwargs, context)
+        groups = self.groups.get((model, field))
+        if not groups:
+            return
+        for group, (loaded, _site) in list(groups.items()):
+            if not loaded.isdisjoint(keys):
+                del groups[group]
+
+
+class GetLoopListener(Listener):
+    """Reports ``Model.objects.get()`` called repeatedly from the same line."""
+
+    def setup(self) -> None:
+        self.threshold = conf.threshold(settings, "NPLUS1_GET_THRESHOLD")
+        self.counts: defaultdict[tuple[Any, ...], int] = defaultdict(int)
+        self.reported: set[tuple[Any, ...]] = set()
+        super().setup()
+
+    def handlers(self) -> dict[str, Callable[..., None]]:
+        return {signals.GET_CALL: self.handle_get}
+
+    def handle_get(self, args: Any, kwargs: Any, context: Any, ret: Any, parser: Any) -> None:
+        model, caller = parser(args, kwargs, context, ret)
+        key = (model, *caller)
+        if key in self.reported:
+            return
+        message = GetLoopMessage(model, "get()", caller=caller)
+        if self.parent.suppresses(message):
+            return
+        self.counts[key] += 1
+        if self.counts[key] >= self.threshold:
+            self.reported.add(key)
+            self.parent.notify(message)
+
+
 class _SQL:
-    pass
+    """Stands in for the model of a duplicate query."""
 
 
 _SQL_LITERAL_RE = re.compile(r"'(?:[^']|'')*'|\b\d+\b")
+
+_SHORT_SQL_LENGTH = 120
+
+
+def _sql_text(sql: Any, context: dict[str, Any]) -> str:
+    if isinstance(sql, str):
+        return sql
+    if isinstance(sql, bytes):
+        return sql.decode(errors="replace")
+    try:
+        # psycopg's sql.Composed renders against the cursor's connection.
+        return sql.as_string(context["cursor"].cursor)
+    except Exception:  # noqa: BLE001
+        return str(sql)
 
 
 def _fingerprint_sql(sql: str) -> str:
@@ -438,58 +343,48 @@ def _fingerprint_sql(sql: str) -> str:
     return " ".join(_SQL_LITERAL_RE.sub("?", sql).split())
 
 
+def _shorten(sql: str) -> str:
+    if len(sql) <= _SHORT_SQL_LENGTH:
+        return sql
+    return sql[: _SHORT_SQL_LENGTH - 3] + "..."
+
+
 class DuplicateQueryListener(Listener):
-    """Detects repeated identical SQL queries (N+1 fallback for raw SQL).
-
-    Uses Django's connection.execute_wrapper to intercept all queries,
-    fingerprints them by normalizing literals, and counts occurrences
-    from the same call-site. This catches N+1 patterns from raw SQL,
-    .raw(), and any ORM path not covered by the descriptor-level detection.
-    """
-
-    def __init__(self, parent: Any) -> None:
-        super().__init__(parent)
-        self.enabled = False
-        self.counts: defaultdict[tuple[str, str, int, str], int] = defaultdict(int)
-        self._wrapper_cm: Any = None
+    """Reports the same SQL run repeatedly from the same line, which also covers ``.raw()`` and cursor SQL."""
 
     def setup(self) -> None:
-        from django.conf import settings
-        from django.db import connection
-
-        self.enabled = getattr(settings, "NPLUS1_DETECT_DUPLICATE_QUERIES", False)
+        self.enabled = bool(getattr(settings, "NPLUS1_DETECT_DUPLICATE_QUERIES", False))
         if not self.enabled:
             return
-        self.counts = defaultdict(int)
-        self.threshold = getattr(settings, "NPLUS1_DUPLICATE_QUERY_THRESHOLD", 2)
-        self._wrapper_cm = connection.execute_wrapper(self._wrapper)
-        self._wrapper_cm.__enter__()
+        self.threshold = conf.threshold(settings, "NPLUS1_DUPLICATE_QUERY_THRESHOLD")
+        self.counts: defaultdict[tuple[str, str, int, str], int] = defaultdict(int)
+        self.reported: set[tuple[str, str, int, str]] = set()
+        super().setup()
 
     def teardown(self) -> None:
-        if not self.enabled or self._wrapper_cm is None:
-            return
-        self._wrapper_cm.__exit__(None, None, None)
-        self._wrapper_cm = None
+        if self.enabled:
+            super().teardown()
 
-    def _wrapper(self, execute: Any, sql: str, params: Any, many: bool, context: Any) -> Any:
-        from django_nplus1.patch import _in_connection_setup
-        from django_nplus1.util import get_caller
+    def handlers(self) -> dict[str, Callable[..., None]]:
+        return {signals.QUERY: self.handle_query}
 
-        result = execute(sql, params, many, context)
-        if many or _in_connection_setup.get():
-            return result
+    def handle_query(self, args: Any, kwargs: Any, context: Any, ret: Any, parser: Any) -> None:
+        sql, query_context = parser(args, kwargs, context)
         # Without a project frame there is no call site to count per.
         caller = get_caller()
         if caller is None:
-            return result
-        fingerprint = _fingerprint_sql(sql)
+            return
+        fingerprint = _fingerprint_sql(_sql_text(sql, query_context))
         key = (fingerprint, *caller)
+        if key in self.reported:
+            return
+        message = DuplicateQueryMessage(_SQL, _shorten(fingerprint), caller=caller)
+        if self.parent.suppresses(message):
+            return
         self.counts[key] += 1
-        if self.counts[key] == self.threshold:
-            short_sql = fingerprint[:120] + ("..." if len(fingerprint) > 120 else "")
-            message = DuplicateQueryMessage(_SQL, short_sql, caller=caller)
+        if self.counts[key] >= self.threshold:
+            self.reported.add(key)
             self.parent.notify(message)
-        return result
 
 
 LISTENERS: dict[str, type[Listener]] = {

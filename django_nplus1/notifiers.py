@@ -1,30 +1,32 @@
-import logging
 import warnings
 from typing import TYPE_CHECKING, Any
 
-from django_nplus1.exceptions import NPlus1Error
+from django_nplus1 import conf
 
 if TYPE_CHECKING:
     from django_nplus1.detect import Message
 
-_SENTINEL = object()
-
 
 class Notifier:
-    CONFIG_KEY: str | None = None
-    ENABLED_DEFAULT: bool = False
+    CONFIG_KEY: str
+    ENABLED_DEFAULT = False
+
+    def __init__(self, config: Any) -> None:
+        pass
+
+    # Notifiers built from the same settings are equal, so nested scopes report once.
+    def __eq__(self, other: object) -> bool:
+        return type(other) is type(self) and vars(other) == vars(self)
+
+    def __hash__(self) -> int:
+        return hash(type(self))
 
     @classmethod
     def is_enabled(cls, config: Any) -> bool:
-        if cls.CONFIG_KEY is None:
-            return cls.ENABLED_DEFAULT
-        value = getattr(config, cls.CONFIG_KEY, _SENTINEL)
-        if value is _SENTINEL:
-            return cls.ENABLED_DEFAULT
-        return bool(value)
+        return bool(getattr(config, cls.CONFIG_KEY, cls.ENABLED_DEFAULT))
 
     def notify(self, message: Message) -> None:
-        pass
+        raise NotImplementedError
 
 
 class LogNotifier(Notifier):
@@ -32,8 +34,8 @@ class LogNotifier(Notifier):
     ENABLED_DEFAULT = True
 
     def __init__(self, config: Any) -> None:
-        self.logger: logging.Logger = getattr(config, "NPLUS1_LOGGER", logging.getLogger("django_nplus1"))
-        self.level: int = getattr(config, "NPLUS1_LOG_LEVEL", logging.WARNING)
+        self.logger = conf.logger(config)
+        self.level = conf.log_level(config)
 
     def notify(self, message: Message) -> None:
         self.logger.log(self.level, message.message)
@@ -41,44 +43,30 @@ class LogNotifier(Notifier):
 
 class WarningNotifier(Notifier):
     CONFIG_KEY = "NPLUS1_WARN"
-    ENABLED_DEFAULT = False
-
-    def __init__(self, config: Any) -> None:
-        pass
 
     def notify(self, message: Message) -> None:
+        # The warning points at the line that triggered the detection.
         if message.caller:
             filename, lineno, _ = message.caller
-            warnings.warn_explicit(
-                message.message,
-                UserWarning,
-                filename=filename,
-                lineno=lineno,
-            )
+        elif message.callers and message.callers[-1]:
+            filename, lineno, _ = message.callers[-1][0]
         else:
-            # No caller info available (e.g. EagerLoadMessage at teardown).
-            # Use warn_explicit with our own package as source rather than
-            # a misleading stacklevel that points to internal dispatch code.
-            warnings.warn_explicit(
-                message.message,
-                UserWarning,
-                filename="django_nplus1",
-                lineno=0,
-            )
+            filename, lineno = "django_nplus1", 0
+        warnings.warn_explicit(message.message, UserWarning, filename=filename, lineno=lineno)
 
 
 class ErrorNotifier(Notifier):
     CONFIG_KEY = "NPLUS1_RAISE"
-    ENABLED_DEFAULT = False
 
     def __init__(self, config: Any) -> None:
-        self.error: type[Exception] = getattr(config, "NPLUS1_ERROR", NPlus1Error)
+        self.error = conf.error_class(config)
 
     def notify(self, message: Message) -> None:
         raise self.error(message.message)
 
 
 def init(config: Any) -> list[Notifier]:
+    """Build the notifiers that the ``NPLUS1_LOG``, ``NPLUS1_WARN`` and ``NPLUS1_RAISE`` settings enable."""
     return [
         notifier_cls(config)
         for notifier_cls in (LogNotifier, WarningNotifier, ErrorNotifier)

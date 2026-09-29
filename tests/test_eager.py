@@ -1,97 +1,180 @@
 import pytest
+from django.db.models import FilteredRelation, Prefetch, Q
+from testapp.models import Child, Node, Pet, PetProxy, Tag, User
 
-from django_nplus1 import signals
-from django_nplus1.detect import EagerListener
-from django_nplus1.signals import _listeners, setup_context, teardown_context
+from django_nplus1 import DetectionContext, Profiler
 
-
-@pytest.mark.django_db
-class TestSelectRelated:
-    def test_select_one_to_one_unused(self, objects, client, logger):
-        client.get("/select_one_to_one_unused/")
-        assert len(logger.log.call_args_list) == 1
-        args = logger.log.call_args[0]
-        assert "User.occupation" in args[1]
-
-    def test_select_many_to_one_unused(self, objects, client, logger):
-        client.get("/select_many_to_one_unused/")
-        assert len(logger.log.call_args_list) == 1
-        args = logger.log.call_args[0]
-        assert "Pet.user" in args[1]
-
-    def test_select_nested(self, objects, client, logger):
-        client.get("/select_nested/")
-        assert not logger.log.called
-
-    def test_select_nested_unused(self, objects, client, logger):
-        client.get("/select_nested_unused/")
-        assert len(logger.log.call_args_list) == 2
-        calls = [call[0] for call in logger.log.call_args_list]
-        assert any("Pet.user" in call[1] for call in calls)
-        assert any("User.occupation" in call[1] for call in calls)
+pytestmark = pytest.mark.django_db
 
 
-@pytest.mark.django_db
-class TestPrefetchRelated:
-    def test_prefetch_one_to_one_unused(self, objects, client, logger):
-        client.get("/prefetch_one_to_one_unused/")
-        assert len(logger.log.call_args_list) == 1
-        args = logger.log.call_args[0]
-        assert "User.occupation" in args[1]
-
-    def test_prefetch_many_to_many_unused(self, objects, client, logger):
-        client.get("/prefetch_many_to_many_unused/")
-        assert len(logger.log.call_args_list) == 1
-        args = logger.log.call_args[0]
-        assert "User.hobbies" in args[1]
-
-    def test_prefetch_nested(self, objects, client, logger):
-        client.get("/prefetch_nested/")
-        assert not logger.log.called
-
-    def test_prefetch_nested_unused(self, objects, client, logger):
-        client.get("/prefetch_nested_unused/")
-        assert len(logger.log.call_args_list) == 2
-        calls = [call[0] for call in logger.log.call_args_list]
-        assert any("Pet.user" in call[1] for call in calls)
-        assert any("User.occupation" in call[1] for call in calls)
-
-    def test_prefetch_generic_relation(self, objects, client, logger):
-        client.get("/prefetch_generic_relation/")
-        assert not logger.log.called
-
-    def test_prefetch_generic_relation_unused(self, objects, client, logger):
-        client.get("/prefetch_generic_relation_unused/")
-        assert len(logger.log.call_args_list) == 1
-        args = logger.log.call_args[0]
-        assert "User.tags" in args[1]
+def with_hobby_list():
+    return User.objects.prefetch_related(Prefetch("hobbies", to_attr="hobby_list"))
 
 
-class TestEagerListenerCleanup:
-    def test_nested_unused_not_duplicated(self, objects, client, logger):
-        """Multiple eager loads in one request should report each unused field exactly once."""
-        client.get("/select_nested_unused/")
-        messages = [call[0][1] for call in logger.log.call_args_list]
-        assert sum(1 for m in messages if "Pet.user" in m) == 1
-        assert sum(1 for m in messages if "User.occupation" in m) == 1
+@pytest.mark.parametrize(
+    ("queryset", "expected"),
+    [
+        pytest.param(lambda: Pet.objects.select_related("user"), ["Pet.user"], id="select-fk"),
+        pytest.param(lambda: User.objects.select_related("occupation"), ["User.occupation"], id="select-reverse-o2o"),
+        pytest.param(
+            lambda: Pet.objects.select_related("user__occupation"),
+            ["Pet.user", "User.occupation"],
+            id="select-nested",
+        ),
+        pytest.param(lambda: User.objects.prefetch_related("hobbies"), ["User.hobbies"], id="prefetch-m2m"),
+        pytest.param(lambda: User.objects.prefetch_related("occupation"), ["User.occupation"], id="prefetch-o2o"),
+        pytest.param(
+            lambda: Pet.objects.prefetch_related("user__occupation"),
+            ["Pet.user", "User.occupation"],
+            id="prefetch-nested",
+        ),
+        pytest.param(lambda: User.objects.prefetch_related("tags"), ["User.tags"], id="generic-relation"),
+        pytest.param(with_hobby_list, ["User.hobby_list"], id="to-attr"),
+        pytest.param(lambda: Tag.objects.prefetch_related("content_object"), ["Tag.content_object"], id="generic-fk"),
+    ],
+)
+def test_unused_eager_load_is_detected(objects, detected, queryset, expected):
+    with DetectionContext():
+        list(queryset())
+    assert sorted((m.label, f"{m.model.__name__}.{m.field}") for m in detected) == [
+        ("unused_eager_load", name) for name in expected
+    ]
 
-    def test_no_stale_handlers_after_teardown(self):
-        """After teardown, all signal handlers registered by EagerListener must be removed."""
 
-        token = setup_context()
+def read_selected_user():
+    for pet in Pet.objects.select_related("user"):
+        pet.user
 
-        class FakeParent:
-            def notify(self, msg):
-                pass
 
-        registry = _listeners.get()
-        before = len(registry[signals.TOUCH])
+def read_selected_occupation():
+    for user in User.objects.select_related("occupation"):
+        user.occupation
 
-        listener = EagerListener(FakeParent())
-        listener.setup()
-        for _ in range(3):
-            listener.handle_eager(parser=lambda a, k, c: (object, "field", ["inst"], 1, None))
-        listener.teardown()
 
-        assert len(registry[signals.TOUCH]) == before
-        teardown_context(token)
+def read_nested_selected():
+    for pet in Pet.objects.select_related("user__occupation"):
+        pet.user.occupation
+
+
+def read_prefetched_hobbies():
+    for user in User.objects.prefetch_related("hobbies"):
+        list(user.hobbies.all())
+
+
+def read_prefetched_occupation():
+    for user in User.objects.prefetch_related("occupation"):
+        user.occupation
+
+
+def read_nested_prefetched():
+    for pet in Pet.objects.prefetch_related("user__occupation"):
+        pet.user.occupation
+
+
+def read_prefetched_tags():
+    for user in User.objects.prefetch_related("tags"):
+        list(user.tags.all())
+
+
+def read_prefetched_content_object():
+    for tag in Tag.objects.prefetch_related("content_object"):
+        tag.content_object
+
+
+def iterate_hobby_list():
+    for user in with_hobby_list():
+        list(user.hobby_list)
+
+
+def measure_hobby_list():
+    for user in with_hobby_list():
+        len(user.hobby_list)
+
+
+def index_hobby_list():
+    for user in with_hobby_list():
+        user.hobby_list[0]
+
+
+def search_hobby_list():
+    return [None in user.hobby_list for user in with_hobby_list()]
+
+
+def reverse_hobby_list():
+    for user in with_hobby_list():
+        list(reversed(user.hobby_list))
+
+
+def count_prefetched_hobbies():
+    for user in User.objects.prefetch_related("hobbies"):
+        user.hobbies.count()
+
+
+def check_prefetched_addresses():
+    for user in User.objects.prefetch_related("addresses"):
+        user.addresses.exists()
+
+
+def read_one_row_of_the_group():
+    users = list(User.objects.prefetch_related("hobbies"))
+    list(users[0].hobbies.all())
+
+
+def load_no_rows():
+    list(User.objects.filter(name="nobody").select_related("occupation").prefetch_related("hobbies"))
+
+
+def read_user_of_proxy():
+    for pet in PetProxy.objects.select_related("user"):
+        pet.user
+
+
+def read_owner_of_mti_child():
+    for child in Child.objects.select_related("owner"):
+        child.owner
+
+
+def read_child_of_self_relation():
+    for node in Node.objects.filter(parent__isnull=True).select_related("child"):
+        node.child
+
+
+def read_filtered_relation():
+    owners = Pet.objects.annotate(owner=FilteredRelation("user", condition=Q(user__name="alice")))
+    for pet in owners.select_related("owner"):
+        pet.owner
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        read_selected_user,
+        read_selected_occupation,
+        read_nested_selected,
+        read_prefetched_hobbies,
+        read_prefetched_occupation,
+        read_nested_prefetched,
+        read_prefetched_tags,
+        read_prefetched_content_object,
+        iterate_hobby_list,
+        measure_hobby_list,
+        index_hobby_list,
+        search_hobby_list,
+        reverse_hobby_list,
+        count_prefetched_hobbies,
+        check_prefetched_addresses,
+        read_one_row_of_the_group,
+        load_no_rows,
+        read_user_of_proxy,
+        read_owner_of_mti_child,
+        read_child_of_self_relation,
+        read_filtered_relation,
+    ],
+    ids=lambda scenario: scenario.__name__,
+)
+def test_used_eager_load_is_not_reported(objects, scenario):
+    for user in objects:
+        Child.objects.create(owner=user)
+        Node.objects.create(parent=Node.objects.create())
+    with Profiler():
+        scenario()

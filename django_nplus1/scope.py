@@ -1,49 +1,58 @@
-from typing import TYPE_CHECKING, Any
+from contextvars import ContextVar
+from typing import TYPE_CHECKING, Any, Self
 
-from django_nplus1.detect import LISTENERS, is_allowed, is_inline_ignored
-from django_nplus1.signals import nplus1_detected, setup_context, teardown_context
+from django_nplus1 import signals
+from django_nplus1.detect import LISTENERS, Rule, is_allowed, is_inline_ignored
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterator, Sequence
     from contextvars import Token
     from types import TracebackType
 
-    from django_nplus1.detect import Listener, Message, Rule
+    from django_nplus1.detect import Listener, Message
     from django_nplus1.notifiers import Notifier
+
+# The innermost scope entered in the current context.
+_active: ContextVar[DetectionContext | None] = ContextVar("nplus1_active_scope", default=None)
+
+# Reads inside a nested scope can use rows that an enclosing scope loaded.
+_FORWARDED = (signals.TOUCH, signals.FIELD_TOUCH)
 
 
 class DetectionContext:
-    """Reusable detection context for N+1 query detection.
+    """Detects N+1 queries and unused eager loads while the ``with`` block runs.
 
-    Context manager that activates N+1 detection for its duration.
-    Used by ``NPlus1Middleware`` (per-request), ``Profiler`` (per-test),
-    and the Celery integration (per-task).
-
-    Usage::
-
-        with DetectionContext(notifiers=nots, whitelist=wl, sender=MyClass):
-            code_to_monitor()
+    Scopes nest. A detection inside an inner scope goes to the notifiers of every
+    enclosing scope, and a whitelist entry of any of them suppresses it.
     """
 
     def __init__(
         self,
         *,
-        notifiers: list[Notifier] | None = None,
-        whitelist: Sequence[Rule] | None = None,
+        notifiers: Sequence[Notifier] | None = None,
+        whitelist: Sequence[Rule | dict[str, Any]] | None = None,
         sender: Any = None,
     ) -> None:
-        self._notifiers = notifiers or []
-        self._whitelist = whitelist or []
+        self._notifiers = list(notifiers or ())
+        self._whitelist = [item if isinstance(item, Rule) else Rule(**item) for item in whitelist or ()]
         self._sender = sender
         self._listeners: dict[str, Listener] = {}
-        self._token: Token[Any] | None = None
+        self._outer: DetectionContext | None = None
+        self._tokens: tuple[Token[Any], Token[Any]] | None = None
 
-    def __enter__(self) -> DetectionContext:
-        self._token = setup_context()
-        for name, listener_cls in LISTENERS.items():
-            listener = listener_cls(self)
-            listener.setup()
-            self._listeners[name] = listener
+    def __enter__(self) -> Self:
+        if self._tokens is not None:
+            raise RuntimeError(f"{type(self).__name__} is already active.")
+        self._outer = _active.get()
+        self._tokens = (signals.setup_context(inherit=_FORWARDED), _active.set(self))
+        try:
+            for name, listener_cls in LISTENERS.items():
+                listener = listener_cls(self)
+                listener.setup()
+                self._listeners[name] = listener
+        except BaseException:
+            self._close()
+            raise
         return self
 
     def __exit__(
@@ -52,8 +61,7 @@ class DetectionContext:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        # Tear down every listener even if one raises; a skipped one keeps checking
-        # queries after the scope. The body's exception outranks teardown detections.
+        # Tear down every listener even if one raises, so none outlives the scope.
         error: Exception | None = None
         try:
             for listener in self._listeners.values():
@@ -62,17 +70,58 @@ class DetectionContext:
                 except Exception as exc:  # noqa: BLE001
                     error = error or exc
         finally:
-            self._listeners.clear()
-            if self._token is not None:
-                teardown_context(self._token)
-                self._token = None
+            self._close()
+        # The block's own exception outranks detections made at teardown.
         if error is not None and exc_type is None:
             raise error
 
+    def _close(self) -> None:
+        self._listeners.clear()
+        if self._tokens is not None:
+            registry_token, active_token = self._tokens
+            self._tokens = None
+            _active.reset(active_token)
+            signals.teardown_context(registry_token)
+        self._outer = None
+
+    def _chain(self) -> Iterator[DetectionContext]:
+        scope: DetectionContext | None = self
+        while scope is not None:
+            yield scope
+            scope = scope._outer
+
+    def outer_listener[L: Listener](self, listener_cls: type[L]) -> L | None:
+        """Return the enclosing scope's listener of this class, if there is one."""
+        if self._outer is None:
+            return None
+        listeners = self._outer._listeners.values()
+        return next((listener for listener in listeners if isinstance(listener, listener_cls)), None)
+
+    def suppresses(self, message: Message) -> bool:
+        """Check ``nplus1_allow()``, inline ignore comments, and the whitelists of this and the enclosing scopes."""
+        return (
+            is_allowed(message)
+            or is_inline_ignored(message)
+            or any(message.match(scope._whitelist) for scope in self._chain())
+        )
+
     def notify(self, message: Message) -> None:
-        if message.match(self._whitelist) or is_allowed(message) or is_inline_ignored(message):
+        if self.suppresses(message):
             return
         sender = self._sender if self._sender is not None else type(self)
-        nplus1_detected.send(sender=sender, message=message)
+        signals.nplus1_detected.send(sender=sender, message=message)
+        error: Exception | None = None
+        notified: list[Notifier] = []
+        for scope in self._chain():
+            try:
+                scope._deliver(message, notified)
+            except Exception as exc:  # noqa: BLE001
+                error = error or exc
+        if error is not None:
+            raise error
+
+    def _deliver(self, message: Message, notified: list[Notifier]) -> None:
         for notifier in self._notifiers:
-            notifier.notify(message)
+            if notifier not in notified:
+                notified.append(notifier)
+                notifier.notify(message)

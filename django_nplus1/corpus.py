@@ -1,355 +1,170 @@
-import importlib
-import json
+"""Corpus mode: eager loads and field loads that no test of the session reads.
+
+Findings are ``(model label, field, load site)`` entries loaded somewhere and never read.
+"""
+
 import linecache
 import re
 from collections import defaultdict
-from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any
 
-from django_nplus1 import detect, signals
-from django_nplus1.detect import Listener
+from django.apps import apps
+from django.conf import settings
+from django.core.exceptions import FieldDoesNotExist, ImproperlyConfigured
+
+from django_nplus1 import detect, fields, signals
+from django_nplus1.detect import EagerLoadMessage, Listener
 from django_nplus1.middleware import DjangoRule
-from django_nplus1.scope import DetectionContext
-from django_nplus1.signals import setup_context
 
-CallSite = tuple[str, int, str]
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from django.db.models import Model
+
+    from django_nplus1.util import CallSite
+
+UNUSED_FIELD_LOAD = "unused_field_load"
+
+Entry = tuple[str, str, "CallSite"]
 
 
-class CorpusEagerTracker:
-    """Session-lifetime accumulator for unused eager-load detection.
-
-    `data` maps (model, field, call_site) to the set of instance keys ever
-    loaded at that declaration site. `touched` maps (model, field) to the
-    set of instance keys ever accessed. An entry in `data` is "unused"
-    iff none of its instance keys appear in `touched[(model, field)]`.
-    """
+class CorpusTracker:
+    """Load sites seen in the session, and the ones whose rows had the field read."""
 
     def __init__(self) -> None:
-        self.data: dict[tuple[type, str, CallSite], set[str]] = defaultdict(set)
-        self.touched: dict[tuple[type, str], set[str]] = defaultdict(set)
+        self.loaded: set[Entry] = set()
+        self.used: set[Entry] = set()
 
-    def record_load(self, model: type, field: str, instances: list[str], site: CallSite) -> None:
-        self.data[(model, field, site)].update(instances)
+    def unused(self) -> list[Entry]:
+        return sorted(self.loaded - self.used)
 
-    def record_touch(self, model: type, field: str, instance_keys: list[str]) -> None:
-        self.touched[(model, field)].update(instance_keys)
-
-    def unused(self) -> list[tuple[type, str, CallSite]]:
-        result = []
-        for (model, field, site), insts in self.data.items():
-            if not insts & self.touched.get((model, field), set()):
-                result.append((model, field, site))
-        return result
-
-    def serialize(self) -> dict[str, Any]:
+    def serialize(self) -> dict[str, list[list[Any]]]:
         return {
-            "data": [
-                {
-                    "model": f"{m.__module__}.{m.__qualname__}",
-                    "field": f,
-                    "site": list(s),
-                    "instances": sorted(insts),
-                }
-                for (m, f, s), insts in self.data.items()
-            ],
-            "touched": [
-                {
-                    "model": f"{m.__module__}.{m.__qualname__}",
-                    "field": f,
-                    "instances": sorted(insts),
-                }
-                for (m, f), insts in self.touched.items()
-            ],
+            "loaded": [[label, field, list(site)] for label, field, site in self.loaded],
+            "used": [[label, field, list(site)] for label, field, site in self.used],
         }
 
     def merge(self, payload: dict[str, Any]) -> None:
-        # Skip entries whose model can't be re-imported in this process.
-        # Django's migration framework synthesizes transient classes with
-        # ``__module__ == '__fake__'`` during pytest-django's DB setup; a
-        # worker that captured one of these has nothing the controller can
-        # resolve. The same applies to any prefetched class living in a
-        # module the controller's environment doesn't load.
-        for entry in payload.get("data", []):
-            model = _resolve_model_or_none(entry["model"])
-            if model is None:
-                continue
-            site = tuple(entry["site"])
-            self.data[(model, entry["field"], site)].update(entry["instances"])
-        for entry in payload.get("touched", []):
-            model = _resolve_model_or_none(entry["model"])
-            if model is None:
-                continue
-            self.touched[(model, entry["field"])].update(entry["instances"])
+        for name, entries in (("loaded", self.loaded), ("used", self.used)):
+            for label, field, site in payload.get(name, ()):
+                entries.add((label, field, tuple(site)))
+
+    def reset(self) -> None:
+        self.loaded.clear()
+        self.used.clear()
 
 
-_model_resolver_cache: dict[str, type] = {}
+TRACKERS = {EagerLoadMessage.label: CorpusTracker(), UNUSED_FIELD_LOAD: CorpusTracker()}
 
 
-def _resolve_model(dotted: str) -> type:
-    cached = _model_resolver_cache.get(dotted)
-    if cached is not None:
-        return cached
-    module_name, _, qual = dotted.rpartition(".")
-    obj: Any = importlib.import_module(module_name)
-    for part in qual.split("."):
-        obj = getattr(obj, part)
-    resolved = cast("type", obj)
-    _model_resolver_cache[dotted] = resolved
-    return resolved
+class _CorpusListener(Listener):
+    label: str
+
+    def setup(self) -> None:
+        self.tracker = TRACKERS[self.label]
+        # Primary keys repeat across tests, so a read only counts for rows loaded in
+        # the same scope. Nested scopes share the outermost scope's rows.
+        outer = self.parent.outer_listener(type(self))
+        self.sites: defaultdict[tuple[type[Model], str], defaultdict[str, set[CallSite]]] = (
+            outer.sites if outer is not None else defaultdict(lambda: defaultdict(set))
+        )
+        super().setup()
+
+    def record_load(self, model: type[Model], field: str, keys: list[str], site: CallSite | None) -> None:
+        if site is None:
+            return
+        self.tracker.loaded.add((model._meta.label, field, site))
+        sites = self.sites[(model, field)]
+        for key in keys:
+            sites[key].add(site)
+
+    def record_touch(self, model: type[Model], field: str, keys: list[str]) -> None:
+        sites = self.sites.get((model, field))
+        if not sites:
+            return
+        label = model._meta.label
+        for key in keys:
+            for site in sites.get(key, ()):
+                self.tracker.used.add((label, field, site))
 
 
-def _resolve_model_or_none(dotted: str) -> type | None:
-    try:
-        return _resolve_model(dotted)
-    except ImportError, AttributeError:
-        return None
+class CorpusEagerListener(_CorpusListener):
+    label = EagerLoadMessage.label
+
+    def handlers(self) -> dict[str, Callable[..., None]]:
+        return {signals.EAGER_LOAD: self.handle_eager, signals.TOUCH: self.handle_touch}
+
+    def handle_eager(self, args: Any, kwargs: Any, context: Any, ret: Any, parser: Any) -> None:
+        model, field, keys, _group, site = parser(args, kwargs, context)
+        self.record_load(model, field, keys, site)
+
+    def handle_touch(self, args: Any, kwargs: Any, context: Any, ret: Any, parser: Any) -> None:
+        self.record_touch(*parser(args, kwargs, context))
 
 
-class CorpusFieldTracker:
-    """Session-lifetime accumulator for unused concrete-field detection.
+class CorpusFieldListener(_CorpusListener):
+    label = UNUSED_FIELD_LOAD
 
-    Same shape as ``CorpusEagerTracker`` but kept separate so the report
-    can label finds distinctly and future tuning (e.g. exclude lists)
-    does not entangle the two code paths.
-    """
-
-    def __init__(self) -> None:
-        self.data: dict[tuple[type, str, CallSite], set[str]] = defaultdict(set)
-        self.touched: dict[tuple[type, str], set[str]] = defaultdict(set)
-
-    def record_load(self, model: type, field: str, instances: list[str], site: CallSite) -> None:
-        self.data[(model, field, site)].update(instances)
-
-    def record_touch(self, model: type, field: str, instance_keys: list[str]) -> None:
-        self.touched[(model, field)].update(instance_keys)
-
-    def unused(self) -> list[tuple[type, str, CallSite]]:
-        result = []
-        for (model, field, site), insts in self.data.items():
-            if not insts & self.touched.get((model, field), set()):
-                result.append((model, field, site))
-        return result
-
-    def serialize(self) -> dict[str, Any]:
+    def handlers(self) -> dict[str, Callable[..., None]]:
         return {
-            "data": [
-                {
-                    "model": f"{m.__module__}.{m.__qualname__}",
-                    "field": f,
-                    "site": list(s),
-                    "instances": sorted(insts),
-                }
-                for (m, f, s), insts in self.data.items()
-            ],
-            "touched": [
-                {
-                    "model": f"{m.__module__}.{m.__qualname__}",
-                    "field": f,
-                    "instances": sorted(insts),
-                }
-                for (m, f), insts in self.touched.items()
-            ],
+            signals.FIELD_LOAD: self.handle_load,
+            signals.FIELD_TOUCH: self.handle_touch,
+            signals.TOUCH: self.handle_relation_touch,
         }
 
-    def merge(self, payload: dict[str, Any]) -> None:
-        for entry in payload.get("data", []):
-            model = _resolve_model_or_none(entry["model"])
-            if model is None:
-                continue
-            site = tuple(entry["site"])
-            self.data[(model, entry["field"], site)].update(entry["instances"])
-        for entry in payload.get("touched", []):
-            model = _resolve_model_or_none(entry["model"])
-            if model is None:
-                continue
-            self.touched[(model, entry["field"])].update(entry["instances"])
+    def handle_load(self, args: Any, kwargs: Any, context: Any, ret: Any, parser: Any) -> None:
+        self.record_load(*parser(args, kwargs, context))
 
+    def handle_touch(self, args: Any, kwargs: Any, context: Any, ret: Any, parser: Any) -> None:
+        self.record_touch(*parser(args, kwargs, context))
 
-_corpus_tracker: CorpusEagerTracker | None = None
-
-
-def get_tracker() -> CorpusEagerTracker:
-    """Return the active session tracker, initializing it lazily."""
-    global _corpus_tracker  # noqa: PLW0603
-    if _corpus_tracker is None:
-        _corpus_tracker = CorpusEagerTracker()
-    return _corpus_tracker
-
-
-_corpus_field_tracker: CorpusFieldTracker | None = None
-
-
-def get_field_tracker() -> CorpusFieldTracker:
-    """Return the active session field tracker, initializing it lazily."""
-    global _corpus_field_tracker  # noqa: PLW0603
-    if _corpus_field_tracker is None:
-        _corpus_field_tracker = CorpusFieldTracker()
-    return _corpus_field_tracker
-
-
-_DUMP_PREFIX = ".nplus1-eager-corpus."
-
-
-def dump_worker(workerid: str) -> None:
-    path = Path.cwd() / f"{_DUMP_PREFIX}{workerid}.json"
-    payload = {
-        "eager": get_tracker().serialize(),
-        "field": get_field_tracker().serialize(),
-    }
-    path.write_text(json.dumps(payload), encoding="utf-8")
-
-
-def merge_worker_dumps() -> None:
-    cwd = Path.cwd()
-    eager_tracker = get_tracker()
-    field_tracker = get_field_tracker()
-    for path in sorted(cwd.glob(f"{_DUMP_PREFIX}*.json")):
+    def handle_relation_touch(self, args: Any, kwargs: Any, context: Any, ret: Any, parser: Any) -> None:
+        # A cached forward relation is read without its foreign key column, but needs it.
+        model, name, keys = parser(args, kwargs, context)
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            continue
-        if "eager" in payload or "field" in payload:
-            eager_tracker.merge(payload.get("eager", {}))
-            field_tracker.merge(payload.get("field", {}))
-        else:
-            # Legacy single-tracker payload from a pre-field-detection worker.
-            eager_tracker.merge(payload)
-        path.unlink(missing_ok=True)
-
-
-class CorpusEagerListener(Listener):
-    def setup(self) -> None:
-        signals.connect(signals.EAGER_LOAD, self.handle_eager)
-        signals.connect(signals.TOUCH, self.handle_touch)
-
-    def teardown(self) -> None:
-        signals.disconnect(signals.EAGER_LOAD, self.handle_eager)
-        signals.disconnect(signals.TOUCH, self.handle_touch)
-
-    def handle_eager(
-        self,
-        args: Any = None,
-        kwargs: Any = None,
-        context: Any = None,
-        ret: Any = None,
-        parser: Any = None,
-    ) -> None:
-        model, field, instances, _key, site = parser(args, kwargs, context)
-        if site is None:
+            attname = model._meta.get_field(name).attname
+        except FieldDoesNotExist, AttributeError:
             return
-        get_tracker().record_load(model, field, instances, site)
-
-    def handle_touch(
-        self,
-        args: Any = None,
-        kwargs: Any = None,
-        context: Any = None,
-        ret: Any = None,
-        parser: Any = None,
-    ) -> None:
-        parsed = parser(args, kwargs, context)
-        if parsed is None:
-            return
-        model, field, instances = parsed
-        get_tracker().record_touch(model, field, instances)
+        self.record_touch(model, attname, keys)
 
 
-class CorpusFieldListener(Listener):
-    def setup(self) -> None:
-        signals.connect(signals.FIELD_LOAD, self.handle_load)
-        signals.connect(signals.FIELD_TOUCH, self.handle_touch)
-
-    def teardown(self) -> None:
-        signals.disconnect(signals.FIELD_LOAD, self.handle_load)
-        signals.disconnect(signals.FIELD_TOUCH, self.handle_touch)
-
-    def handle_load(
-        self,
-        args: Any = None,
-        kwargs: Any = None,
-        context: Any = None,
-        ret: Any = None,
-        parser: Any = None,
-    ) -> None:
-        model, field, instances, site = parser(args, kwargs, context)
-        if site is None:
-            return
-        get_field_tracker().record_load(model, field, instances, site)
-
-    def handle_touch(
-        self,
-        args: Any = None,
-        kwargs: Any = None,
-        context: Any = None,
-        ret: Any = None,
-        parser: Any = None,
-    ) -> None:
-        parsed = parser(args, kwargs, context)
-        if parsed is None:
-            return
-        model, field, instances = parsed
-        get_field_tracker().record_touch(model, field, instances)
-
-
-_corpus_enabled: bool = False
-
-
-class CorpusContext(DetectionContext):
-    """DetectionContext variant that installs CorpusEagerListener and CorpusFieldListener.
-
-    Use when you want a block of test or script code to contribute
-    EAGER_LOAD / TOUCH / FIELD_LOAD / FIELD_TOUCH events to the session
-    trackers without enabling lazy/get/duplicate detection.
-    """
-
-    def __enter__(self) -> CorpusContext:
-        self._token = setup_context()
-        eager = CorpusEagerListener(self)
-        eager.setup()
-        self._listeners["eager_load"] = eager
-        field = CorpusFieldListener(self)
-        field.setup()
-        self._listeners["field_load"] = field
-        return self
-
-    def notify(self, message: Any) -> None:
-        # Corpus listener never calls notify - reports at session end.
-        pass
-
-
-def activate() -> None:
-    """Enable corpus mode: swap LISTENERS["eager_load"], register field listener,
-    patch DeferredAttribute, reset both trackers.
-
-    Idempotent: a second call is a no-op so accumulated tracker data is
-    preserved (for tests that call activate() per-fixture).
-    """
-    global _corpus_enabled, _corpus_tracker, _corpus_field_tracker  # noqa: PLW0603
-    if _corpus_enabled:
-        return
-    _corpus_enabled = True
-    _corpus_tracker = CorpusEagerTracker()
-    _corpus_field_tracker = CorpusFieldTracker()
-    detect.LISTENERS["eager_load"] = CorpusEagerListener
-    detect.LISTENERS["field_load"] = CorpusFieldListener
-    from django_nplus1 import fields
-
-    fields.patch_deferred_attribute()
+_enabled = False
 
 
 def is_enabled() -> bool:
-    return _corpus_enabled
+    return _enabled
 
 
-def format_finds(finds: list[tuple[type, str, CallSite]]) -> str:
-    if not finds:
-        return ""
-    lines = [f"django-nplus1: corpus-wide unused_eager_load ({len(finds)} finds)"]
-    for model, field, site in finds:
-        filename, lineno, funcname = site
-        label = f"{model.__name__}.{field}"
-        lines.append(f"  {label:30} at {filename}:{lineno} in {funcname}")
-    return "\n".join(lines)
+def activate() -> None:
+    """Start collecting, with empty findings."""
+    global _enabled  # noqa: PLW0603
+    for tracker in TRACKERS.values():
+        tracker.reset()
+    if _enabled:
+        return
+    detect.LISTENERS["eager_load"] = CorpusEagerListener
+    detect.LISTENERS["field_load"] = CorpusFieldListener
+    fields.patch_deferred_attribute()
+    _enabled = True
+
+
+def deactivate() -> None:
+    """Stop collecting and restore the per-scope eager load detection. Findings stay readable."""
+    global _enabled  # noqa: PLW0603
+    detect.LISTENERS["eager_load"] = detect.EagerListener
+    detect.LISTENERS.pop("field_load", None)
+    fields.unpatch_deferred_attribute()
+    _enabled = False
+
+
+def serialize() -> dict[str, Any]:
+    return {label: tracker.serialize() for label, tracker in TRACKERS.items()}
+
+
+def merge(payload: dict[str, Any]) -> None:
+    """Add the findings of another process, such as a pytest-xdist worker."""
+    for label, tracker in TRACKERS.items():
+        tracker.merge(payload.get(label, {}))
 
 
 _INLINE_CORPUS_IGNORE_RE = re.compile(r"#\s*nplus1:\s*corpus-ignore")
@@ -357,51 +172,36 @@ _INLINE_CORPUS_IGNORE_RE = re.compile(r"#\s*nplus1:\s*corpus-ignore")
 
 def _is_inline_corpus_ignored(site: CallSite) -> bool:
     filename, lineno, _ = site
-    line = linecache.getline(filename, lineno)
-    return bool(line) and bool(_INLINE_CORPUS_IGNORE_RE.search(line))
+    return bool(_INLINE_CORPUS_IGNORE_RE.search(linecache.getline(filename, lineno)))
 
 
 def _whitelist_rules() -> list[DjangoRule]:
     try:
-        from django.conf import settings
-    except ImportError, AttributeError:
+        whitelist = getattr(settings, "NPLUS1_WHITELIST", [])
+    except ImproperlyConfigured:
         return []
-    data = getattr(settings, "NPLUS1_WHITELIST", [])
-    return [DjangoRule(**item) for item in data]
+    return [DjangoRule(**item) for item in whitelist]
 
 
-def report() -> list[tuple[type, str, CallSite]]:
-    tracker = get_tracker()
+def report(label: str) -> list[tuple[type[Model], str, CallSite]]:
+    """Return the unused loads for ``label``, minus whitelisted and ``corpus-ignore`` sites."""
     rules = _whitelist_rules()
-    result = []
-    for model, field, site in tracker.unused():
-        if _is_inline_corpus_ignored(site):
+    findings = []
+    for model_label, field, site in TRACKERS[label].unused():
+        try:
+            model = apps.get_model(model_label)
+        except LookupError:
             continue
-        if any(rule.compare("unused_eager_load", model, field) for rule in rules):
+        if _is_inline_corpus_ignored(site) or any(rule.compare(label, model, field) for rule in rules):
             continue
-        result.append((model, field, site))
-    return result
+        findings.append((model, field, site))
+    return findings
 
 
-def field_report() -> list[tuple[type, str, CallSite]]:
-    tracker = get_field_tracker()
-    rules = _whitelist_rules()
-    result = []
-    for model, field, site in tracker.unused():
-        if _is_inline_corpus_ignored(site):
-            continue
-        if any(rule.compare("unused_field_load", model, field) for rule in rules):
-            continue
-        result.append((model, field, site))
-    return result
-
-
-def format_field_finds(finds: list[tuple[type, str, CallSite]]) -> str:
-    if not finds:
-        return ""
-    lines = [f"django-nplus1: corpus-wide unused_field_load ({len(finds)} finds)"]
-    for model, field, site in finds:
-        filename, lineno, funcname = site
-        label = f"{model.__name__}.{field}"
-        lines.append(f"  {label:30} at {filename}:{lineno} in {funcname}")
+def format_findings(label: str, findings: list[tuple[type[Model], str, CallSite]]) -> str:
+    count = len(findings)
+    lines = [f"django-nplus1: corpus-wide {label} ({count} finding{'' if count == 1 else 's'})"]
+    for model, field, (filename, lineno, funcname) in findings:
+        name = f"{model.__name__}.{field}"
+        lines.append(f"  {name:30} at {filename}:{lineno} in {funcname}")
     return "\n".join(lines)
