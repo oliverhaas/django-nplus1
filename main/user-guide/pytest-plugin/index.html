@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -31,7 +31,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -617,6 +617,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#corpus-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Corpus Mode
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#disabling-the-plugin" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -910,6 +921,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#corpus-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Corpus Mode
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#disabling-the-plugin" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -946,7 +968,7 @@
 <h3 id="nplus1"><code>nplus1</code><a class="headerlink" href="#nplus1" title="Permanent link">&para;</a></h3>
 <p>A fixture that provides a <code>Profiler</code> context. Any N+1 queries detected while it is active raise <code>NPlus1Error</code>.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_my_view</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">nplus1</span><span class="p">):</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/my-view/&quot;</span><span class="p">)</span>  <span class="c1"># Raises if N+1 detected</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"/my-view/"</span><span class="p">)</span>  <span class="c1"># Raises if N+1 detected</span>
 </span></code></pre></div>
 <p>The profiler is active from the fixture's setup to its teardown, so fixtures requested after <code>nplus1</code> run inside it. Request it last, or use the marker, to check only the test body.</p>
 <h2 id="markers">Markers<a class="headerlink" href="#markers" title="Permanent link">&para;</a></h2>
@@ -954,18 +976,20 @@
 <p>Mark a test for automatic N+1 detection. The test body runs inside a <code>Profiler</code>. Fixtures, including pytest-django's test database setup, run outside it.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">nplus1</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_my_view</span><span class="p">(</span><span class="n">client</span><span class="p">):</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/my-view/&quot;</span><span class="p">)</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"/my-view/"</span><span class="p">)</span>
 </span></code></pre></div>
 <p>For <code>unittest</code>-style tests such as <code>django.test.TestCase</code>, pytest runs <code>setUp()</code> and <code>tearDown()</code> as part of the test, so they are checked too.</p>
 <p>With whitelisting:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">nplus1</span><span class="p">(</span><span class="n">whitelist</span><span class="o">=</span><span class="p">[{</span><span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;auth.User&quot;</span><span class="p">}])</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">nplus1</span><span class="p">(</span><span class="n">whitelist</span><span class="o">=</span><span class="p">[{</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"auth.User"</span><span class="p">}])</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_with_whitelist</span><span class="p">(</span><span class="n">client</span><span class="p">):</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/my-view/&quot;</span><span class="p">)</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"/my-view/"</span><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="whitelisting">Whitelisting<a class="headerlink" href="#whitelisting" title="Permanent link">&para;</a></h2>
 <p>The marker and the <code>nplus1</code> fixture apply <code>NPLUS1_WHITELIST</code> from your settings, plus the marker's own <code>whitelist</code>. See <a href="../whitelisting/">Whitelisting</a> for the pattern format.</p>
+<h2 id="corpus-mode">Corpus Mode<a class="headerlink" href="#corpus-mode" title="Permanent link">&para;</a></h2>
+<p><code>pytest --nplus1-eager-corpus</code>, or <code>NPLUS1_EAGER_CORPUS = True</code> in your test settings, reports the eager loads and loaded fields that no test in the session read, and fails the run. See <a href="../corpus-mode/">Corpus Mode</a>.</p>
 <h2 id="disabling-the-plugin">Disabling the Plugin<a class="headerlink" href="#disabling-the-plugin" title="Permanent link">&para;</a></h2>
-<p>If you need to disable the plugin for specific tests, you can use the <code>-p</code> flag:</p>
+<p>To run without the plugin, for example when another plugin clashes with it, pass <code>-p no:nplus1</code>. This turns it off for the whole run, so the marker, the fixture and corpus mode are unavailable:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>pytest<span class="w"> </span>-p<span class="w"> </span>no:nplus1
 </span></code></pre></div>
 
@@ -1022,7 +1046,7 @@
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.sections", "navigation.expand", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>

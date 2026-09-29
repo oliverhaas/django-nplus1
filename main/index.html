@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -29,7 +29,7 @@
       
     
     
-      <link rel="stylesheet" href="assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="assets/stylesheets/palette.ab4e12ef.min.css">
@@ -851,7 +851,7 @@
 <h1 id="django-n1">Django N+1<a class="headerlink" href="#django-n1" title="Permanent link">&para;</a></h1>
 <div class="admonition note">
 <p class="admonition-title">Beta</p>
-<p>This package is under active development and the API may change before 1.0.</p>
+<p>This package is under active development and the API can change before 1.0.</p>
 </div>
 <p>N+1 query detection for Django.</p>
 <p>Based on <a href="https://github.com/jmcarp/nplusone">nplusone</a> by <a href="https://github.com/jmcarp">Joshua Carp</a>, a well-established library for automatic N+1 detection across Python ORMs. If you need broad ORM support (SQLAlchemy, Peewee, etc.), <code>nplusone</code> is still the best choice.</p>
@@ -865,6 +865,7 @@
 <li><code>Model.objects.get()</code> repeated in a loop</li>
 <li>Unused <code>select_related</code> / <code>prefetch_related</code></li>
 <li>Duplicate raw SQL (opt-in via <code>NPLUS1_DETECT_DUPLICATE_QUERIES</code>)</li>
+<li>Eager loads and fields that no test in the session reads (opt-in <a href="user-guide/corpus-mode/">corpus mode</a>)</li>
 </ul>
 <p>Activates via:</p>
 <ul>
@@ -872,12 +873,14 @@
 <li>pytest plugin (<code>nplus1</code> fixture and <code>@pytest.mark.nplus1</code> marker)</li>
 <li>Celery <code>task_prerun</code>/<code>task_postrun</code> signals</li>
 <li><code>Profiler</code> context manager</li>
+<li><code>DetectionContext</code> for other entry points</li>
 </ul>
 <p>Suppression:</p>
 <ul>
 <li>Wildcard whitelist with typo detection</li>
 <li><code># nplus1: ignore</code> inline comments</li>
 <li><code>nplus1_allow()</code> context manager</li>
+<li><code># nplus1: corpus-ignore</code> inline comments for corpus mode</li>
 </ul>
 <p>Reports via logging, exceptions, <code>warnings.warn_explicit()</code>, and a Django signal. Messages include file, line, and function. Threshold tunable via <code>NPLUS1_THRESHOLD</code>. Only depends on Django.</p>
 <h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
@@ -886,13 +889,13 @@
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># settings.py</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">INSTALLED_APPS</span> <span class="o">=</span> <span class="p">[</span>
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="o">...</span><span class="p">,</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="s2">&quot;django_nplus1&quot;</span><span class="p">,</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="s2">"django_nplus1"</span><span class="p">,</span>
 </span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="p">]</span>
 </span></code></pre></div>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># settings/testing.py</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">MIDDLEWARE</span> <span class="o">=</span> <span class="p">[</span>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="o">...</span><span class="p">,</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="s2">&quot;django_nplus1.NPlus1Middleware&quot;</span><span class="p">,</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="s2">"django_nplus1.NPlus1Middleware"</span><span class="p">,</span>
 </span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="p">]</span>
 </span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="n">NPLUS1_RAISE</span> <span class="o">=</span> <span class="kc">True</span>
 </span></code></pre></div>
@@ -958,7 +961,7 @@
       <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.sections", "navigation.expand", "content.code.copy", "content.code.annotate"], "search": "assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>

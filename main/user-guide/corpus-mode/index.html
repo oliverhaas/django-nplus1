@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -31,7 +31,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -639,6 +639,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#which-reads-count" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Which reads count
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#report" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Report
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#suppression" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -665,17 +687,6 @@
     <span class="md-ellipsis">
       
         pytest-xdist
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#exit-code" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Exit code
       
     </span>
   </a>
@@ -886,6 +897,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#which-reads-count" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Which reads count
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#report" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Report
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#suppression" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -912,17 +945,6 @@
     <span class="md-ellipsis">
       
         pytest-xdist
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#exit-code" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Exit code
       
     </span>
   </a>
@@ -961,8 +983,8 @@
 
 
 <h1 id="corpus-mode">Corpus mode<a class="headerlink" href="#corpus-mode" title="Permanent link">&para;</a></h1>
-<p>Corpus mode accumulates load and touch events across the entire pytest session and reports two classes of finding once at session end: prefetches that were never read (<code>unused_eager_load</code>) and concrete fields that were never read (<code>unused_field_load</code>).</p>
-<p>The per-request <code>unused_eager_load</code> detector flags prefetches with no in-request touches. In real codebases that fires on patterns that are correct at suite scope: shared prefetch tuples consumed by many paths, <code>{% if %}</code> branches where the empty path flags the prefetch, <code>select_related</code> to sparse FKs. Corpus mode aggregates across the whole session, so a prefetch survives if any test touched it.</p>
+<p>Corpus mode collects eager loads and field loads across the whole pytest session and reports two kinds of finding once at the end: eager loads whose relation no test read (<code>unused_eager_load</code>) and concrete fields that no test read (<code>unused_field_load</code>).</p>
+<p>The per-request <code>unused_eager_load</code> detector flags eager loads that the request didn't read. In real codebases that fires on patterns that are correct at suite scope: shared prefetch tuples consumed by many paths, <code>{% if %}</code> branches where the empty path flags the prefetch, <code>select_related</code> to sparse FKs. Corpus mode aggregates across the whole session, so an eager load passes once any test reads what it loaded.</p>
 <p>Field detection has no per-request equivalent. It is only available in corpus mode.</p>
 <h2 id="enable">Enable<a class="headerlink" href="#enable" title="Permanent link">&para;</a></h2>
 <p>CLI flag:</p>
@@ -971,62 +993,73 @@
 <p>Or in Django test settings:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">NPLUS1_EAGER_CORPUS</span> <span class="o">=</span> <span class="kc">True</span>
 </span></code></pre></div>
-<p>Off by default; opt-in only.</p>
+<p>Off by default.</p>
 <h2 id="what-changes">What changes<a class="headerlink" href="#what-changes" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Per-request <code>unused_eager_load</code> detection is suppressed for the whole session.</li>
-<li>Any <code>DetectionContext</code> opened during the run (by <code>NPlus1Middleware</code>, the Celery integration, an explicit <code>Profiler</code>, or a manual <code>with DetectionContext()</code>) contributes EAGER_LOAD / TOUCH / FIELD_LOAD / FIELD_TOUCH events to a shared session tracker.</li>
-<li><code>DeferredAttribute</code> is patched into a data descriptor so every concrete-field read passes through the touch hook, regardless of whether the value was loaded by the SELECT.</li>
-<li>ORM calls outside an instrumented scope (test setup, factories, direct queryset assertions) are ignored.</li>
-<li>At session end, surviving <code>(model, field, call_site)</code> tuples are printed for both detectors and pytest exits with code 1 if any remain.</li>
+<li>Per-request <code>unused_eager_load</code> detection is off for the whole session.</li>
+<li>Every detection scope opened during the run (by <code>NPlus1Middleware</code>, the Celery integration, <code>Profiler</code>, the pytest marker and fixture, or a manual <code>with DetectionContext():</code>) records its eager loads, field loads and reads in a session-wide tracker.</li>
+<li>Django's <code>DeferredAttribute</code> becomes a data descriptor, so every read of a loaded field goes through it and counts as a read. Field values stay in the instance <code>__dict__</code>, so models behave as they do without corpus mode.</li>
+<li>ORM calls outside a scope (test setup, factories, direct queryset assertions) are ignored.</li>
+<li>At the end of the session the findings are printed in a "django-nplus1 corpus" section of the terminal summary, and the run fails.</li>
 </ul>
 <h2 id="what-counts-as-instrumented">What counts as instrumented<a class="headerlink" href="#what-counts-as-instrumented" title="Permanent link">&para;</a></h2>
-<p>Only code executed inside an active <code>DetectionContext</code> contributes to the tracker. In practice that means:</p>
+<p>Only code executed inside an active detection scope contributes to the tracker. In practice that means:</p>
 <ul>
 <li>View bodies reached through <code>NPlus1Middleware</code> (typical: tests using the Django test client).</li>
 <li>Celery task bodies when <code>NPLUS1_CELERY = True</code> is set and the task signals are connected.</li>
 <li>Code wrapped in <code>Profiler()</code>, <code>@pytest.mark.nplus1</code>, or a manual <code>with DetectionContext():</code> block.</li>
 </ul>
 <p>If a prefetch is declared and consumed entirely in test code (no middleware, no task, no explicit wrap), corpus mode will not flag it. Wrap the code you actually want audited.</p>
-<h2 id="suppression">Suppression<a class="headerlink" href="#suppression" title="Permanent link">&para;</a></h2>
-<p>Use the existing <code>NPLUS1_WHITELIST</code> setting:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">NPLUS1_WHITELIST</span> <span class="o">=</span> <span class="p">[</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="p">{</span><span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="s2">&quot;unused_eager_load&quot;</span><span class="p">,</span> <span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;app.Model&quot;</span><span class="p">,</span> <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="s2">&quot;rel&quot;</span><span class="p">},</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="p">]</span>
+<h2 id="which-reads-count">Which reads count<a class="headerlink" href="#which-reads-count" title="Permanent link">&para;</a></h2>
+<p>A read counts only for rows loaded in the same scope. Each test starts with an empty database and reuses primary keys, so a read in one test says nothing about the rows another test loaded. Nested scopes, such as a test client request inside <code>Profiler</code>, share the rows of the outermost scope.</p>
+<p>A finding names the line that declared the eager load or, for a field, the line that started the queryset. The finding goes away once any test reads the field on a row loaded there.</p>
+<p>Reading a forward relation, such as <code>pet.user</code>, also counts as a read of its foreign key column <code>user_id</code>, because loading the relation needs that column.</p>
+<h2 id="report">Report<a class="headerlink" href="#report" title="Permanent link">&para;</a></h2>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>============================= django-nplus1 corpus =============================
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>django-nplus1: corpus-wide unused_eager_load (1 finding)
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>  User.hobbies                   at /project/users/views.py:12 in user_list
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>django-nplus1: corpus-wide unused_field_load (1 finding)
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>  User.name                      at /project/users/views.py:12 in user_list
 </span></code></pre></div>
-<p>Or use a per-line marker at the declaration:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">view</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">users</span> <span class="o">=</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">prefetch_related</span><span class="p">(</span><span class="s2">&quot;hobbies&quot;</span><span class="p">)</span>  <span class="c1"># nplus1: corpus-ignore</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="o">...</span>
+<p>When findings remain, a run that would have passed exits with code 1. Any other exit code, such as the one for failed tests or an interrupted run, stays as it is.</p>
+<h2 id="suppression">Suppression<a class="headerlink" href="#suppression" title="Permanent link">&para;</a></h2>
+<p>Only <code>NPLUS1_WHITELIST</code> and <code># nplus1: corpus-ignore</code> apply to corpus findings. Whitelists given to a scope, <code>nplus1_allow()</code> and <code># nplus1: ignore</code> don't.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">NPLUS1_WHITELIST</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="p">{</span><span class="s2">"label"</span><span class="p">:</span> <span class="s2">"unused_eager_load"</span><span class="p">,</span> <span class="s2">"model"</span><span class="p">:</span> <span class="s2">"app.Model"</span><span class="p">,</span> <span class="s2">"field"</span><span class="p">:</span> <span class="s2">"rel"</span><span class="p">},</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="p">]</span>
+</span></code></pre></div>
+<p>A <code># nplus1: corpus-ignore</code> comment on the line a finding names suppresses every finding for that line, eager loads and fields alike:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">view</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">users</span> <span class="o">=</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">prefetch_related</span><span class="p">(</span><span class="s2">"hobbies"</span><span class="p">)</span>  <span class="c1"># nplus1: corpus-ignore</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="o">...</span>
 </span></code></pre></div>
 <p>The corpus marker is distinct from the existing <code># nplus1: ignore</code> marker. Use <code>corpus-ignore</code> for prefetches exercised only outside the test suite (management commands, error handlers).</p>
 <h2 id="unused-field-loads">Unused field loads<a class="headerlink" href="#unused-field-loads" title="Permanent link">&para;</a></h2>
-<p>A field is counted as "touched" when accessing it would have triggered a database fetch had the field been deferred. Concretely, the read must be routed through <code>DeferredAttribute.__get__</code>. Fields that are loaded by the SELECT but never accessed in this way across the full pytest session are reported as <code>unused_field_load</code>. The suggested fix is to add <code>.only()</code> or <code>.defer()</code> at the call site so the column is not fetched at all.</p>
-<p>Note on <code>model.save()</code>: every field on a re-saved instance is counted as touched, because deferring any field would force a refetch inside <code>save()</code>. Use <code>save(update_fields=[...])</code> or <code>.update()</code> to avoid touching unrelated fields.</p>
+<p>A field loaded by the SELECT but never read across the session is reported as <code>unused_field_load</code>. The suggested fix is <code>.only()</code> or <code>.defer()</code> at the line the finding names, so the column is not fetched at all. Primary keys are never reported.</p>
+<p>Note on <code>model.save()</code>: every field on a re-saved instance is counted as read, because <code>save()</code> reads each field it writes. Use <code>save(update_fields=[...])</code> or <code>.update()</code> to avoid reading unrelated fields.</p>
 <p>Exclude noisy models with <code>NPLUS1_FIELD_EXCLUDE</code>:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">NPLUS1_FIELD_EXCLUDE</span> <span class="o">=</span> <span class="p">[</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="s2">&quot;auth.User&quot;</span><span class="p">,</span>        <span class="c1"># exact match</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="s2">&quot;contenttypes.*&quot;</span><span class="p">,</span>   <span class="c1"># wildcard: all models in the app</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="p">]</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">NPLUS1_FIELD_EXCLUDE</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="s2">"auth.User"</span><span class="p">,</span>  <span class="c1"># exact match</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="s2">"contenttypes.*"</span><span class="p">,</span>  <span class="c1"># wildcard: all models in the app</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="p">]</span>
 </span></code></pre></div>
-<p>Patterns are fnmatch'd against <code>app_label.ModelName</code>. Setting <code>["*"]</code> short-circuits field tracking entirely.</p>
-<p>Add <code>unused_field_load</code> to <code>NPLUS1_WHITELIST</code> to suppress individual fields:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">NPLUS1_WHITELIST</span> <span class="o">=</span> <span class="p">[</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="p">{</span><span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="s2">&quot;unused_field_load&quot;</span><span class="p">,</span> <span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;myapp.Article&quot;</span><span class="p">,</span> <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="s2">&quot;body&quot;</span><span class="p">},</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="p">]</span>
+<p>Patterns are fnmatch'd against <code>app_label.ModelName</code>. <code>["*"]</code> turns field tracking off.</p>
+<p>Add <code>unused_field_load</code> to <code>NPLUS1_WHITELIST</code> to suppress individual fields. A foreign key's column goes by its attribute name, such as <code>user_id</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">NPLUS1_WHITELIST</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="p">{</span><span class="s2">"label"</span><span class="p">:</span> <span class="s2">"unused_field_load"</span><span class="p">,</span> <span class="s2">"model"</span><span class="p">:</span> <span class="s2">"myapp.Article"</span><span class="p">,</span> <span class="s2">"field"</span><span class="p">:</span> <span class="s2">"body"</span><span class="p">},</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="p">{</span><span class="s2">"label"</span><span class="p">:</span> <span class="s2">"unused_field_load"</span><span class="p">,</span> <span class="s2">"model"</span><span class="p">:</span> <span class="s2">"myapp.Article"</span><span class="p">,</span> <span class="s2">"field"</span><span class="p">:</span> <span class="s2">"author_id"</span><span class="p">},</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="p">]</span>
 </span></code></pre></div>
-<p>A <code># nplus1: corpus-ignore</code> comment at the queryset call site suppresses both <code>unused_eager_load</code> and <code>unused_field_load</code> for that queryset.</p>
 <h2 id="pytest-xdist">pytest-xdist<a class="headerlink" href="#pytest-xdist" title="Permanent link">&para;</a></h2>
-<p>Workers dump their tracker state to <code>.nplus1-eager-corpus.&lt;workerid&gt;.json</code> in the pytest working directory. The controller merges all dumps in <code>pytest_sessionfinish</code> and reports once. Run pytest from the project root for consistent results across xdist invocations.</p>
-<h2 id="exit-code">Exit code<a class="headerlink" href="#exit-code" title="Permanent link">&para;</a></h2>
-<p>Corpus mode reports at session end: pytest exits with code 1 if any untouched prefetches or untouched field loads remain after whitelist filtering. The standard pytest exit code for test failures (also 1) is preserved.</p>
+<p>Corpus mode works with pytest-xdist. Each worker hands its tracker to the controller when it finishes, and the controller reports once for the whole session. No files are written.</p>
 <h2 id="for-plugin-authors">For plugin authors<a class="headerlink" href="#for-plugin-authors" title="Permanent link">&para;</a></h2>
-<p>Custom listeners subscribed to the <code>EAGER_LOAD</code> signal must unpack a 5-element tuple as of 0.4.0: <code>(model, field, instances, key, call_site)</code>. The fifth element is the declaration call-site as a <code>(filename, lineno, funcname)</code> tuple, or <code>None</code> if it could not be resolved.</p>
-<p>Two new signals back the field detector:</p>
+<p>Listeners connected with <code>django_nplus1.signals.connect()</code> receive each payload as the <code>args</code> tuple. Rows are identified by keys of the form <code>"app_label.ModelName:pk"</code>, and call sites are <code>(filename, lineno, funcname)</code> tuples.</p>
 <ul>
-<li><code>FIELD_LOAD</code> carries <code>(model, field, instance_keys, call_site)</code>. Fired once per non-deferred concrete field on each fetched row when corpus mode is active. <code>call_site</code> may be <code>None</code> if the queryset call site could not be resolved.</li>
-<li><code>FIELD_TOUCH</code> carries <code>(model, field, instance_keys)</code>. Fired on every read routed through the patched <code>DeferredAttribute.__get__</code>, which (during corpus mode) is every concrete-field read on a loaded instance.</li>
+<li><code>EAGER_LOAD</code> carries <code>(model, field, keys, group, call_site)</code>. <code>group</code> numbers the query that loaded the rows. <code>call_site</code> is the line that declared the eager load. It is resolved in corpus mode only and is <code>None</code> otherwise.</li>
+<li><code>FIELD_LOAD</code> carries <code>(model, attname, keys, call_site)</code>, once for each loaded concrete field other than the primary key. <code>call_site</code> is the line that started the queryset.</li>
+<li><code>FIELD_TOUCH</code> carries <code>(model, attname, keys)</code> for each read of a loaded field.</li>
 </ul>
+<p><code>FIELD_LOAD</code> and <code>FIELD_TOUCH</code> are only sent in corpus mode.</p>
 
 
 
@@ -1081,7 +1114,7 @@
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.sections", "navigation.expand", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>

@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -31,7 +31,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -1068,13 +1068,13 @@
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># settings/testing.py</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">MIDDLEWARE</span> <span class="o">=</span> <span class="p">[</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="o">...</span><span class="p">,</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="s2">&quot;django_nplus1.NPlus1Middleware&quot;</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="s2">"django_nplus1.NPlus1Middleware"</span><span class="p">,</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="p">]</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">NPLUS1_RAISE</span> <span class="o">=</span> <span class="kc">True</span>
 </span></code></pre></div>
 <p>Now any view test that uses the Django test client will fail if an N+1 query is detected:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_list_authors</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">authors</span><span class="p">):</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">response</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/authors/&quot;</span><span class="p">)</span>  <span class="c1"># raises NPlus1Error if view has N+1</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">response</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"/authors/"</span><span class="p">)</span>  <span class="c1"># raises NPlus1Error if view has N+1</span>
 </span></code></pre></div>
 <h3 id="why-test-settings">Why test settings?<a class="headerlink" href="#why-test-settings" title="Permanent link">&para;</a></h3>
 <p>Testing actual request paths catches real problems in your views. Helper functions or management commands that intentionally defer prefetching to their callers can produce false positives when wrapped in a detection context; testing through the middleware avoids that.</p>
@@ -1082,8 +1082,8 @@
 <p>Introducing django-nplus1 to a project with existing N+1 queries will likely fail many tests at once. Whitelist the known issues and fix them over time:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># settings/testing.py</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">NPLUS1_WHITELIST</span> <span class="o">=</span> <span class="p">[</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="p">{</span><span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;myapp.Author&quot;</span><span class="p">,</span> <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="s2">&quot;books&quot;</span><span class="p">},</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="p">{</span><span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;myapp.Book&quot;</span><span class="p">,</span> <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="s2">&quot;publisher&quot;</span><span class="p">},</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="p">{</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"myapp.Author"</span><span class="p">,</span> <span class="s2">"field"</span><span class="p">:</span> <span class="s2">"books"</span><span class="p">},</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="p">{</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"myapp.Book"</span><span class="p">,</span> <span class="s2">"field"</span><span class="p">:</span> <span class="s2">"publisher"</span><span class="p">},</span>
 </span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="p">]</span>
 </span></code></pre></div>
 <p>See <a href="../../user-guide/whitelisting/">Whitelisting</a> for the full format including wildcards and <code>nplus1_allow()</code>.</p>
@@ -1095,7 +1095,7 @@
 </span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">user</span><span class="o">.</span><span class="n">profile</span><span class="p">)</span>  <span class="c1"># N+1! Each access triggers a separate query</span>
 </span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
 </span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="c1"># Fix with select_related:</span>
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">users</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">select_related</span><span class="p">(</span><span class="s2">&quot;profile&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">())</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">users</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">select_related</span><span class="p">(</span><span class="s2">"profile"</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">())</span>
 </span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="k">for</span> <span class="n">user</span> <span class="ow">in</span> <span class="n">users</span><span class="p">:</span>
 </span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">user</span><span class="o">.</span><span class="n">profile</span><span class="p">)</span>  <span class="c1"># Already loaded</span>
 </span></code></pre></div>
@@ -1104,19 +1104,20 @@
 <li><strong>Deferred field access</strong>: <code>.defer()</code> / <code>.only()</code> fields accessed in a loop</li>
 <li><strong><code>.get()</code> in a loop</strong>: <code>Model.objects.get()</code> called repeatedly from the same call-site</li>
 <li><strong>Unused eager loads</strong>: <code>select_related</code> / <code>prefetch_related</code> results that are never accessed</li>
+<li><strong>Unused loads across the test suite</strong>: eager loads and fields that no test reads, with <a href="../../user-guide/corpus-mode/">corpus mode</a></li>
 </ul>
 <h2 id="other-options">Other Options<a class="headerlink" href="#other-options" title="Permanent link">&para;</a></h2>
 <p>The middleware in test settings is the recommended starting point, but django-nplus1 offers other ways to run detection:</p>
 <h3 id="middleware-in-all-environments">Middleware in All Environments<a class="headerlink" href="#middleware-in-all-environments" title="Permanent link">&para;</a></h3>
 <p>Add the middleware to your base settings to log warnings during development or production:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># settings.py</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">MIDDLEWARE</span> <span class="o">=</span> <span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="s2">&quot;django_nplus1.NPlus1Middleware&quot;</span><span class="p">]</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">MIDDLEWARE</span> <span class="o">=</span> <span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="s2">"django_nplus1.NPlus1Middleware"</span><span class="p">]</span>
 </span></code></pre></div>
 <h3 id="pytest-plugin">pytest Plugin<a class="headerlink" href="#pytest-plugin" title="Permanent link">&para;</a></h3>
 <p>For per-test control without the middleware:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">nplus1</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_my_view</span><span class="p">(</span><span class="n">client</span><span class="p">):</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/my-view/&quot;</span><span class="p">)</span>  <span class="c1"># Fails if N+1 detected</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"/my-view/"</span><span class="p">)</span>  <span class="c1"># Fails if N+1 detected</span>
 </span></code></pre></div>
 <p>See <a href="../../user-guide/pytest-plugin/">pytest Plugin</a> for details.</p>
 <h3 id="profiler">Profiler<a class="headerlink" href="#profiler" title="Permanent link">&para;</a></h3>
@@ -1124,15 +1125,15 @@
 <div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1</span><span class="w"> </span><span class="kn">import</span> <span class="n">Profiler</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
 </span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="k">with</span> <span class="n">Profiler</span><span class="p">():</span>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="n">users</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">all</span><span class="p">())</span>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="n">users</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">profile</span>  <span class="c1"># Raises NPlus1Error</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="k">for</span> <span class="n">user</span> <span class="ow">in</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>        <span class="n">user</span><span class="o">.</span><span class="n">profile</span>  <span class="c1"># Raises NPlus1Error at the second user</span>
 </span></code></pre></div>
 <h2 id="celery-tasks">Celery Tasks<a class="headerlink" href="#celery-tasks" title="Permanent link">&para;</a></h2>
 <p>The equivalent of the middleware for Celery tasks:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># settings.py (or settings/testing.py)</span>
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">NPLUS1_CELERY</span> <span class="o">=</span> <span class="kc">True</span>
 </span></code></pre></div>
-<p>Each task gets its own detection context, so N+1 queries inside <code>task.delay()</code> or <code>task.apply()</code> are reported the same way as in HTTP requests.</p>
+<p>Each task gets its own detection scope, so N+1 queries in tasks run by a worker or with <code>task.apply()</code> are reported the same way as in HTTP requests. One difference: an unused eager load is only found when the task ends, too late to fail it, so it is logged at ERROR level even with <code>NPLUS1_RAISE</code>.</p>
 
 
 
@@ -1187,7 +1188,7 @@
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.sections", "navigation.expand", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>

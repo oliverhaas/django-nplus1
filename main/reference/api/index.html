@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -31,7 +31,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -751,6 +751,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#detectioncontext" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DetectionContext
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#nplus1_allow" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -884,6 +895,17 @@
     <span class="md-ellipsis">
       
         Markers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Options
       
     </span>
   </a>
@@ -1022,6 +1044,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#detectioncontext" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DetectionContext
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#nplus1_allow" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1161,6 +1194,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Options
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1192,92 +1236,117 @@
 <p>Django middleware that detects N+1 queries and unused eager loads during request processing. Supports both sync and async views.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">MIDDLEWARE</span> <span class="o">=</span> <span class="p">[</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">...</span><span class="p">,</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="s2">&quot;django_nplus1.NPlus1Middleware&quot;</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="s2">"django_nplus1.NPlus1Middleware"</span><span class="p">,</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="p">]</span>
 </span></code></pre></div>
+<p>It reads the <code>NPLUS1_*</code> settings when Django creates it, so invalid settings and whitelist entries naming unknown models fail at startup. With <code>NPLUS1_RAISE</code>, an exception raised by the view wins over a detection made at the end of the request.</p>
 <h2 id="profiler">Profiler<a class="headerlink" href="#profiler" title="Permanent link">&para;</a></h2>
 <h3 id="profiler_1"><code>Profiler</code><a class="headerlink" href="#profiler_1" title="Permanent link">&para;</a></h3>
-<p>Context manager for manual N+1 detection.</p>
+<p>Context manager for manual N+1 detection. It raises <code>NPlus1Error</code> on the first detection.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1</span><span class="w"> </span><span class="kn">import</span> <span class="n">Profiler</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="k">with</span> <span class="n">Profiler</span><span class="p">(</span><span class="n">whitelist</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="k">as</span> <span class="n">p</span><span class="p">:</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="k">with</span> <span class="n">Profiler</span><span class="p">(</span><span class="n">whitelist</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">notifiers</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 </span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="o">...</span>  <span class="c1"># Any N+1 queries here raise NPlus1Error</span>
 </span></code></pre></div>
 <p><strong>Parameters:</strong></p>
 <ul>
 <li><code>whitelist</code> (optional): List of dicts, each with any of <code>model</code>, <code>field</code>, and <code>label</code>. A <code>model</code> pattern matches the class name (<code>"User"</code>) or <code>"app_label.ModelName"</code> (<code>"auth.User"</code>).</li>
+<li><code>notifiers</code> (optional): Notifiers that run before the raise. <code>Profiler(notifiers=init(settings))</code>, with <code>init</code> from <code>django_nplus1.notifiers</code>, also logs, warns or raises as the <code>NPLUS1_*</code> settings say.</li>
 </ul>
+<h2 id="detectioncontext"><code>DetectionContext</code><a class="headerlink" href="#detectioncontext" title="Permanent link">&para;</a></h2>
+<p>The detection scope that <code>NPlus1Middleware</code>, <code>Profiler</code> and the Celery integration are built on. Use it to detect N+1 queries in other entry points, such as management commands or message consumers.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django.conf</span><span class="w"> </span><span class="kn">import</span> <span class="n">settings</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1</span><span class="w"> </span><span class="kn">import</span> <span class="n">DetectionContext</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1.notifiers</span><span class="w"> </span><span class="kn">import</span> <span class="n">init</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="k">with</span> <span class="n">DetectionContext</span><span class="p">(</span><span class="n">notifiers</span><span class="o">=</span><span class="n">init</span><span class="p">(</span><span class="n">settings</span><span class="p">),</span> <span class="n">whitelist</span><span class="o">=</span><span class="p">[{</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"auth.User"</span><span class="p">}]):</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="o">...</span>
+</span></code></pre></div>
+<p><strong>Parameters</strong> (keyword-only, all optional):</p>
+<ul>
+<li><code>notifiers</code>: Objects with a <code>notify(message)</code> method, called for each detection.</li>
+<li><code>whitelist</code>: Entries in the same format as <code>Profiler(whitelist=...)</code>.</li>
+<li><code>sender</code>: The <code>sender</code> of the <code>nplus1_detected</code> signal. Default: the scope's class.</li>
+</ul>
+<p>Scopes nest. A detection inside an inner scope goes to the notifiers of every enclosing scope, and notifiers built from the same settings report it once. A whitelist entry of any enclosing scope suppresses it. Entering a scope that is already active raises <code>RuntimeError</code>.</p>
 <h2 id="nplus1_allow"><code>nplus1_allow</code><a class="headerlink" href="#nplus1_allow" title="Permanent link">&para;</a></h2>
 <p>Context manager to locally suppress N+1 detection for specific code blocks. Useful for incrementally adopting detection in existing projects.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1</span><span class="w"> </span><span class="kn">import</span> <span class="n">nplus1_allow</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1</span><span class="w"> </span><span class="kn">import</span> <span class="n">nplus1_allow</span>
 </span></code></pre></div>
 <p><strong>Usage:</strong></p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Suppress all detections in a block</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">with</span> <span class="n">nplus1_allow</span><span class="p">():</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="o">...</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="c1"># Suppress a specific model (supports fnmatch wildcards)</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="k">with</span> <span class="n">nplus1_allow</span><span class="p">([{</span><span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;User&quot;</span><span class="p">}]):</span>
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="o">...</span>
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>
-</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="c1"># Suppress a specific model/field combination</span>
-</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="k">with</span> <span class="n">nplus1_allow</span><span class="p">([{</span><span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;User&quot;</span><span class="p">,</span> <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="s2">&quot;profile&quot;</span><span class="p">}]):</span>
-</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>    <span class="o">...</span>
-</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>
-</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="c1"># Suppress multiple patterns</span>
-</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="k">with</span> <span class="n">nplus1_allow</span><span class="p">([{</span><span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;User&quot;</span><span class="p">,</span> <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="s2">&quot;profile&quot;</span><span class="p">},</span> <span class="p">{</span><span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;Post&quot;</span><span class="p">}]):</span>
-</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>    <span class="o">...</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Suppress all detections in a block</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="k">with</span> <span class="n">nplus1_allow</span><span class="p">():</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="o">...</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="c1"># Suppress a specific model (supports fnmatch wildcards)</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="k">with</span> <span class="n">nplus1_allow</span><span class="p">([{</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"User"</span><span class="p">}]):</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="o">...</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="c1"># Suppress a specific model/field combination</span>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="k">with</span> <span class="n">nplus1_allow</span><span class="p">([{</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"User"</span><span class="p">,</span> <span class="s2">"field"</span><span class="p">:</span> <span class="s2">"profile"</span><span class="p">}]):</span>
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>    <span class="o">...</span>
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="c1"># Suppress multiple patterns</span>
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="k">with</span> <span class="n">nplus1_allow</span><span class="p">([{</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"User"</span><span class="p">,</span> <span class="s2">"field"</span><span class="p">:</span> <span class="s2">"profile"</span><span class="p">},</span> <span class="p">{</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"Post"</span><span class="p">}]):</span>
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>    <span class="o">...</span>
 </span></code></pre></div>
 <p><strong>Parameters:</strong></p>
 <ul>
 <li><code>whitelist</code> (optional): List of dicts with <code>model</code>, <code>field</code>, and/or <code>label</code> keys. Same format as <code>Profiler(whitelist=...)</code> and <code>@pytest.mark.nplus1(whitelist=...)</code>. Supports fnmatch wildcards.</li>
 </ul>
-<p>With no arguments, all detections are suppressed within the block. Supports nesting: inner <code>nplus1_allow</code> calls add to the outer rules; exiting restores the previous state.</p>
-<p>Works in both middleware and profiler contexts.</p>
+<p>Without an argument, every detection in the block is suppressed. An empty list suppresses nothing. Supports nesting: inner <code>nplus1_allow</code> calls add to the outer rules; exiting restores the previous state.</p>
+<p>An unused eager load is reported when the scope ends, but it is suppressed when the query that loaded it ran inside the block.</p>
+<p>Works in every detection scope.</p>
 <p><strong>Note:</strong> <code>nplus1_allow()</code> and <code>Profiler</code> match a <code>model</code> pattern against both the class name (<code>"User"</code>) and <code>"app_label.ModelName"</code> (<code>"auth.User"</code>), so patterns copied from <code>NPLUS1_WHITELIST</code> work unchanged.</p>
 <h2 id="signals">Signals<a class="headerlink" href="#signals" title="Permanent link">&para;</a></h2>
 <h3 id="nplus1_detected"><code>nplus1_detected</code><a class="headerlink" href="#nplus1_detected" title="Permanent link">&para;</a></h3>
-<p>Django signal emitted on every detection (after whitelist and <code>nplus1_allow</code> filtering). Useful for custom reporting (e.g., sending to Sentry).</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1</span><span class="w"> </span><span class="kn">import</span> <span class="n">nplus1_detected</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">report_nplus1</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">sentry_sdk</span><span class="o">.</span><span class="n">capture_message</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">message</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="s2">&quot;warning&quot;</span><span class="p">)</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="n">nplus1_detected</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">report_nplus1</span><span class="p">)</span>
+<p>Django signal sent once per detection, after whitelist and <code>nplus1_allow</code> filtering. Useful for custom reporting (e.g., sending to Sentry).</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1</span><span class="w"> </span><span class="kn">import</span> <span class="n">nplus1_detected</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">report_nplus1</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">sentry_sdk</span><span class="o">.</span><span class="n">capture_message</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">message</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="s2">"warning"</span><span class="p">)</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="n">nplus1_detected</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">report_nplus1</span><span class="p">)</span>
 </span></code></pre></div>
 <p><strong>Arguments sent:</strong></p>
 <ul>
-<li><code>sender</code>: <code>NPlus1Middleware</code> (function) or <code>Profiler</code> (class)</li>
-<li><code>message</code>: A <code>Message</code> instance with <code>.model</code>, <code>.field</code>, <code>.label</code>, and <code>.message</code> attributes</li>
+<li><code>sender</code>: The class of the innermost scope that made the detection: <code>NPlus1Middleware</code> for requests, <code>Profiler</code> for <code>Profiler</code>, the pytest marker and the <code>nplus1</code> fixture, and <code>DetectionContext</code> for Celery tasks. A <code>DetectionContext</code> created with <code>sender=</code> sends that value.</li>
+<li><code>message</code>: A <code>Message</code> instance with <code>.model</code>, <code>.field</code>, <code>.label</code>, and <code>.message</code> attributes. <code>.caller</code> is the <code>(filename, lineno, funcname)</code> of the line that triggered the detection, or <code>None</code> when there is none, as for an unused eager load. With <code>NPLUS1_SHOW_ALL_CALLERS</code>, <code>.callers</code> holds a stack for each repeated access instead.</li>
 </ul>
 <h2 id="duplicate-query-detection">Duplicate Query Detection<a class="headerlink" href="#duplicate-query-detection" title="Permanent link">&para;</a></h2>
 <p>The primary detection works at the ORM descriptor level. For raw SQL, <code>.raw()</code>, and other paths that bypass the ORM, enable SQL-level duplicate query detection:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">NPLUS1_DETECT_DUPLICATE_QUERIES</span> <span class="o">=</span> <span class="kc">True</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">NPLUS1_DUPLICATE_QUERY_THRESHOLD</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># default</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">NPLUS1_DETECT_DUPLICATE_QUERIES</span> <span class="o">=</span> <span class="kc">True</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">NPLUS1_DUPLICATE_QUERY_THRESHOLD</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># default</span>
 </span></code></pre></div>
-<p>When enabled, all SQL queries are fingerprinted (literals replaced with <code>?</code>) and repeated identical queries from the same call-site are flagged. Detected via the <code>Profiler</code>, <code>@pytest.mark.nplus1</code>, and <code>NPlus1Middleware</code>.</p>
+<p>When enabled, every query on every database connection is fingerprinted (literals replaced with <code>?</code>), and repeated identical queries from the same call-site are flagged. This works in every detection scope.</p>
 <p>The call site is the innermost frame of your code. Frames from the standard library, installed packages, and console-script launchers such as <code>bin/pytest</code> don't count. Queries with no frame of your code on the stack aren't counted, nor are queries Django runs while opening a connection (backend setup and <code>connection_created</code> receivers such as <code>django.contrib.postgres</code>' type lookups).</p>
 <h2 id="exceptions">Exceptions<a class="headerlink" href="#exceptions" title="Permanent link">&para;</a></h2>
 <h3 id="nplus1error"><code>NPlus1Error</code><a class="headerlink" href="#nplus1error" title="Permanent link">&para;</a></h3>
-<p>Raised when an N+1 query or unused eager load is detected (when <code>NPLUS1_RAISE=True</code> or using <code>Profiler</code>).</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1</span><span class="w"> </span><span class="kn">import</span> <span class="n">NPlus1Error</span>
+<p>Raised on a detection by <code>Profiler</code>, and by the middleware and Celery tasks when <code>NPLUS1_RAISE = True</code> and <code>NPLUS1_ERROR</code> names no other class. Also raised at startup when <code>NPLUS1_WHITELIST</code> names a model that doesn't exist.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1</span><span class="w"> </span><span class="kn">import</span> <span class="n">NPlus1Error</span>
 </span></code></pre></div>
 <h2 id="celery-integration">Celery Integration<a class="headerlink" href="#celery-integration" title="Permanent link">&para;</a></h2>
-<p>Per-task N+1 detection for Celery workers. Each task execution gets its own detection context, mirroring how the middleware wraps HTTP requests.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>pip<span class="w"> </span>install<span class="w"> </span>django-nplus1<span class="o">[</span>celery<span class="o">]</span>
+<p>Per-task N+1 detection for Celery workers. Each task run gets its own detection scope, like a request under the middleware.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>pip<span class="w"> </span>install<span class="w"> </span>django-nplus1<span class="o">[</span>celery<span class="o">]</span>
 </span></code></pre></div>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># settings.py</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">NPLUS1_CELERY</span> <span class="o">=</span> <span class="kc">True</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># settings.py</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">NPLUS1_CELERY</span> <span class="o">=</span> <span class="kc">True</span>
 </span></code></pre></div>
 <h3 id="setup_celery_detection"><code>setup_celery_detection()</code><a class="headerlink" href="#setup_celery_detection" title="Permanent link">&para;</a></h3>
-<p>Manually connect Celery task signals. Called automatically when <code>NPLUS1_CELERY = True</code>.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1.celery</span><span class="w"> </span><span class="kn">import</span> <span class="n">setup_celery_detection</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">setup_celery_detection</span><span class="p">()</span>
+<p>Connects the Celery task signals. Called at startup when <code>NPLUS1_CELERY = True</code>. Invalid <code>NPLUS1_*</code> settings raise here.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1.celery</span><span class="w"> </span><span class="kn">import</span> <span class="n">setup_celery_detection</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="n">setup_celery_detection</span><span class="p">()</span>
 </span></code></pre></div>
+<p><code>teardown_celery_detection()</code> disconnects them. Call it only while no task runs.</p>
 <p><strong>Limitations:</strong></p>
 <ul>
-<li><code>nplus1_allow()</code> context does not propagate across task boundaries (ContextVars don't survive serialization).</li>
-<li>Scope nesting for synchronous subtasks (<code>.apply()</code> inside a task) creates a separate context for the inner task.</li>
+<li>A detection made when a task ends, such as an unused eager load, can't fail the task, because Celery has already recorded its result. It is logged at ERROR level on the <code>django_nplus1</code> logger instead.</li>
+<li>When detection can't start for a task, the task runs without it and the error is logged at ERROR level.</li>
+<li><code>nplus1_allow()</code> doesn't reach tasks sent to a worker, because context variables don't travel with the task message. A task run with <code>.apply()</code> inside another task or a request nests in that scope, so an enclosing <code>nplus1_allow()</code> covers it.</li>
 </ul>
 <h2 id="pytest-plugin">pytest Plugin<a class="headerlink" href="#pytest-plugin" title="Permanent link">&para;</a></h2>
 <h3 id="fixtures">Fixtures<a class="headerlink" href="#fixtures" title="Permanent link">&para;</a></h3>
@@ -1288,6 +1357,10 @@
 <ul>
 <li><code>@pytest.mark.nplus1</code>: Auto-detect N+1 in the marked test's body. Fixtures run outside the profiler. Applies <code>NPLUS1_WHITELIST</code>.</li>
 <li><code>@pytest.mark.nplus1(whitelist=[...])</code>: With extra whitelist entries.</li>
+</ul>
+<h3 id="options">Options<a class="headerlink" href="#options" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>--nplus1-eager-corpus</code>: Turns on <a href="../../user-guide/corpus-mode/">corpus mode</a>.</li>
 </ul>
 
 
@@ -1343,7 +1416,7 @@
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.sections", "navigation.expand", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>
