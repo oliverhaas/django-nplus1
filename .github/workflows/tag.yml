@@ -11,7 +11,7 @@ jobs:
       should_release: ${{ steps.version.outputs.should_release }}
       version: ${{ steps.version.outputs.current }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 2
 
@@ -23,7 +23,7 @@ jobs:
 
           if curl -s "https://pypi.org/pypi/django-nplus1/$CURRENT_VERSION/json" | grep -q '"version"'; then
             echo "should_release=false" >> $GITHUB_OUTPUT
-            echo "Version $CURRENT_VERSION already on PyPI — nothing to do"
+            echo "Version $CURRENT_VERSION is already on PyPI, nothing to do"
             exit 0
           fi
 
@@ -33,7 +33,7 @@ jobs:
           git fetch --tags
           if git rev-parse "v$CURRENT_VERSION" >/dev/null 2>&1; then
             echo "should_release=false" >> $GITHUB_OUTPUT
-            echo "Tag v$CURRENT_VERSION already exists — delete it manually to re-release"
+            echo "Tag v$CURRENT_VERSION already exists. Delete it to release again."
             exit 0
           fi
 
@@ -45,10 +45,10 @@ jobs:
     if: needs.check-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v10.2.0
 
       - name: Set up Python
         run: uv python install 3.14
@@ -81,7 +81,7 @@ jobs:
     env:
       VERSION: ${{ needs.check-version.outputs.version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Create and push tag
         run: |
@@ -90,8 +90,7 @@ jobs:
           git tag "v$VERSION"
           git push origin "v$VERSION"
 
-      # GITHUB_TOKEN-pushed tags don't trigger downstream workflows — explicit
-      # dispatch is required.
+      # Tags pushed with GITHUB_TOKEN don't trigger other workflows, so dispatch them.
       - name: Trigger publish workflow
         run: gh workflow run publish.yml -f version=$VERSION -R ${{ github.repository }}
         env:
