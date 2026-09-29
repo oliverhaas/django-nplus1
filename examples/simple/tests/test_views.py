@@ -1,11 +1,7 @@
-"""
-Example tests demonstrating django-nplus1 detection.
+"""Example tests for django-nplus1.
 
-Tests marked with @pytest.mark.nplus1 will fail if the code under test
-triggers an N+1 query. No pytest.raises needed -- the test simply fails,
-telling you to fix the view.
-
-Run with: pytest
+A test marked with @pytest.mark.nplus1 fails when the code under test triggers an N+1 query,
+and the error names the relation and the line that loaded it.
 """
 
 import pytest
@@ -55,23 +51,24 @@ class TestBookListBad:
 @pytest.mark.nplus1
 @pytest.mark.django_db
 class TestBookService:
-    """Testing service methods that operate on single instances.
+    """book_get_author_name reads book.author and leaves prefetching to the caller.
 
-    book_get_author_name accesses book.author without prefetching.
-    That's fine -- it's the caller's job to prefetch. In tests, we
-    use nplus1_allow to suppress detection for the service layer
-    and test the logic itself.
+    A row fetched on its own is never reported. Calling the helper for each row of a list is an N+1.
     """
 
-    def test_single_book_with_allow(self, books):
+    def test_single_book_with_select_related(self, books):
         book = Book.objects.select_related("author").first()
         assert BookService.book_get_author_name(book=book) == "Author 0"
 
     def test_single_book_without_prefetch(self, books):
-        """nplus1_allow in the test suppresses detection for the service call."""
         book = Book.objects.first()
+        assert BookService.book_get_author_name(book=book) == "Author 0"
+
+    def test_each_book_of_a_list_with_allow(self, books):
+        """nplus1_allow suppresses the N+1 so the test can check the helper's logic."""
         with nplus1_allow([{"model": "Book", "field": "author"}]):
-            assert BookService.book_get_author_name(book=book) == "Author 0"
+            names = [BookService.book_get_author_name(book=book) for book in Book.objects.order_by("pk")]
+        assert names == ["Author 0", "Author 1", "Author 2"]
 
     def test_batch_is_always_safe(self, books):
         """book_get_author_names uses prefetch_related_objects internally."""
