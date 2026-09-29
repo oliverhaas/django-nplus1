@@ -1,5 +1,4 @@
 import contextlib
-import functools
 from collections import defaultdict
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
@@ -7,94 +6,86 @@ from typing import TYPE_CHECKING, Any
 from django.dispatch import Signal
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Generator
+    from collections.abc import Callable, Generator, Iterable
     from contextvars import Token
 
-# Django signal emitted on every N+1 or unused eager load detection.
-# Receivers get ``sender`` (the notifying object) and ``message`` (a Message instance).
+# Django signal sent once per detection. Receivers get ``sender`` (the class of the
+# scope that detected it) and ``message`` (a Message instance).
 nplus1_detected = Signal()
 
 # Per-context listener registry
-_listeners: ContextVar[defaultdict[str, list[Callable[..., Any]]]] = ContextVar(
+_listeners: ContextVar[defaultdict[str, list[Callable[..., Any]]] | None] = ContextVar(
     "nplus1_listeners",
+    default=None,
 )
+
+# Signal names muted in the current context by suppress()
+_suppressed: ContextVar[frozenset[str]] = ContextVar("nplus1_suppressed", default=frozenset())
+
+
+def active() -> bool:
+    """Return True while a detection scope is active in the current context."""
+    return _listeners.get() is not None
 
 
 def connect(signal_name: str, callback: Callable[..., Any]) -> None:
-    try:
-        _listeners.get()[signal_name].append(callback)
-    except LookupError:
-        return
+    listeners = _listeners.get()
+    if listeners is not None:
+        listeners[signal_name].append(callback)
 
 
 def disconnect(signal_name: str, callback: Callable[..., Any]) -> None:
-    try:
-        _listeners.get()[signal_name].remove(callback)
-    except ValueError, LookupError:
-        pass
+    listeners = _listeners.get()
+    if listeners is None:
+        return
+    with contextlib.suppress(ValueError):
+        listeners[signal_name].remove(callback)
 
 
 def send(signal_name: str, **kwargs: Any) -> None:
-    try:
-        listeners = _listeners.get()
-    except LookupError:
-        return  # No active context - detection not enabled
-    for callback in listeners[signal_name][:]:
+    listeners = _listeners.get()
+    if listeners is None or signal_name in _suppressed.get():
+        return
+    callbacks = listeners.get(signal_name)
+    if not callbacks:
+        return
+    for callback in callbacks[:]:
         callback(**kwargs)
 
 
-def signalify(
-    signal_name: str,
-    func: Callable[..., Any],
-    *,
-    parser: Callable[..., Any] | None = None,
-) -> Callable[..., Any]:
-    @functools.wraps(func)
-    def wrapped(*args: Any, **kwargs: Any) -> Any:
-        ret = func(*args, **kwargs)
-        send(
-            signal_name,
-            args=args,
-            kwargs=kwargs,
-            ret=ret,
-            context={},
-            parser=parser,
-        )
-        return ret
-
-    return wrapped
+def _args(args: Any, kwargs: Any, context: Any, ret: Any = None) -> Any:
+    return args
 
 
-def designalify(signal_name: str, func: Callable[..., Any]) -> Callable[..., Any]:
-    @functools.wraps(func)
-    def wrapped(*args: Any, **kwargs: Any) -> Any:
-        with suppress(signal_name):
-            return func(*args, **kwargs)
-
-    return wrapped
+def emit(signal_name: str, *args: Any, **context: Any) -> None:
+    """Send a signal whose payload is its positional arguments."""
+    send(signal_name, args=args, kwargs={}, context=context, ret=None, parser=_args)
 
 
 @contextlib.contextmanager
 def suppress(signal_name: str) -> Generator[None]:
-    try:
-        registry = _listeners.get()
-    except LookupError:
-        yield
-        return
-    saved = registry[signal_name][:]
-    registry[signal_name].clear()
+    """Mute one signal in the current context. Other threads and tasks keep receiving it."""
+    token = _suppressed.set(_suppressed.get() | {signal_name})
     try:
         yield
     finally:
-        registry[signal_name] = saved
+        _suppressed.reset(token)
 
 
-def setup_context() -> Token[defaultdict[str, list[Callable[..., Any]]]]:
-    """Create a fresh listener registry for the current context. Returns a token for teardown."""
-    return _listeners.set(defaultdict(list))
+def setup_context(inherit: Iterable[str] = ()) -> Token[defaultdict[str, list[Callable[..., Any]]] | None]:
+    """Create a fresh listener registry for the current context. Returns a token for teardown.
+
+    Callbacks for the ``inherit`` signals carry over from the enclosing registry.
+    """
+    registry: defaultdict[str, list[Callable[..., Any]]] = defaultdict(list)
+    outer = _listeners.get()
+    if outer is not None:
+        for signal_name in inherit:
+            registry[signal_name] = list(outer.get(signal_name, ()))
+    return _listeners.set(registry)
 
 
-def teardown_context(token: Token[defaultdict[str, list[Callable[..., Any]]]]) -> None:
+def teardown_context(token: Token[defaultdict[str, list[Callable[..., Any]]] | None]) -> None:
     """Reset the listener registry to the state before setup_context."""
     _listeners.reset(token)
 
@@ -108,3 +99,4 @@ TOUCH = "touch"
 GET_CALL = "get_call"
 FIELD_LOAD = "field_load"
 FIELD_TOUCH = "field_touch"
+QUERY = "query"

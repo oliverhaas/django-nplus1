@@ -8,15 +8,21 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import types
 
-_PACKAGE_DIR = str(Path(__file__).resolve().parent)
-# "scripts" holds console-script launchers such as bin/pytest.
+    from django.db.models import Model
+
+CallSite = tuple[str, int, str]
+
+_PACKAGE_DIR = str(Path(__file__).parent)
+# "scripts" holds console-script launchers such as bin/pytest. Frame filenames can
+# carry either the symlinked or the resolved path, so both spellings are listed.
 _INTERNAL_DIRS = tuple(
-    f"{Path(directory)}{os.sep}"
+    f"{spelling}{os.sep}"
     for directory in {
         _PACKAGE_DIR,
         *site.getsitepackages(),
         *(sysconfig.get_path(key) for key in ("stdlib", "platstdlib", "purelib", "platlib", "scripts")),
     }
+    for spelling in {str(Path(directory)), os.path.realpath(directory)}
 )
 
 
@@ -31,7 +37,7 @@ def _is_internal_frame(frame: types.FrameType) -> bool:
     return "site-packages" in filename or filename.startswith(_INTERNAL_DIRS)
 
 
-def get_caller() -> tuple[str, int, str] | None:
+def get_caller() -> CallSite | None:
     """
     Walk the call stack and return (filename, lineno, funcname) of the
     first project frame, or None when every frame is internal.
@@ -47,12 +53,12 @@ def get_caller() -> tuple[str, int, str] | None:
     return None
 
 
-def get_stack() -> list[tuple[str, int, str]]:
+def get_stack() -> list[CallSite]:
     """
     Return the current call stack as (filename, lineno, funcname) tuples,
     excluding internal frames.
     """
-    result: list[tuple[str, int, str]] = []
+    result: list[CallSite] = []
     frame: types.FrameType | None = sys._getframe(1)
     try:
         while frame is not None:
@@ -62,3 +68,16 @@ def get_stack() -> list[tuple[str, int, str]]:
     finally:
         del frame
     return result
+
+
+def to_key(instance: Model) -> str:
+    """Identify a model instance as ``app_label.Model:pk``.
+
+    Reads the primary key from ``__dict__`` so no descriptor (and no signal) runs.
+    Unsaved instances fall back to their object id.
+    """
+    meta = instance._meta
+    values = [instance.__dict__.get(field.attname) for field in meta.pk_fields]
+    if any(value is None for value in values):
+        return f"{meta.label}:#{id(instance)}"
+    return f"{meta.label}:{values[0] if len(values) == 1 else tuple(values)}"

@@ -81,3 +81,28 @@ class Company(models.Model):
 
     class Meta:
         app_label = "testapp"
+
+
+class PetProxy(Pet):
+    class Meta:
+        app_label = "testapp"
+        proxy = True
+
+
+class Base(models.Model):
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="bases")
+
+    class Meta:
+        app_label = "testapp"
+
+
+class Child(Base):
+    class Meta:
+        app_label = "testapp"
+
+
+class Node(models.Model):
+    parent = models.OneToOneField("self", on_delete=models.CASCADE, null=True, related_name="child")
+
+    class Meta:
+        app_label = "testapp"

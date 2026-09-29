@@ -1,8 +1,8 @@
 # Corpus mode
 
-Corpus mode accumulates load and touch events across the entire pytest session and reports two classes of finding once at session end: prefetches that were never read (`unused_eager_load`) and concrete fields that were never read (`unused_field_load`).
+Corpus mode collects eager loads and field loads across the whole pytest session and reports two kinds of finding once at the end: eager loads whose relation no test read (`unused_eager_load`) and concrete fields that no test read (`unused_field_load`).
 
-The per-request `unused_eager_load` detector flags prefetches with no in-request touches. In real codebases that fires on patterns that are correct at suite scope: shared prefetch tuples consumed by many paths, `{% if %}` branches where the empty path flags the prefetch, `select_related` to sparse FKs. Corpus mode aggregates across the whole session, so a prefetch survives if any test touched it.
+The per-request `unused_eager_load` detector flags eager loads that the request didn't read. In real codebases that fires on patterns that are correct at suite scope: shared prefetch tuples consumed by many paths, `{% if %}` branches where the empty path flags the prefetch, `select_related` to sparse FKs. Corpus mode aggregates across the whole session, so an eager load passes once any test reads what it loaded.
 
 Field detection has no per-request equivalent. It is only available in corpus mode.
 
@@ -20,19 +20,19 @@ Or in Django test settings:
 NPLUS1_EAGER_CORPUS = True
 ```
 
-Off by default; opt-in only.
+Off by default.
 
 ## What changes
 
-- Per-request `unused_eager_load` detection is suppressed for the whole session.
-- Any `DetectionContext` opened during the run (by `NPlus1Middleware`, the Celery integration, an explicit `Profiler`, or a manual `with DetectionContext()`) contributes EAGER_LOAD / TOUCH / FIELD_LOAD / FIELD_TOUCH events to a shared session tracker.
-- `DeferredAttribute` is patched into a data descriptor so every concrete-field read passes through the touch hook, regardless of whether the value was loaded by the SELECT.
-- ORM calls outside an instrumented scope (test setup, factories, direct queryset assertions) are ignored.
-- At session end, surviving `(model, field, call_site)` tuples are printed for both detectors and pytest exits with code 1 if any remain.
+- Per-request `unused_eager_load` detection is off for the whole session.
+- Every detection scope opened during the run (by `NPlus1Middleware`, the Celery integration, `Profiler`, the pytest marker and fixture, or a manual `with DetectionContext():`) records its eager loads, field loads and reads in a session-wide tracker.
+- Django's `DeferredAttribute` becomes a data descriptor, so every read of a loaded field goes through it and counts as a read. Field values stay in the instance `__dict__`, so models behave as they do without corpus mode.
+- ORM calls outside a scope (test setup, factories, direct queryset assertions) are ignored.
+- At the end of the session the findings are printed in a "django-nplus1 corpus" section of the terminal summary, and the run fails.
 
 ## What counts as instrumented
 
-Only code executed inside an active `DetectionContext` contributes to the tracker. In practice that means:
+Only code executed inside an active detection scope contributes to the tracker. In practice that means:
 
 - View bodies reached through `NPlus1Middleware` (typical: tests using the Django test client).
 - Celery task bodies when `NPLUS1_CELERY = True` is set and the task signals are connected.
@@ -40,9 +40,29 @@ Only code executed inside an active `DetectionContext` contributes to the tracke
 
 If a prefetch is declared and consumed entirely in test code (no middleware, no task, no explicit wrap), corpus mode will not flag it. Wrap the code you actually want audited.
 
+## Which reads count
+
+A read counts only for rows loaded in the same scope. Each test starts with an empty database and reuses primary keys, so a read in one test says nothing about the rows another test loaded. Nested scopes, such as a test client request inside `Profiler`, share the rows of the outermost scope.
+
+A finding names the line that declared the eager load or, for a field, the line that started the queryset. The finding goes away once any test reads the field on a row loaded there.
+
+Reading a forward relation, such as `pet.user`, also counts as a read of its foreign key column `user_id`, because loading the relation needs that column.
+
+## Report
+
+```text
+============================= django-nplus1 corpus =============================
+django-nplus1: corpus-wide unused_eager_load (1 finding)
+  User.hobbies                   at /project/users/views.py:12 in user_list
+django-nplus1: corpus-wide unused_field_load (1 finding)
+  User.name                      at /project/users/views.py:12 in user_list
+```
+
+When findings remain, a run that would have passed exits with code 1. Any other exit code, such as the one for failed tests or an interrupted run, stays as it is.
+
 ## Suppression
 
-Use the existing `NPLUS1_WHITELIST` setting:
+Only `NPLUS1_WHITELIST` and `# nplus1: corpus-ignore` apply to corpus findings. Whitelists given to a scope, `nplus1_allow()` and `# nplus1: ignore` don't.
 
 ```python
 NPLUS1_WHITELIST = [
@@ -50,7 +70,7 @@ NPLUS1_WHITELIST = [
 ]
 ```
 
-Or use a per-line marker at the declaration:
+A `# nplus1: corpus-ignore` comment on the line a finding names suppresses every finding for that line, eager loads and fields alike:
 
 ```python
 def view(request):
@@ -62,44 +82,40 @@ The corpus marker is distinct from the existing `# nplus1: ignore` marker. Use `
 
 ## Unused field loads
 
-A field is counted as "touched" when accessing it would have triggered a database fetch had the field been deferred. Concretely, the read must be routed through `DeferredAttribute.__get__`. Fields that are loaded by the SELECT but never accessed in this way across the full pytest session are reported as `unused_field_load`. The suggested fix is to add `.only()` or `.defer()` at the call site so the column is not fetched at all.
+A field loaded by the SELECT but never read across the session is reported as `unused_field_load`. The suggested fix is `.only()` or `.defer()` at the line the finding names, so the column is not fetched at all. Primary keys are never reported.
 
-Note on `model.save()`: every field on a re-saved instance is counted as touched, because deferring any field would force a refetch inside `save()`. Use `save(update_fields=[...])` or `.update()` to avoid touching unrelated fields.
+Note on `model.save()`: every field on a re-saved instance is counted as read, because `save()` reads each field it writes. Use `save(update_fields=[...])` or `.update()` to avoid reading unrelated fields.
 
 Exclude noisy models with `NPLUS1_FIELD_EXCLUDE`:
 
 ```python
 NPLUS1_FIELD_EXCLUDE = [
-    "auth.User",        # exact match
-    "contenttypes.*",   # wildcard: all models in the app
+    "auth.User",  # exact match
+    "contenttypes.*",  # wildcard: all models in the app
 ]
 ```
 
-Patterns are fnmatch'd against `app_label.ModelName`. Setting `["*"]` short-circuits field tracking entirely.
+Patterns are fnmatch'd against `app_label.ModelName`. `["*"]` turns field tracking off.
 
-Add `unused_field_load` to `NPLUS1_WHITELIST` to suppress individual fields:
+Add `unused_field_load` to `NPLUS1_WHITELIST` to suppress individual fields. A foreign key's column goes by its attribute name, such as `user_id`:
 
 ```python
 NPLUS1_WHITELIST = [
     {"label": "unused_field_load", "model": "myapp.Article", "field": "body"},
+    {"label": "unused_field_load", "model": "myapp.Article", "field": "author_id"},
 ]
 ```
 
-A `# nplus1: corpus-ignore` comment at the queryset call site suppresses both `unused_eager_load` and `unused_field_load` for that queryset.
-
 ## pytest-xdist
 
-Workers dump their tracker state to `.nplus1-eager-corpus.<workerid>.json` in the pytest working directory. The controller merges all dumps in `pytest_sessionfinish` and reports once. Run pytest from the project root for consistent results across xdist invocations.
-
-## Exit code
-
-Corpus mode reports at session end: pytest exits with code 1 if any untouched prefetches or untouched field loads remain after whitelist filtering. The standard pytest exit code for test failures (also 1) is preserved.
+Corpus mode works with pytest-xdist. Each worker hands its tracker to the controller when it finishes, and the controller reports once for the whole session. No files are written.
 
 ## For plugin authors
 
-Custom listeners subscribed to the `EAGER_LOAD` signal must unpack a 5-element tuple as of 0.4.0: `(model, field, instances, key, call_site)`. The fifth element is the declaration call-site as a `(filename, lineno, funcname)` tuple, or `None` if it could not be resolved.
+Listeners connected with `django_nplus1.signals.connect()` receive each payload as the `args` tuple. Rows are identified by keys of the form `"app_label.ModelName:pk"`, and call sites are `(filename, lineno, funcname)` tuples.
 
-Two new signals back the field detector:
+- `EAGER_LOAD` carries `(model, field, keys, group, call_site)`. `group` numbers the query that loaded the rows. `call_site` is the line that declared the eager load. It is resolved in corpus mode only and is `None` otherwise.
+- `FIELD_LOAD` carries `(model, attname, keys, call_site)`, once for each loaded concrete field other than the primary key. `call_site` is the line that started the queryset.
+- `FIELD_TOUCH` carries `(model, attname, keys)` for each read of a loaded field.
 
-- `FIELD_LOAD` carries `(model, field, instance_keys, call_site)`. Fired once per non-deferred concrete field on each fetched row when corpus mode is active. `call_site` may be `None` if the queryset call site could not be resolved.
-- `FIELD_TOUCH` carries `(model, field, instance_keys)`. Fired on every read routed through the patched `DeferredAttribute.__get__`, which (during corpus mode) is every concrete-field read on a loaded instance.
+`FIELD_LOAD` and `FIELD_TOUCH` are only sent in corpus mode.

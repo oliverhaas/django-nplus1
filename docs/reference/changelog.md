@@ -1,13 +1,82 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
 
-- Corpus mode now also flags concrete fields loaded by the SELECT but never read across the suite. Reports as `unused_field_load`; suggested fix is `.only()` / `.defer()`. Suppress noisy models with `NPLUS1_FIELD_EXCLUDE`.
+### Breaking changes
+
+- Invalid settings raise `ImproperlyConfigured` when the middleware is created or Celery detection is set up. This covers a threshold that is not an integer of at least 1, an `NPLUS1_LOG_LEVEL` that is neither a number nor a level name, an `NPLUS1_LOGGER` that is neither a logger nor a logger name, and an `NPLUS1_ERROR` that is not an exception class or a path to one. A threshold such as `0` or `"2"` used to turn detection off without a word. `Profiler` and `DetectionContext` check the thresholds they use when they are entered.
+- Detection scopes nest. A detection in an inner scope reaches the notifiers of every enclosing scope, where notifiers built from the same settings report it once, and a whitelist entry of any of them suppresses it. With `NPlus1Middleware` installed, `@pytest.mark.nplus1`, the `nplus1` fixture and `Profiler` now see N+1 queries in views that a test requests through the test client. Tests that passed because the middleware hid those queries from them can now fail.
+- `nplus1_allow([])` suppresses nothing. Only `nplus1_allow()` without an argument suppresses every detection.
+- Listeners of the `EAGER_LOAD` signal receive `(model, field, keys, group, call_site)`, and instance keys have the form `app_label.ModelName:pk`.
+
+### Corpus mode
+
+- `pytest --nplus1-eager-corpus`, or `NPLUS1_EAGER_CORPUS = True`, collects eager loads and loaded fields across the whole session. At the end it reports the ones that no test read and fails the session. Unused `select_related()` and `prefetch_related()` calls are reported as `unused_eager_load`, and columns that `.only()` or `.defer()` could skip as `unused_field_load`. See [Corpus Mode](../user-guide/corpus-mode.md).
+- A finding names the line that declared the eager load or started the queryset. A `# nplus1: corpus-ignore` comment on that line suppresses it. `NPLUS1_FIELD_EXCLUDE` skips whole models, and `NPLUS1_WHITELIST` applies.
+- Works with pytest-xdist. Workers hand their findings to the controller, so no files are written.
+- New `FIELD_LOAD` and `FIELD_TOUCH` signals feed the field tracking.
+
+### Detection
+
+- N+1 queries and unused prefetches on `GenericRelation` managers are detected.
+- A `GenericForeignKey` read in a loop is reported as an N+1 on the relation, such as `Tag.content_object`. It was reported as `get()` in a loop on the target model.
+- Loops over `.iterator()` are detected.
+- A deferred field read in a loop is reported once, as an N+1 on the field. It was also reported as `get()` in a loop, which fired at the second read whatever `NPLUS1_THRESHOLD` said, and a whitelist entry for the field didn't stop it.
+- Eager loads that are read are no longer reported as unused. This affected `Prefetch(to_attr=...)` lists that are iterated, indexed, measured or searched, `GenericForeignKey` prefetches, `.count()` and `.exists()` on a prefetched relation, and `select_related()` through proxy models, multi-table inheritance parents, self-referential reverse one-to-one relations and `FilteredRelation`.
+- Reading a relation loaded with `select_related()` is no longer reported as an N+1 when the same rows were loaded earlier in the scope.
+- Rows of models with the same class name in different apps are told apart.
+- Call sites no longer point into django-nplus1's own code when the package is imported through a symlinked path.
+- Duplicate query detection runs under the async middleware and on every database connection, not only `default`. SQL given as bytes or as a psycopg `sql.Composed` object no longer raises `TypeError` after the query has run. The query text in the message is cut to 120 characters.
+- Duplicate query detection skips queries Django runs while opening a connection, such as `django.contrib.postgres`' hstore and citext type lookups, and queries with no frame of your code on the stack. Call sites no longer fall back to the standard library or a launcher line such as `.venv/bin/pytest:10`, which merged unrelated library queries into one call site. Async ORM calls run in a worker thread without your frames, so `aget()` loops are no longer reported as `get_in_loop`.
+
+### Suppression and scopes
+
+- A suppressed read no longer uses up the one report per model and field, so a later N+1 in the same scope is still reported. With `NPLUS1_SHOW_ALL_CALLERS`, an ignore comment suppresses a detection only when every listed call carries it.
+- `nplus1_allow()` also suppresses unused eager loads.
+- A whitelist entry for a model also covers its proxy models and multi-table inheritance children.
+- `Profiler`, `nplus1_allow()`, and the marker's `whitelist` match `model` patterns against `"app_label.ModelName"` as well as the class name, so `{"model": "auth.User"}` works there too.
+- In `duplicate_query` whitelist entries, `[` in the `field` pattern matches a literal bracket.
+- `DetectionContext` accepts whitelist entries as dicts, like `Profiler`. It crashed at the first detection.
+- Rows loaded in a scope can be read in a nested scope without being reported as an unused eager load.
+- Entering a scope that is already active raises `RuntimeError`. It used to leak the scope's listeners.
+- Prefetches running in several threads of one scope at once no longer hide lazy loads in the other threads, and no longer switch N+1 detection off for the rest of the scope.
+- A detection raised when a `Profiler` or `DetectionContext` exits no longer replaces an exception from its body, and no longer skips tearing down the remaining listeners. Previously an unused eager load at exit left duplicate query detection attached to the connection.
+
+### Reporting and settings
+
+- `Profiler` accepts `notifiers`, which run before it raises, for example to also log the detection.
+- `NPLUS1_LOGGER` accepts a logger name, `NPLUS1_LOG_LEVEL` a level name such as `"ERROR"`, and `NPLUS1_ERROR` a dotted path to an exception class. Strings used to crash the request at the first detection.
+- With `NPLUS1_SHOW_ALL_CALLERS`, the calls listed in a message no longer change after it was sent, and `NPLUS1_WARN` warnings point at the line that triggered the detection instead of `django_nplus1:0`.
+
+### Middleware
+
+- `NPlus1Middleware` is a class. The `MIDDLEWARE` entry stays `"django_nplus1.NPlus1Middleware"`.
+- `NPLUS1_WHITELIST` is checked when the middleware is created, at startup instead of on the first request. An unknown model still raises `NPlus1Error`. An unknown field only warns, because a `Prefetch(to_attr=...)` name is no model field. Column names such as `user_id` and model classes are accepted.
+- With `NPLUS1_RAISE`, an exception raised by the view is no longer replaced by a detection made at the end of the request.
+
+### Celery
+
+- Invalid settings raise when detection is set up, which happens at startup with `NPLUS1_CELERY = True`. They used to turn detection off for every task, with a DEBUG log line. When detection can't start for a single task, the task still runs and the error is logged at ERROR level.
+- A detection made when a task ends, such as an unused eager load, is logged at ERROR level on the `django_nplus1` logger instead of raised. Celery can't fail a task that has already finished.
+- An eager `self.replace()` no longer leaves its detection scope active.
+
+### pytest plugin
+
 - `@pytest.mark.nplus1` checks only the test body. Previously its profiler also covered fixtures, including pytest-django's test database setup, so `post_migrate` handlers and data fixtures could fail the test at setup, and the failure stayed cached for later database tests on the same worker. The autouse `auto_nplus1` fixture is replaced by a `pytest_runtest_call` hook.
 - The pytest marker and `nplus1` fixture apply `NPLUS1_WHITELIST`.
-- `Profiler`, `nplus1_allow()`, and the marker's `whitelist` match `model` patterns against `"app_label.ModelName"` as well as the class name, so `{"model": "auth.User"}` works there too.
-- Duplicate query detection skips queries Django runs while opening a connection, such as `django.contrib.postgres`' hstore and citext type lookups, and queries with no frame of your code on the stack. Call sites no longer fall back to the standard library or a launcher line such as `.venv/bin/pytest:10`, which merged unrelated library queries into one call site. Async ORM calls run in a worker thread without your frames, so `aget()` loops are no longer reported as `get_in_loop`.
-- A detection raised when a `Profiler` or `DetectionContext` exits no longer replaces an exception from its body, and no longer skips tearing down the remaining listeners. Previously an unused eager load at exit left duplicate query detection attached to the connection.
+
+### ORM patches
+
+These apply as soon as `django_nplus1` is installed, also outside detection scopes.
+
+- Related querysets, and instances with prefetched relations, can be pickled and deep-copied.
+- A related manager called with `manager=`, as in `user.hobbies(manager="objects")`, no longer raises `TypeError`.
+- Calling `.all()` many times on a prefetched relation no longer ends in `RecursionError`.
+- Related querysets are freed without waiting for the garbage collector.
+
+### Compatibility
+
+- Supports Django 6.1.
 
 ## 0.3.5
 

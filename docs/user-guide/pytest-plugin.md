@@ -41,9 +41,13 @@ def test_with_whitelist(client):
 
 The marker and the `nplus1` fixture apply `NPLUS1_WHITELIST` from your settings, plus the marker's own `whitelist`. See [Whitelisting](whitelisting.md) for the pattern format.
 
+## Corpus Mode
+
+`pytest --nplus1-eager-corpus`, or `NPLUS1_EAGER_CORPUS = True` in your test settings, reports the eager loads and loaded fields that no test in the session read, and fails the run. See [Corpus Mode](corpus-mode.md).
+
 ## Disabling the Plugin
 
-If you need to disable the plugin for specific tests, you can use the `-p` flag:
+To run without the plugin, for example when another plugin clashes with it, pass `-p no:nplus1`. This turns it off for the whole run, so the marker, the fixture and corpus mode are unavailable:
 
 ```bash
 pytest -p no:nplus1

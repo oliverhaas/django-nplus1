@@ -1,9 +1,10 @@
 [project]
 name = "django-nplus1"
-version = "0.3.5"
+version = "0.4.0"
 description = "N+1 query detection for Django"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.14"
 keywords = ["django", "n+1", "query", "detection", "performance", "orm"]
 authors = [{ name = "Oliver Haas", email = "ohaas@e1plus.de" }]
@@ -12,9 +13,9 @@ classifiers = [
   "Environment :: Web Environment",
   "Framework :: Django",
   "Framework :: Django :: 6.0",
+  "Framework :: Django :: 6.1",
   "Framework :: Pytest",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
   "Programming Language :: Python",
   "Programming Language :: Python :: 3",
@@ -41,22 +42,25 @@ Changelog = "https://oliverhaas.github.io/django-nplus1/reference/changelog/"
 
 [dependency-groups]
 dev = [
-  "celery[redis]>=5.3",
-  "django-stubs==6.0.4",
-  "mypy==2.1.0",
-  "pre-commit==4.6.0",
-  "pytest-cov==7.1.0",
-  "pytest-django==4.12.0",
-  "pytest-mock==3.15.1",
-  "pytest-xdist>=3.8.0",
-  "pytest==9.0.3",
-  "ruff==0.15.14",
-  "ty==0.0.39",
+  "django-stubs==6.1.1",
+  "mypy==2.3.1",
+  "pre-commit==4.6.2",
+  "ruff==0.16.9",
+  "ty==0.0.84",
+  { include-group = "test" },
 ]
-docs = ["mkdocs==1.6.1", "mkdocs-material==9.7.6", "mike==2.2.0"]
+docs = ["mkdocs==1.6.1", "mkdocs-material==9.7.7", "mike==2.2.0"]
+test = [
+  "celery[redis]>=5.3",
+  "coverage==7.16.2",
+  "pytest-django==4.14.0",
+  "pytest-mock==3.16.0",
+  "pytest-xdist>=3.8.0",
+  "pytest==9.1.1",
+]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
@@ -80,6 +84,7 @@ ignore = [
   "ARG001",  # Unused function args required by parser callback interface (args, kwargs, context, ret)
   "ARG002",  # Unused method args required by signal callback interface
   "COM812",  # Conflicts with ruff-format
+  "CPY001",  # LICENSE covers the package, files carry no copyright headers
   "D",       # Docstrings - will add incrementally
   "E501",    # Line length handled by config
   "EM",      # Exception strings inline are fine
@@ -101,22 +106,23 @@ suppress-none-returning = true
 [tool.ruff.lint.per-file-ignores]
 "django_nplus1/mypy_settings.py" = ["S105"]
 "tests/**" = [
-  "ANN",    # Type annotations not required in tests
-  "ARG",    # Unused arguments common in fixtures
-  "B018",   # Useless expressions are how we trigger lazy loads in tests
-  "DJ008",  # Test models don't need __str__
-  "E402",   # Import order in settings files
-  "F841",   # Unused variables okay in tests
-  "PT006",  # Parametrize tuple style is preference
-  "PT011",  # Broad pytest.raises okay in some tests
-  "PT012",  # Multi-statement pytest.raises needed for N+1 trigger patterns
-  "PT013",  # pytest import style is preference
-  "PT018",  # Compound assertions okay in tests
-  "RUF012", # Django migrations use mutable class attributes by design
-  "RUF043", # Regex metacharacters in match= are intentional (dot in model.field)
-  "S101",   # assert in tests
-  "S105",   # Hardcoded passwords in test settings
-  "T201",   # print in test views is intentional
+  "ANN",     # Type annotations not required in tests
+  "ARG",     # Unused arguments common in fixtures
+  "B018",    # Useless expressions are how we trigger lazy loads in tests
+  "DJ008",   # Test models don't need __str__
+  "E402",    # Import order in settings files
+  "F841",    # Unused variables okay in tests
+  "PLR0917", # pytest passes fixtures and parameters as positional arguments
+  "PT006",   # Parametrize tuple style is preference
+  "PT011",   # Broad pytest.raises okay in some tests
+  "PT012",   # Multi-statement pytest.raises needed for N+1 trigger patterns
+  "PT013",   # pytest import style is preference
+  "PT018",   # Compound assertions okay in tests
+  "RUF012",  # Django migrations use mutable class attributes by design
+  "RUF043",  # Regex metacharacters in match= are intentional (dot in model.field)
+  "S101",    # assert in tests
+  "S105",    # Hardcoded passwords in test settings
+  "T201",    # print in test views is intentional
 ]
 
 [tool.mypy]
@@ -142,28 +148,15 @@ python-version = "3.14"
 respect-type-ignore-comments = false
 
 [[tool.ty.overrides]]
-include = [
-  "django_nplus1/fields.py",
-  "django_nplus1/middleware.py",
-  "django_nplus1/patch.py",
-]
+include = ["django_nplus1/fields.py", "django_nplus1/patch.py"]
 
 [tool.ty.overrides.rules]
-# patch.py and fields.py monkeypatch Django internals; middleware.py and fields.py access _meta on type
+# Both modules monkeypatch Django internals.
 unresolved-attribute = "ignore"
-invalid-assignment = "ignore"
-
-[[tool.ty.overrides]]
-include = ["tests/**"]
-
-[tool.ty.overrides.rules]
-unresolved-attribute = "ignore"
-invalid-argument-type = "ignore"
 invalid-assignment = "ignore"
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "settings.base"
-addopts = "--cov=django_nplus1 --cov-report=term-missing --cov-report=xml --no-cov-on-fail"
 pythonpath = ["tests"]
 testpaths = ["tests"]
 xfail_strict = true

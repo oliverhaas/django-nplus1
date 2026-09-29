@@ -1,65 +1,61 @@
-"""Celery integration for per-task N+1 query detection.
+"""Celery integration: every task runs in its own detection scope, like a request under NPlus1Middleware.
 
-Wraps each Celery task execution in a DetectionContext, mirroring how
-NPlus1Middleware wraps HTTP requests.
-
-Activate via settings::
-
-    NPLUS1_CELERY = True
-
-Or manually::
-
-    from django_nplus1.celery import setup_celery_detection
-    setup_celery_detection()
+Enable it with ``NPLUS1_CELERY = True``, or call ``setup_celery_detection()``.
 """
 
 import logging
 import threading
+from collections import defaultdict
 from typing import Any
 
-from django_nplus1.middleware import _load_config
+from django_nplus1.middleware import load_config
 from django_nplus1.scope import DetectionContext
 
 logger = logging.getLogger("django_nplus1")
 
-# task_id -> active DetectionContext (one entry per in-flight task)
-_active_scopes: dict[str, DetectionContext] = {}
+# Task id -> scopes of its runs in flight. An eager self.replace() runs the replacement
+# under the same id while the replaced task is still running.
+_active_scopes: defaultdict[str, list[DetectionContext]] = defaultdict(list)
 
 _connected = False
 _connect_lock = threading.Lock()
 
 
 def _on_prerun(sender: Any = None, task_id: str = "", **kwargs: Any) -> None:
-    """Create and enter a DetectionContext for this task."""
     try:
-        nots, whitelist = _load_config()
-    except Exception:  # noqa: BLE001
-        logger.debug("Failed to load config for task %s", task_id, exc_info=True)
+        nots, whitelist = load_config()
+        scope = DetectionContext(notifiers=nots, whitelist=whitelist)
+        scope.__enter__()
+    except Exception:
+        logger.exception("django-nplus1: detection not started for task %s", task_id)
         return
-    scope = DetectionContext(notifiers=nots, whitelist=whitelist)
-    scope.__enter__()
-    _active_scopes[task_id] = scope
+    _active_scopes[task_id].append(scope)
 
 
 def _on_postrun(sender: Any = None, task_id: str = "", **kwargs: Any) -> None:
-    """Exit and clean up the DetectionContext for this task."""
-    scope = _active_scopes.pop(task_id, None)
-    if scope is not None:
+    scopes = _active_scopes.get(task_id)
+    if not scopes:
+        return
+    scope = scopes.pop()
+    if not scopes:
+        del _active_scopes[task_id]
+    # The task has finished, so a detection raised here can't fail it any more.
+    try:
         scope.__exit__(None, None, None)
+    except Exception:
+        logger.exception("django-nplus1: detection at the end of task %s raised", task_id)
 
 
 def setup_celery_detection() -> None:
-    """Connect Celery task signals for per-task N+1 detection.
+    """Connect the Celery task signals. Later calls do nothing.
 
-    Safe to call multiple times; subsequent calls are no-ops.
-
-    Raises ``ImportError`` if celery is not installed.
+    Raises ``ImportError`` without Celery, and ``ImproperlyConfigured`` or ``NPlus1Error``
+    for invalid ``NPLUS1_*`` settings.
     """
     global _connected  # noqa: PLW0603
     with _connect_lock:
         if _connected:
             return
-
         try:
             from celery.signals import task_postrun, task_prerun  # type: ignore[import-untyped]
         except ImportError as exc:
@@ -68,26 +64,23 @@ def setup_celery_detection() -> None:
                 "Install it with: pip install django-nplus1[celery]"
             )
             raise ImportError(msg) from exc
-
+        load_config()
         task_prerun.connect(_on_prerun)
         task_postrun.connect(_on_postrun)
         _connected = True
 
 
 def teardown_celery_detection() -> None:
-    """Disconnect Celery task signals. Useful for testing.
+    """Disconnect the Celery task signals.
 
-    Only safe to call when no tasks are in flight; in-flight scopes are
-    dropped without calling ``__exit__``.
+    Call it only while no task runs. Scopes of tasks in flight are dropped without ending them.
     """
     global _connected  # noqa: PLW0603
     with _connect_lock:
         if not _connected:
             return
-        try:
-            from celery.signals import task_postrun, task_prerun
-        except ImportError:
-            return
+        from celery.signals import task_postrun, task_prerun
+
         task_prerun.disconnect(_on_prerun)
         task_postrun.disconnect(_on_postrun)
         _active_scopes.clear()

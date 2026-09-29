@@ -1,45 +1,29 @@
 from typing import TYPE_CHECKING, Any
 
-from django_nplus1.detect import Message, Rule, is_allowed, is_inline_ignored
 from django_nplus1.exceptions import NPlus1Error
 from django_nplus1.scope import DetectionContext
-from django_nplus1.signals import nplus1_detected
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from django_nplus1.detect import Message
     from django_nplus1.notifiers import Notifier
 
 
 class Profiler(DetectionContext):
-    """Test-harness detection context that always raises NPlus1Error.
+    """Detection scope for tests that raises ``NPlus1Error`` on the first detection.
 
-    Pass ``notifiers=`` to fan out logs/warnings alongside the raise, e.g.::
-
-        from django.conf import settings
-        from django_nplus1.notifiers import init
-
-        with Profiler(notifiers=init(settings)):
-            ...
-
-    With the default ``notifiers=None`` no notifiers run; only the
-    ``nplus1_detected`` signal fires before the raise.
+    ``notifiers`` run before the raise, for example ``Profiler(notifiers=init(settings))``
+    to also log through the configured logger.
     """
 
     def __init__(
         self,
-        whitelist: list[dict[str, Any]] | None = None,
-        notifiers: list[Notifier] | None = None,
+        whitelist: Sequence[dict[str, Any]] | None = None,
+        notifiers: Sequence[Notifier] | None = None,
     ) -> None:
-        rules = [Rule(**item) for item in (whitelist or [])]
-        super().__init__(notifiers=notifiers, whitelist=rules)
+        super().__init__(notifiers=notifiers, whitelist=whitelist)
 
-    def __enter__(self) -> Profiler:
-        super().__enter__()
-        return self
-
-    def notify(self, message: Message) -> None:
-        if message.match(self._whitelist) or is_allowed(message) or is_inline_ignored(message):
-            return
-        nplus1_detected.send(sender=type(self), message=message)
-        for notifier in self._notifiers:
-            notifier.notify(message)
+    def _deliver(self, message: Message, notified: list[Notifier]) -> None:
+        super()._deliver(message, notified)
         raise NPlus1Error(message.message)

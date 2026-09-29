@@ -1,110 +1,145 @@
+import contextlib
+import copy
 import fnmatch
+import warnings
+from inspect import iscoroutinefunction, markcoroutinefunction
 from typing import TYPE_CHECKING, Any
 
-from asgiref.sync import iscoroutinefunction
 from django.apps import apps
 from django.conf import settings
-from django.utils.decorators import sync_and_async_middleware
 
-from django_nplus1 import notifiers
-from django_nplus1.detect import Rule
+from django_nplus1 import conf, notifiers
+from django_nplus1.detect import DuplicateQueryMessage, Rule
 from django_nplus1.exceptions import NPlus1Error
 from django_nplus1.scope import DetectionContext
 
 if TYPE_CHECKING:
-    from django.http import HttpRequest, HttpResponse
+    from collections.abc import Callable, Generator, Sequence
 
-_FNMATCH_CHARS = set("*?[]")
+    from django.db.models import Model
+    from django.http import HttpRequest
+
+_PATTERN_CHARS = frozenset("*?[")
 
 
-def _validate_whitelist(whitelist: list[dict[str, Any]]) -> None:
-    """Validate whitelist entries against the Django model registry.
+def _is_pattern(value: str) -> bool:
+    return not _PATTERN_CHARS.isdisjoint(value)
 
-    Raises NPlus1Error for invalid model or field names.
-    Skips entries that use fnmatch wildcards (* ? [ ]).
+
+def _field_names(model: type[Model]) -> set[str]:
+    meta = model._meta
+    names = {"get()"}
+    names.update(field.name for field in meta.get_fields(include_hidden=True))
+    names.update(field.attname for field in meta.concrete_fields)
+    names.update(name for rel in meta.related_objects if (name := rel.get_accessor_name()))
+    return names
+
+
+def validate_whitelist(whitelist: Sequence[dict[str, Any]]) -> None:
+    """Check ``NPLUS1_WHITELIST`` entries against the installed models.
+
+    An unknown model raises ``NPlus1Error``. An unknown field only warns, because a
+    ``Prefetch(to_attr=...)`` name is no model field.
     """
-    # Build registry: {"app_label.ModelName": set_of_field_names}
-    registry: dict[str, set[str]] = {}
-    for model in apps.get_models():
-        key = f"{model._meta.app_label}.{model.__name__}"
-        fields = {f.name for f in model._meta.get_fields(include_hidden=True)}
-        # Include reverse relation accessor names
-        fields |= {name for rel in model._meta.related_objects if (name := rel.get_accessor_name()) is not None}
-        registry[key] = fields
-
+    registry = {model._meta.label: model for model in apps.get_models()}
     for entry in whitelist:
-        model_pattern = entry.get("model")
-        if not model_pattern:
+        name = entry.get("model")
+        if isinstance(name, type):
+            meta = name.__dict__.get("_meta")
+            if meta is None:
+                continue
+            name = meta.label
+        if not isinstance(name, str) or _is_pattern(name):
             continue
-
-        # Skip fnmatch patterns
-        if any(c in model_pattern for c in _FNMATCH_CHARS):
-            continue
-
-        if model_pattern not in registry:
-            suffix = model_pattern.split(".")[-1].lower()
-            similar = sorted(k for k in registry if suffix in k.lower())[:3]
-            msg = f"NPLUS1_WHITELIST: model '{model_pattern}' not found in installed Django models."
+        model = registry.get(name)
+        if model is None:
+            suffix = name.rsplit(".", 1)[-1].lower()
+            similar = sorted(label for label in registry if suffix in label.lower())[:3]
+            msg = f"NPLUS1_WHITELIST: model '{name}' not found in installed Django models."
             if similar:
                 msg += f" Did you mean one of: {', '.join(similar)}?"
             raise NPlus1Error(msg)
-
-        field_name = entry.get("field")
-        if not field_name:
+        field = entry.get("field")
+        if entry.get("label") == DuplicateQueryMessage.label or not isinstance(field, str) or _is_pattern(field):
             continue
-        if any(c in field_name for c in _FNMATCH_CHARS):
-            continue
-
-        if field_name not in registry[model_pattern]:
-            raise NPlus1Error(
-                f"NPLUS1_WHITELIST: field '{field_name}' not found on '{model_pattern}'",
+        if field not in _field_names(model):
+            warnings.warn(
+                f"NPLUS1_WHITELIST: '{field}' is not a field of '{name}'. "
+                "Only a Prefetch(to_attr=...) name is expected here.",
+                UserWarning,
+                stacklevel=2,
             )
 
 
 class DjangoRule(Rule):
-    def match_model(self, model: type) -> bool:
-        if self.model is model:
+    """A ``NPLUS1_WHITELIST`` entry. Model names match ``app_label.ModelName`` only."""
+
+    def match_class(self, cls: type) -> bool:
+        if self.model is cls:
             return True
-        if isinstance(self.model, str):
-            meta = getattr(model, "_meta", None)
-            if meta is None:
-                return False
-            return fnmatch.fnmatch(
-                f"{meta.app_label}.{model.__name__}",
-                self.model,
-            )
-        return False
+        meta = cls.__dict__.get("_meta")
+        return isinstance(self.model, str) and meta is not None and fnmatch.fnmatch(meta.label, self.model)
 
 
-_last_validated_whitelist: list[dict[str, Any]] | None = None
+_validated_whitelist: list[dict[str, Any]] | None = None
 
 
-def _load_config() -> tuple[list[notifiers.Notifier], list[DjangoRule]]:
-    """Load notifiers and whitelist from settings."""
-    global _last_validated_whitelist  # noqa: PLW0603
+def load_config() -> tuple[list[notifiers.Notifier], list[DjangoRule]]:
+    """Read the notifiers and the whitelist from settings. Invalid settings raise."""
+    global _validated_whitelist  # noqa: PLW0603
     nots = notifiers.init(settings)
-    whitelist_data = getattr(settings, "NPLUS1_WHITELIST", [])
-    if whitelist_data != _last_validated_whitelist:
-        _validate_whitelist(whitelist_data)
-        _last_validated_whitelist = whitelist_data
-    whitelist = [DjangoRule(**item) for item in whitelist_data]
-    return nots, whitelist
+    conf.check_thresholds(settings)
+    whitelist = list(getattr(settings, "NPLUS1_WHITELIST", []))
+    # A copy, so entries added to the settings list in place get validated too.
+    if whitelist != _validated_whitelist:
+        validate_whitelist(whitelist)
+        _validated_whitelist = copy.deepcopy(whitelist)
+    return nots, [DjangoRule(**item) for item in whitelist]
 
 
-@sync_and_async_middleware
-def NPlus1Middleware(get_response: Any) -> Any:  # noqa: N802
-    if iscoroutinefunction(get_response):
+_VIEW_EXCEPTION = "_nplus1_view_exception"
 
-        async def async_middleware(request: HttpRequest) -> HttpResponse:
-            nots, whitelist = _load_config()
-            with DetectionContext(notifiers=nots, whitelist=whitelist, sender=NPlus1Middleware):
-                return await get_response(request)
 
-        return async_middleware
+class NPlus1Middleware:
+    """Detects N+1 queries per request and reports them through the ``NPLUS1_*`` notifiers."""
 
-    def sync_middleware(request: HttpRequest) -> HttpResponse:
-        nots, whitelist = _load_config()
-        with DetectionContext(notifiers=nots, whitelist=whitelist, sender=NPlus1Middleware):
-            return get_response(request)
+    async_capable = True
+    sync_capable = True
 
-    return sync_middleware
+    def __init__(self, get_response: Callable[[HttpRequest], Any]) -> None:
+        self.get_response = get_response
+        # Invalid settings fail at startup instead of on the first request.
+        load_config()
+        if iscoroutinefunction(get_response):
+            markcoroutinefunction(self)
+
+    def __call__(self, request: HttpRequest) -> Any:
+        if iscoroutinefunction(self):
+            return self.__acall__(request)
+        with self._detect(request):
+            return self.get_response(request)
+
+    async def __acall__(self, request: HttpRequest) -> Any:
+        with self._detect(request):
+            return await self.get_response(request)
+
+    def process_exception(self, request: HttpRequest, exception: Exception) -> None:
+        # Django turns a view's exception into an error response before it reaches
+        # __call__. Keep it, so detections at the end of the request don't replace it.
+        request.__dict__[_VIEW_EXCEPTION] = exception
+
+    @contextlib.contextmanager
+    def _detect(self, request: HttpRequest) -> Generator[None]:
+        nots, whitelist = load_config()
+        scope = DetectionContext(notifiers=nots, whitelist=whitelist, sender=NPlus1Middleware)
+        scope.__enter__()
+        try:
+            yield
+        except BaseException as exc:
+            scope.__exit__(type(exc), exc, exc.__traceback__)
+            raise
+        view_exception = request.__dict__.pop(_VIEW_EXCEPTION, None)
+        if view_exception is None:
+            scope.__exit__(None, None, None)
+        else:
+            scope.__exit__(type(view_exception), view_exception, view_exception.__traceback__)

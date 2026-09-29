@@ -1,81 +1,60 @@
 import os
 from pathlib import Path
-from unittest import mock
 
 import pytest
-from django.conf import settings
 from testapp.models import Address, Allergy, Company, Hobby, Occupation, Pet, Region, Store, Tag, User
 
-from django_nplus1 import signals
-from django_nplus1.detect import LazyListener
-from django_nplus1.signals import setup_context, teardown_context
+from django_nplus1 import corpus, nplus1_detected
+
+pytest_plugins = ["pytester"]
 
 
 @pytest.fixture
 def objects(db):
-    user = User.objects.create()
-    user2 = User.objects.create()
-    pet = Pet.objects.create(user=user)
-    Pet.objects.create(user=user2)
-    allergy = Allergy.objects.create()
-    allergy.pets.add(pet)
-    Occupation.objects.create(user=user)
-    Address.objects.create(user=user)
-    hobby = Hobby.objects.create()
-    user.hobbies.add(hobby)
-    Tag.objects.create(label="t", content_object=user)
-    Tag.objects.create(label="t2", content_object=user2)
+    hobbies = [Hobby.objects.create(), Hobby.objects.create()]
+    users = []
+    for name in ("alice", "bob"):
+        user = User.objects.create(name=name)
+        user.hobbies.add(*hobbies)
+        Occupation.objects.create(user=user)
+        Address.objects.create(user=user)
+        Allergy.objects.create().pets.add(Pet.objects.create(user=user))
+        Tag.objects.create(label=name, content_object=user)
+        users.append(user)
+    return users
 
 
 @pytest.fixture
 def shared_fk_objects(db):
-    r1 = Region.objects.create()
-    r2 = Region.objects.create()
-    main = Store.objects.create(region=r1)
-    backup = Store.objects.create(region=r2)
+    main = Store.objects.create(region=Region.objects.create())
+    backup = Store.objects.create(region=Region.objects.create())
     return Company.objects.create(main_store=main, backup_store=backup)
 
 
 @pytest.fixture
-def calls():
-    token = setup_context()
-    calls = []
+def detected():
+    messages = []
 
-    def subscriber(args=None, kwargs=None, context=None, ret=None, parser=None):
-        calls.append(parser(args, kwargs, context))
+    def receiver(sender, message, **kwargs):
+        messages.append(message)
 
-    signals.connect(signals.LAZY_LOAD, subscriber)
-    yield calls
-    signals.disconnect(signals.LAZY_LOAD, subscriber)
-    teardown_context(token)
+    nplus1_detected.connect(receiver)
+    yield messages
+    nplus1_detected.disconnect(receiver)
 
 
 @pytest.fixture
-def lazy_listener():
-    token = setup_context()
-    mock_parent = mock.Mock()
-    listener = LazyListener(mock_parent)
-    listener.setup()
-    try:
-        yield listener
-    finally:
-        listener.teardown()
-        teardown_context(token)
-
-
-@pytest.fixture
-def logger(monkeypatch):
-    mock_logger = mock.Mock()
-    monkeypatch.setattr(settings, "NPLUS1_LOGGER", mock_logger)
-    return mock_logger
+def corpus_mode():
+    corpus.activate()
+    yield corpus
+    corpus.deactivate()
+    for tracker in corpus.TRACKERS.values():
+        tracker.reset()
 
 
 @pytest.fixture
 def django_pytester(pytester, monkeypatch):
-    """pytester whose subprocess runs can import testapp and settings.base.
-
-    Modules using it declare ``pytest_plugins = ["pytester"]``.
-    """
+    """pytester whose subprocess runs can import testapp and settings.base."""
     tests_dir = str(Path(__file__).parent.resolve())
     existing = os.environ.get("PYTHONPATH")
     monkeypatch.setenv("PYTHONPATH", os.pathsep.join([tests_dir, existing]) if existing else tests_dir)

@@ -1,335 +1,394 @@
+import copy
+import gc
+import pickle
 import sys
-from unittest import mock
+import weakref
 
 import pytest
-from testapp.models import (
-    Address,
-    Allergy,
-    Company,
-    Hobby,
-    Occupation,
-    Pet,
-    User,
-)
+from django.contrib.auth.models import User as AuthUser
+from django.core.exceptions import ImproperlyConfigured
+from django.db import connection
+from django.db.models import Prefetch, prefetch_related_objects
+from django.template import engines
+from testapp.models import Allergy, Company, Hobby, Occupation, Pet, Tag, User
 
-from django_nplus1.detect import LazyListener, LazyLoadMessage
-from django_nplus1.signals import setup_context, teardown_context
+from django_nplus1 import DetectionContext, NPlus1Error, Profiler, signals
 
+pytestmark = pytest.mark.django_db
 
-@pytest.mark.django_db
-class TestOneToOne:
-    def test_one_to_one(self, objects, calls):
-        occupation = Occupation.objects.first()
-        occupation.user
-        assert len(calls) == 1
-        call = calls[0]
-        assert call == (Occupation, f"Occupation:{occupation.pk}", "user")
-
-    def test_one_to_one_select(self, objects, calls):
-        occupation = Occupation.objects.select_related("user").first()
-        occupation.user
-        assert len(calls) == 0
-
-    def test_one_to_one_prefetch(self, objects, calls):
-        occupation = Occupation.objects.prefetch_related("user").first()
-        occupation.user
-        assert len(calls) == 0
-
-    def test_one_to_one_reverse(self, objects, calls):
-        user = User.objects.first()
-        user.occupation
-        assert len(calls) == 1
-        call = calls[0]
-        assert call == (User, f"User:{user.pk}", "occupation")
+NAME_SQL = "SELECT name FROM testapp_user WHERE id = %s"
 
 
-@pytest.mark.django_db
-class TestManyToOne:
-    def test_many_to_one(self, objects, calls):
-        address = Address.objects.first()
-        address.user
-        assert len(calls) == 1
-        call = calls[0]
-        assert call == (Address, f"Address:{address.pk}", "user")
-
-    def test_many_to_one_select(self, objects, calls):
-        address = list(Address.objects.select_related("user").all())
-        address[0].user
-        assert len(calls) == 0
-
-    def test_many_to_one_prefetch(self, objects, calls):
-        address = list(Address.objects.prefetch_related("user").all())
-        address[0].user
-        assert len(calls) == 0
-
-    def test_many_to_one_reverse(self, objects, calls):
-        user = User.objects.first()
-        user.addresses.first()
-        assert len(calls) == 1
-        call = calls[0]
-        assert call == (User, f"User:{user.pk}", "addresses")
-
-    def test_many_to_one_reverse_no_related_name(self, objects, calls):
-        user = User.objects.first()
-        user.pet_set.first()
-        assert len(calls) == 1
-        call = calls[0]
-        assert call == (User, f"User:{user.pk}", "pet_set")
+def occupation_users():
+    return [occupation.user for occupation in Occupation.objects.all()]
 
 
-@pytest.mark.django_db
-class TestManyToMany:
-    def test_many_to_many(self, objects, calls):
-        users = User.objects.all()
-        list(users[0].hobbies.all())
-        assert len(calls) == 1
-        call = calls[0]
-        assert call == (User, f"User:{users[0].pk}", "hobbies")
+def get_each_user():
+    return [User.objects.get(pk=user.pk) for user in User.objects.all()]
 
-    def test_many_to_many_prefetch(self, objects, calls):
-        users = User.objects.all().prefetch_related("hobbies")
-        list(users[0].hobbies.all())
-        assert len(calls) == 0
 
-    def test_many_to_many_reverse(self, objects, calls):
-        hobbies = Hobby.objects.all()
-        list(hobbies[0].users.all())
-        assert len(calls) == 1
-        call = calls[0]
-        assert call == (Hobby, f"Hobby:{hobbies[0].pk}", "users")
+def select_each_name(sql=NAME_SQL):
+    for pk in User.objects.values_list("pk", flat=True):
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [pk])
 
-    def test_many_to_many_reverse_prefetch(self, objects, calls):
-        hobbies = Hobby.objects.all().prefetch_related("users")
-        list(hobbies[0].users.all())
-        assert len(calls) == 0
 
-    def test_prefetch_related_filter_pk_after_bulk_load(self, objects, lazy_listener):
-        """prefetch_related().filter(pk=X) after a bulk load must not be flagged."""
-        list(User.objects.all())  # bulk load populates `loaded`
-        user = User.objects.prefetch_related("hobbies").filter(pk=1).first()
+def prefetch_per_row():
+    for user in User.objects.all():
+        prefetch_related_objects([user], "hobbies")
         list(user.hobbies.all())
-        lazy_listener.parent.notify.assert_not_called()
-
-    def test_select_related_after_bulk_load_is_flagged(self, objects, lazy_listener):
-        """select_related on already-loaded instances is flagged as N+1."""
-        list(Pet.objects.all())
-        list(Pet.objects.select_related("user"))
-        lazy_listener.parent.notify.assert_called_once()
-
-    def test_many_to_many_forward_no_related_name(self, objects, calls):
-        allergy = Allergy.objects.first()
-        list(allergy.pets.all())
-        assert len(calls) == 1
-        call = calls[0]
-        assert call == (Allergy, f"Allergy:{allergy.pk}", "pets")
-
-    def test_many_to_many_reverse_no_related_name(self, objects, calls):
-        pet = Pet.objects.first()
-        pet.allergy_set.first()
-        assert len(calls) == 1
-        call = calls[0]
-        assert call == (Pet, f"Pet:{pet.pk}", "allergy_set")
-
-    def test_generic_relation(self, objects, calls):
-        user = User.objects.first()
-        list(user.tags.all())
-        assert len(calls) == 1
-        call = calls[0]
-        assert call == (User, f"User:{user.pk}", "tags")
-
-    def test_generic_relation_prefetch(self, objects, calls):
-        users = User.objects.all().prefetch_related("tags")
-        list(users[0].tags.all())
-        assert len(calls) == 0
 
 
-@pytest.mark.django_db
-class TestDeferred:
-    def test_only_triggers_lazy_load(self, objects, calls):
-        """Accessing a deferred field on a bulk-loaded instance emits LAZY_LOAD."""
-        users = list(User.objects.only("id"))
-        users[0].name  # deferred field access
-        assert len(calls) == 1
-        assert calls[0] == (User, f"User:{users[0].pk}", "name")
+class ComposedSQL:
+    def __init__(self, text):
+        self.text = text
 
-    def test_only_no_signal_for_loaded_field(self, objects, calls):
-        """Accessing a loaded field does NOT emit LAZY_LOAD."""
-        users = list(User.objects.only("id", "name"))
-        users[0].name
-        assert len(calls) == 0
-
-    def test_defer_triggers_lazy_load(self, objects, calls):
-        """Accessing a deferred field via .defer() emits LAZY_LOAD."""
-        users = list(User.objects.defer("name"))
-        users[0].name
-        assert len(calls) == 1
-
-    def test_deferred_single_instance_no_detection(self, objects, lazy_listener):
-        """Deferred field on .first()/.get() should NOT be flagged as N+1."""
-        user = User.objects.only("id").first()
-        user.name  # should not raise - single instance
-        lazy_listener.parent.notify.assert_not_called()
-
-    def test_deferred_flagged_after_incidental_single_fetch(self, objects, lazy_listener):
-        """Deferred-field N+1 must still fire when the row was also fetched as a singleton."""
-        users = list(User.objects.only("id"))
-        for user in users:
-            User.objects.get(pk=user.pk)  # populates self.ignore
-        for user in users:
-            _ = user.name
-        lazy_listener.parent.notify.assert_called()
+    def as_string(self, context):
+        return self.text
 
 
-@pytest.mark.django_db
-class TestCallerInfo:
-    def test_lazy_load_message_includes_caller(self, objects, lazy_listener):
-        """LazyLoadMessage includes filename, line, and function."""
-        users = list(User.objects.all())
-        list(users[0].hobbies.all())  # triggers lazy load
-        assert lazy_listener.parent.notify.called
-        message = lazy_listener.parent.notify.call_args[0][0]
-        # The message should contain caller info
-        assert "test_lazy_load_message_includes_caller" in message.message
-        assert ".py:" in message.message
+def execute_as_text(execute, sql, params, many, context):
+    if isinstance(sql, bytes):
+        sql = sql.decode()
+    elif isinstance(sql, ComposedSQL):
+        sql = sql.as_string(context["cursor"].cursor)
+    return execute(sql, params, many, context)
 
 
-@pytest.mark.django_db
-class TestThreshold:
-    def test_threshold_suppresses_first_occurrence(self, objects):
-        """With threshold=2, first lazy access does not trigger."""
-        token = setup_context()
-        mock_parent = mock.Mock()
-        listener = LazyListener(mock_parent)
-        listener.setup()
-        listener.threshold = 2
-        try:
-            users = list(User.objects.all())
-            list(users[0].hobbies.all())  # count=1, below threshold
-            mock_parent.notify.assert_not_called()
-            list(users[1].hobbies.all())  # count=2, meets threshold
-            mock_parent.notify.assert_called_once()
-        finally:
-            listener.teardown()
-            teardown_context(token)
-
-    def test_high_threshold_suppresses_entirely(self, objects):
-        """A high threshold suppresses detection entirely."""
-        token = setup_context()
-        mock_parent = mock.Mock()
-        listener = LazyListener(mock_parent)
-        listener.setup()
-        listener.threshold = 10
-        try:
-            users = list(User.objects.all())
-            list(users[0].hobbies.all())
-            list(users[1].hobbies.all())
-            mock_parent.notify.assert_not_called()
-        finally:
-            listener.teardown()
-            teardown_context(token)
-
-
-@pytest.mark.django_db
-class TestShowAllCallers:
-    def test_message_with_callers(self):
-        """Message with callers formats CALL 1:, CALL 2: sections."""
-        callers = [
-            [("/app/views.py", 10, "my_view"), ("/app/urls.py", 5, "urlconf")],
-            [("/app/views.py", 12, "my_view"), ("/app/urls.py", 5, "urlconf")],
-        ]
-        msg = LazyLoadMessage(User, "hobbies", callers=callers)
-        text = msg.message
-        assert "CALL 1:" in text
-        assert "CALL 2:" in text
-        assert "/app/views.py:10 in my_view" in text
-        assert "/app/views.py:12 in my_view" in text
-        assert "with calls:" in text
-
-    def test_message_without_callers(self):
-        """Message without callers uses single caller format."""
-        msg = LazyLoadMessage(
+@pytest.mark.parametrize(
+    ("load", "model", "field"),
+    [
+        pytest.param(lambda: [pet.user for pet in Pet.objects.all()], Pet, "user", id="forward-fk"),
+        pytest.param(occupation_users, Occupation, "user", id="forward-o2o"),
+        pytest.param(lambda: [user.occupation for user in User.objects.all()], User, "occupation", id="reverse-o2o"),
+        pytest.param(
+            lambda: [list(user.addresses.all()) for user in User.objects.all()],
             User,
-            "hobbies",
-            caller=("/app/views.py", 10, "my_view"),
-        )
-        text = msg.message
-        assert "CALL 1:" not in text
-        assert "at /app/views.py:10 in my_view" in text
+            "addresses",
+            id="reverse-fk",
+        ),
+        pytest.param(
+            lambda: [user.addresses.first() for user in User.objects.all()],
+            User,
+            "addresses",
+            id="reverse-fk-first",
+        ),
+        pytest.param(lambda: [list(user.pet_set.all()) for user in User.objects.all()], User, "pet_set", id="pet-set"),
+        pytest.param(lambda: [list(user.hobbies.all()) for user in User.objects.all()], User, "hobbies", id="m2m"),
+        pytest.param(lambda: [list(hobby.users.all()) for hobby in Hobby.objects.all()], Hobby, "users", id="m2m-back"),
+        pytest.param(lambda: [list(a.pets.all()) for a in Allergy.objects.all()], Allergy, "pets", id="m2m-unnamed"),
+        pytest.param(
+            lambda: [list(pet.allergy_set.all()) for pet in Pet.objects.all()],
+            Pet,
+            "allergy_set",
+            id="m2m-unnamed-back",
+        ),
+        pytest.param(lambda: [list(user.tags.all()) for user in User.objects.all()], User, "tags", id="generic-rel"),
+        pytest.param(lambda: [tag.content_object for tag in Tag.objects.all()], Tag, "content_object", id="generic-fk"),
+        pytest.param(lambda: [user.name for user in User.objects.only("id")], User, "name", id="only"),
+        pytest.param(lambda: [user.name for user in User.objects.defer("name")], User, "name", id="defer"),
+        pytest.param(lambda: [o.user for o in Occupation.objects.iterator()], Occupation, "user", id="iterator"),
+        pytest.param(prefetch_per_row, User, "hobbies", id="prefetch-per-row"),
+    ],
+)
+def test_per_row_load_is_detected(objects, detected, load, model, field):
+    with DetectionContext():
+        load()
+    assert [(m.label, m.model, m.field) for m in detected] == [("n_plus_one", model, field)]
 
-    def test_lazy_listener_show_all_callers(self, objects, lazy_listener):
-        """LazyListener captures full stacks when NPLUS1_SHOW_ALL_CALLERS is enabled."""
-        lazy_listener.show_all_callers = True
-        users = list(User.objects.all())
-        list(users[0].hobbies.all())
-        assert lazy_listener.parent.notify.called
-        message = lazy_listener.parent.notify.call_args[0][0]
-        assert message.callers is not None
-        assert len(message.callers) >= 1
-        assert "CALL 1:" in message.message
+
+def read_selected_users():
+    for pet in Pet.objects.select_related("user"):
+        pet.user
 
 
-@pytest.mark.django_db
-def test_values(objects, lazy_listener):
-    list(User.objects.values("id"))
+def read_prefetched_hobbies():
+    for user in User.objects.prefetch_related("hobbies"):
+        list(user.hobbies.all())
 
 
-@pytest.mark.django_db
-class TestStandalonePrefetch:
-    """prefetch_related_objects() should not false-positive on converging FK chains."""
+def read_nested_selected():
+    for pet in Pet.objects.select_related("user__occupation"):
+        pet.user.occupation
 
-    def test_converging_fk_chains_not_flagged(self, shared_fk_objects, lazy_listener):
-        """Two chains ending on (Store, "region") within one call: not flagged."""
+
+def read_nested_prefetched():
+    for pet in Pet.objects.prefetch_related("user__occupation"):
+        pet.user.occupation
+
+
+def read_prefetched_generic_fk():
+    for tag in Tag.objects.prefetch_related("content_object"):
+        tag.content_object
+
+
+def read_prefetched_generic_relation():
+    for user in User.objects.prefetch_related("tags"):
+        list(user.tags.all())
+
+
+def read_hobbies_of_fetched_users():
+    alice = User.objects.get(name="alice")
+    bob = User.objects.get(name="bob")
+    for user in (alice, bob):
+        list(user.hobbies.all())
+
+
+def read_owners_of_first_and_last():
+    first = Occupation.objects.order_by("pk").first()
+    last = Occupation.objects.order_by("-pk").first()
+    for occupation in (first, last):
+        occupation.user
+
+
+def refetch_loaded_users_with_prefetch():
+    list(User.objects.all())
+    alice = User.objects.prefetch_related("hobbies").get(name="alice")
+    bob = User.objects.prefetch_related("hobbies").get(name="bob")
+    for user in (alice, bob):
+        list(user.hobbies.all())
+
+
+def prefetch_fetched_users_one_by_one():
+    alice = User.objects.get(name="alice")
+    bob = User.objects.get(name="bob")
+    prefetch_related_objects([alice], "hobbies")
+    prefetch_related_objects([bob], "hobbies")
+    for user in (alice, bob):
+        list(user.hobbies.all())
+
+
+def prefetch_all_users():
+    users = list(User.objects.all())
+    prefetch_related_objects(users, "hobbies")
+    for user in users:
+        list(user.hobbies.all())
+
+
+def prefetch_converging_chains():
+    companies = list(Company.objects.all())
+    prefetch_related_objects(companies, "main_store__region", "backup_store__region")
+    for company in companies:
+        company.main_store.region
+        company.backup_store.region
+
+
+def render_prefetched_hobbies():
+    template = engines["django"].from_string(
+        "{% for user in users %}{% for hobby in user.hobbies.all %}{{ hobby.pk }}{% endfor %}{% endfor %}",
+    )
+    template.render({"users": User.objects.prefetch_related("hobbies")})
+
+
+def list_values_across_m2m():
+    list(User.objects.values("name", "hobbies__id"))
+
+
+def reselect_loaded_users():
+    list(User.objects.all())
+    for user in User.objects.select_related("occupation"):
+        user.occupation
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        read_selected_users,
+        read_prefetched_hobbies,
+        read_nested_selected,
+        read_nested_prefetched,
+        read_prefetched_generic_fk,
+        read_prefetched_generic_relation,
+        read_hobbies_of_fetched_users,
+        read_owners_of_first_and_last,
+        refetch_loaded_users_with_prefetch,
+        prefetch_fetched_users_one_by_one,
+        prefetch_all_users,
+        prefetch_converging_chains,
+        render_prefetched_hobbies,
+        list_values_across_m2m,
+        reselect_loaded_users,
+    ],
+    ids=lambda scenario: scenario.__name__,
+)
+def test_batched_or_single_loads_are_not_reported(objects, shared_fk_objects, scenario):
+    with Profiler():
+        scenario()
+
+
+def test_deferred_field_of_rows_fetched_one_by_one_is_detected(objects, detected):
+    with DetectionContext():
+        alice = User.objects.only("id").get(name="alice")
+        bob = User.objects.only("id").get(name="bob")
+        for user in (alice, bob):
+            user.name
+    assert [(m.label, m.model, m.field) for m in detected] == [("n_plus_one", User, "name")]
+
+
+def test_rows_of_a_same_named_model_do_not_count(objects, detected):
+    for user in objects:
+        AuthUser.objects.create(pk=user.pk, username=user.name)
+    with DetectionContext():
+        list(AuthUser.objects.all())
+        for user in objects:
+            list(user.hobbies.all())
+    assert detected == []
+
+
+def test_get_in_loop_is_detected(objects, detected):
+    with DetectionContext():
+        get_each_user()
+    assert [(m.label, m.model, m.field) for m in detected] == [("get_in_loop", User, "get()")]
+
+
+@pytest.mark.parametrize(
+    ("setting", "label", "loop"),
+    [
+        ("NPLUS1_THRESHOLD", "n_plus_one", occupation_users),
+        ("NPLUS1_GET_THRESHOLD", "get_in_loop", get_each_user),
+        ("NPLUS1_DUPLICATE_QUERY_THRESHOLD", "duplicate_query", select_each_name),
+    ],
+)
+@pytest.mark.parametrize(("threshold", "expected"), [(2, 1), (3, 0)])
+def test_threshold_sets_the_repetitions_needed(objects, detected, settings, setting, label, loop, threshold, expected):
+    settings.NPLUS1_DETECT_DUPLICATE_QUERIES = True
+    setattr(settings, setting, threshold)
+    with DetectionContext():
+        loop()
+    assert [m.label for m in detected].count(label) == expected
+
+
+@pytest.mark.parametrize(("enabled", "expected"), [(True, ["duplicate_query"]), (False, [])])
+def test_duplicate_query_detection_follows_setting(objects, detected, settings, enabled, expected):
+    settings.NPLUS1_DETECT_DUPLICATE_QUERIES = enabled
+    with DetectionContext():
+        select_each_name()
+    assert [m.label for m in detected] == expected
+
+
+@pytest.mark.parametrize("convert", [str.encode, ComposedSQL], ids=["bytes", "composed"])
+def test_duplicate_query_reads_sql_that_is_not_str(objects, detected, settings, convert):
+    settings.NPLUS1_DETECT_DUPLICATE_QUERIES = True
+    with DetectionContext(), connection.execute_wrapper(execute_as_text):
+        select_each_name(convert(NAME_SQL))
+    assert [(m.label, m.field) for m in detected] == [("duplicate_query", NAME_SQL)]
+
+
+@pytest.mark.parametrize("name", ["NPLUS1_THRESHOLD", "NPLUS1_GET_THRESHOLD", "NPLUS1_DUPLICATE_QUERY_THRESHOLD"])
+@pytest.mark.parametrize("value", [0, -1, "2", True, 1.5])
+def test_invalid_threshold_fails_at_scope_entry(settings, name, value):
+    settings.NPLUS1_DETECT_DUPLICATE_QUERIES = True
+    setattr(settings, name, value)
+    with pytest.raises(ImproperlyConfigured, match=name), Profiler():
+        pass
+    assert not signals.active()
+
+
+def test_reported_callers_stop_growing(objects, detected, settings):
+    settings.NPLUS1_SHOW_ALL_CALLERS = True
+    with DetectionContext():
+        occupation_users()
+        occupation_users()
+    assert [len(m.callers) for m in detected] == [2]
+
+
+def test_detection_names_the_loading_line(objects):
+    with (
+        pytest.raises(NPlus1Error, match=r"`Occupation\.user` at .+test_detect\.py:\d+ in occupation_users"),
+        Profiler(),
+    ):
+        occupation_users()
+
+
+@pytest.mark.parametrize(
+    "clone",
+    [lambda queryset: pickle.loads(pickle.dumps(queryset)), copy.deepcopy],  # noqa: S301
+    ids=["pickle", "deepcopy"],
+)
+def test_relation_queryset_can_be_copied(objects, clone):
+    with Profiler():
+        hobbies = objects[0].hobbies.all()
+        assert list(clone(hobbies)) == list(hobbies)
+
+
+def test_prefetched_to_attr_list_pickles(objects):
+    with Profiler():
+        user = User.objects.prefetch_related(Prefetch("hobbies", to_attr="hobby_list")).get(name="alice")
+        restored = pickle.loads(pickle.dumps(user))  # noqa: S301
+        assert restored.hobby_list == list(user.hobby_list)
+
+
+def test_prefetched_instance_can_be_deepcopied(objects):
+    with Profiler():
+        user = User.objects.prefetch_related("hobbies").get(name="alice")
+        copied = copy.deepcopy(user)
+        assert list(copied.hobbies.all()) == list(user.hobbies.all())
+
+
+@pytest.mark.parametrize(("relation", "count"), [("hobbies", 2), ("pet_set", 1)])
+def test_related_manager_with_named_manager(objects, relation, count):
+    with Profiler():
+        assert len(getattr(objects[0], relation)(manager="objects").all()) == count
+
+
+def test_prefetched_relation_read_many_times(objects):
+    with Profiler():
+        user = User.objects.prefetch_related("hobbies").get(name="alice")
+        for _ in range(sys.getrecursionlimit()):
+            user.hobbies.all()
+        assert len(user.hobbies.all()) == 2
+
+
+def test_relation_queryset_is_freed_without_garbage_collection(objects):
+    gc.disable()
+    try:
+        with Profiler():
+            hobbies = objects[0].hobbies.all()
+            list(hobbies)
+            ref = weakref.ref(hobbies)
+            del hobbies
+            assert ref() is None
+    finally:
+        gc.enable()
+
+
+def test_prefetch_related_objects_imported_before_setup(django_pytester, monkeypatch):
+    django_pytester.makepyfile(
+        early_helper="""
         from django.db.models import prefetch_related_objects
 
-        lazy_listener.threshold = 2
-        companies = list(Company.objects.all())
-        prefetch_related_objects(
-            companies,
-            "main_store__region",
-            "backup_store__region",
-        )
-        lazy_listener.parent.notify.assert_not_called()
 
-    def test_loop_still_flagged(self, objects, lazy_listener):
-        """Separate prefetch_related_objects calls in a loop: flagged."""
-        from django.db.models import prefetch_related_objects
+        def prefetch_stores(companies):
+            prefetch_related_objects(companies, "main_store__region", "backup_store__region")
+        """,
+        early_settings="""
+        import early_helper
+        from settings.base import *
+        """,
+    )
+    monkeypatch.setenv("DJANGO_SETTINGS_MODULE", "early_settings")
+    django_pytester.makepyfile(
+        """
+        import early_helper
+        import pytest
+        from testapp.models import Company, Region, Store
 
-        lazy_listener.threshold = 2
-        users = list(User.objects.all())
-        for user in users:
-            prefetch_related_objects([user], "hobbies")
-        lazy_listener.parent.notify.assert_called()
+        from django_nplus1 import Profiler
 
-    def test_stale_import_converging_fk_chains(self, shared_fk_objects, lazy_listener):
-        """sys.modules walk replaces stale from-imports so suppression still works."""
-        import types
 
-        from django_nplus1.patch import (
-            _original_prefetch_related_objects,
-            _standalone_prefetch_related_objects,
-        )
-
-        # Simulate a module that captured the original before patching.
-        stale_mod = types.ModuleType("_stale_test_mod")
-        stale_mod.prefetch_related_objects = _original_prefetch_related_objects  # type: ignore[attr-defined]
-        sys.modules["_stale_test_mod"] = stale_mod
-
-        # Re-run the fixup walk.
-        for mod in list(sys.modules.values()):
-            try:
-                if getattr(mod, "prefetch_related_objects", None) is _original_prefetch_related_objects:
-                    mod.prefetch_related_objects = _standalone_prefetch_related_objects  # type: ignore[attr-defined]
-            except Exception:  # noqa: BLE001, S110
-                pass
-
-        try:
-            lazy_listener.threshold = 2
-            companies = list(Company.objects.all())
-            stale_mod.prefetch_related_objects(
-                companies,
-                "main_store__region",
-                "backup_store__region",
+        @pytest.mark.django_db
+        def test_converging_prefetch():
+            Company.objects.create(
+                main_store=Store.objects.create(region=Region.objects.create()),
+                backup_store=Store.objects.create(region=Region.objects.create()),
             )
-            lazy_listener.parent.notify.assert_not_called()
-        finally:
-            del sys.modules["_stale_test_mod"]
+            with Profiler():
+                companies = list(Company.objects.all())
+                early_helper.prefetch_stores(companies)
+                for company in companies:
+                    company.main_store.region
+                    company.backup_store.region
+        """,
+    )
+    result = django_pytester.runpytest_subprocess()
+    result.assert_outcomes(passed=1)
