@@ -1,7 +1,7 @@
 # Django N+1
 
 !!! note "Beta"
-    This package is under active development and the API may change before 1.0.
+    This package is under active development and the API can change before 1.0.
 
 N+1 query detection for Django.
 
@@ -20,6 +20,7 @@ Detects:
 - `Model.objects.get()` repeated in a loop
 - Unused `select_related` / `prefetch_related`
 - Duplicate raw SQL (opt-in via `NPLUS1_DETECT_DUPLICATE_QUERIES`)
+- Eager loads and fields that no test in the session reads (opt-in [corpus mode](user-guide/corpus-mode.md))
 
 Activates via:
 
@@ -27,12 +28,14 @@ Activates via:
 - pytest plugin (`nplus1` fixture and `@pytest.mark.nplus1` marker)
 - Celery `task_prerun`/`task_postrun` signals
 - `Profiler` context manager
+- `DetectionContext` for other entry points
 
 Suppression:
 
 - Wildcard whitelist with typo detection
 - `# nplus1: ignore` inline comments
 - `nplus1_allow()` context manager
+- `# nplus1: corpus-ignore` inline comments for corpus mode
 
 Reports via logging, exceptions, `warnings.warn_explicit()`, and a Django signal. Messages include file, line, and function. Threshold tunable via `NPLUS1_THRESHOLD`. Only depends on Django.
 

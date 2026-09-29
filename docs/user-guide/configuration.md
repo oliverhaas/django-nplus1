@@ -1,6 +1,6 @@
 # Configuration
 
-All settings are optional and configured in your Django settings module.
+All settings are optional and configured in your Django settings module. Invalid values raise `ImproperlyConfigured` when the middleware is created or Celery detection is set up. The thresholds must be integers of at least 1, and every `Profiler` or `DetectionContext` checks them when it starts, including the ones the pytest marker and fixture create.
 
 ## Settings Reference
 
@@ -14,25 +14,23 @@ NPLUS1_LOG = True
 
 ### `NPLUS1_LOG_LEVEL`
 
-Python logging level for detected issues. Default: `logging.WARNING`.
+Logging level for detected issues, as a number or a level name. Default: `logging.WARNING`.
 
 ```python
-import logging
-NPLUS1_LOG_LEVEL = logging.WARNING
+NPLUS1_LOG_LEVEL = "ERROR"
 ```
 
 ### `NPLUS1_LOGGER`
 
-Custom logger instance. Default: `logging.getLogger("django_nplus1")`.
+Logger for detected issues, as a logger or a logger name. Default: the `django_nplus1` logger.
 
 ```python
-import logging
-NPLUS1_LOGGER = logging.getLogger("my_app.nplus1")
+NPLUS1_LOGGER = "my_app.nplus1"
 ```
 
 ### `NPLUS1_RAISE`
 
-Raise `NPlus1Error` on detection instead of (or in addition to) logging. Default: `False`.
+Raise `NPLUS1_ERROR` on detection. Default: `False`. Logging and warnings, where enabled, happen before the raise.
 
 ```python
 NPLUS1_RAISE = True  # Recommended for test settings
@@ -42,7 +40,7 @@ NPLUS1_RAISE = True  # Recommended for test settings
 
 Emit `UserWarning` via `warnings.warn_explicit()` on detection. Default: `False`.
 
-When caller info is available, the warning points to the exact file and line. Integrates with `pytest -W error::UserWarning` and `warnings.filterwarnings()`.
+The warning points at the line that triggered the detection, so `pytest -W error::UserWarning` and `warnings.filterwarnings()` work with it. Unused eager loads are detected when the scope ends and point at `django_nplus1` instead.
 
 ```python
 NPLUS1_WARN = True
@@ -50,10 +48,10 @@ NPLUS1_WARN = True
 
 ### `NPLUS1_ERROR`
 
-Custom exception class to raise. Default: `NPlus1Error`.
+Exception class to raise, or a dotted path to one. Default: `NPlus1Error`.
 
 ```python
-NPLUS1_ERROR = MyCustomError
+NPLUS1_ERROR = "myapp.exceptions.QueryError"
 ```
 
 ### `NPLUS1_THRESHOLD`
@@ -94,9 +92,7 @@ This catches N+1 patterns from `cursor.execute()`, `QuerySet.raw()`, and any oth
 NPLUS1_DETECT_DUPLICATE_QUERIES = True
 ```
 
-Note: duplicate query detection only monitors the default database connection. Multi-database setups won't detect duplicates on secondary connections.
-
-Queries Django runs while opening a connection, and queries with no frame of your code on the call stack, are not counted.
+It watches every database connection. Queries Django runs while opening a connection, and queries with no frame of your code on the call stack, are not counted.
 
 ### `NPLUS1_DUPLICATE_QUERY_THRESHOLD`
 
@@ -119,7 +115,7 @@ NPLUS1_WHITELIST = [
 
 ### `NPLUS1_CELERY`
 
-Enable per-task N+1 detection inside Celery workers. Default: `False`. Requires the `celery` extra (`pip install django-nplus1[celery]`). See [Celery integration](../reference/api.md) for details.
+Enable per-task N+1 detection inside Celery workers. Default: `False`. Requires the `celery` extra (`pip install django-nplus1[celery]`). See [Celery integration](../reference/api.md#celery-integration) for details.
 
 ```python
 NPLUS1_CELERY = True
@@ -127,7 +123,7 @@ NPLUS1_CELERY = True
 
 ### `NPLUS1_FIELD_EXCLUDE`
 
-List of `app_label.ModelName` patterns (fnmatch wildcards) excluded from corpus-mode field tracking. Default: `[]`.
+Models whose fields corpus mode never reports as `unused_field_load`, as `app_label.ModelName` patterns with fnmatch wildcards. Default: `[]`.
 
 ```python
 NPLUS1_FIELD_EXCLUDE = [
@@ -138,7 +134,7 @@ NPLUS1_FIELD_EXCLUDE = [
 
 ### `NPLUS1_EAGER_CORPUS`
 
-Enable corpus-wide `unused_eager_load` detection during pytest runs. Default: `False`. Equivalent to passing `--nplus1-eager-corpus` on the command line. See [Corpus Mode](corpus-mode.md).
+Turn on corpus mode for pytest runs, which reports the eager loads and loaded fields that no test in the session read. Default: `False`. Same as passing `--nplus1-eager-corpus`. See [Corpus Mode](corpus-mode.md).
 
 ```python
 NPLUS1_EAGER_CORPUS = True
