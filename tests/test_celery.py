@@ -30,6 +30,14 @@ def allowed_occupation_users():
 
 
 @app.task
+def occupation_users_or_none():
+    try:
+        return read_occupation_users()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+@app.task
 def first_occupation_user():
     occupations = list(Occupation.objects.order_by("pk"))
     return occupations[0].user.name
@@ -72,10 +80,19 @@ def celery_detection(settings, disconnect_detection):
     setup_celery_detection()
 
 
-def test_detection_fails_the_task(objects, celery_detection):
-    result = occupation_users.apply()
+def logged_errors(caplog):
+    return [
+        record.exc_info[1]
+        for record in caplog.records
+        if record.name == "django_nplus1" and record.levelno >= logging.ERROR
+    ]
+
+
+@pytest.mark.parametrize("throw", [False, True], ids=["stored", "propagated"])
+def test_detection_fails_the_task(objects, celery_detection, caplog, throw):
     with pytest.raises(NPlus1Error, match="Occupation.user"):
-        result.get()
+        occupation_users.apply(throw=throw).get()
+    assert logged_errors(caplog) == []
 
 
 def test_each_task_run_counts_on_its_own(objects, celery_detection):
@@ -96,11 +113,16 @@ def test_detection_ends_with_the_task(objects, celery_detection, task, state):
     assert read_occupation_users() == ["alice", "bob"]
 
 
-def test_detection_at_the_end_of_a_task_is_logged(objects, celery_detection, caplog):
-    assert count_users_with_unused_select.apply().get() == 2
-    errors = [record for record in caplog.records if record.levelno >= logging.ERROR]
-    assert [(record.name, type(record.exc_info[1])) for record in errors] == [("django_nplus1", NPlus1Error)]
-    assert "User.occupation" in str(errors[0].exc_info[1])
+@pytest.mark.parametrize(
+    ("task", "match"),
+    [(count_users_with_unused_select, "User.occupation"), (occupation_users_or_none, "Occupation.user")],
+    ids=["at-the-end", "caught"],
+)
+def test_detection_not_raised_by_the_task_is_logged(objects, celery_detection, caplog, task, match):
+    assert task.apply().successful()
+    errors = logged_errors(caplog)
+    assert [type(error) for error in errors] == [NPlus1Error]
+    assert match in str(errors[0])
 
 
 def test_detection_in_a_subtask_is_logged_once(objects, disconnect_detection, caplog):

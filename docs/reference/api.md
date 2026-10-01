@@ -13,7 +13,7 @@ MIDDLEWARE = [
 ]
 ```
 
-It reads the `NPLUS1_*` settings when Django creates it, so invalid settings and whitelist entries naming unknown models fail at startup. With `NPLUS1_RAISE`, an exception raised by the view wins over a detection made at the end of the request.
+It reads the `NPLUS1_*` settings when Django creates it, so invalid settings and whitelist entries naming unknown models fail at startup. With `NPLUS1_RAISE`, an exception raised by the view wins over a detection made at the end of the request. A detection that the view or a template catches, as the `{% if %}` tag does when a comparison raises, is raised again at the end of the request.
 
 ## Profiler
 
@@ -54,6 +54,8 @@ with DetectionContext(notifiers=init(settings), whitelist=[{"model": "auth.User"
 - `sender`: The `sender` of the `nplus1_detected` signal. Default: the scope's class.
 
 Scopes nest. A detection inside an inner scope goes to the notifiers of every enclosing scope, and notifiers built from the same settings report it once. A whitelist entry of any enclosing scope suppresses it. Entering a scope that is already active raises `RuntimeError`.
+
+A detection that a notifier raises fails the scope even if code in the block catches it: the scope raises it again on exit. It also replaces an exception the block raises afterwards, which is often a consequence of the caught detection. A `BaseException` such as `KeyboardInterrupt` is never replaced, and a block that fails drops the detections made at exit, such as unused eager loads.
 
 ## `nplus1_allow`
 
@@ -167,7 +169,7 @@ setup_celery_detection()
 
 **Limitations:**
 
-- A detection made when a task ends, such as an unused eager load, can't fail the task, because Celery has already recorded its result. It is logged at ERROR level on the `django_nplus1` logger instead.
+- A detection made when a task ends, such as an unused eager load, or one that the task catches, can't fail the task, because Celery has already recorded its result. It is logged at ERROR level on the `django_nplus1` logger instead.
 - When detection can't start for a task, the task runs without it and the error is logged at ERROR level.
 - `nplus1_allow()` doesn't reach tasks sent to a worker, because context variables don't travel with the task message. A task run with `.apply()` inside another task or a request nests in that scope, so an enclosing `nplus1_allow()` covers it.
 
@@ -175,7 +177,7 @@ setup_celery_detection()
 
 ### Fixtures
 
-- `nplus1`: Yields a `Profiler` instance, active from the fixture's setup to its teardown. Test fails on N+1 detection. Applies `NPLUS1_WHITELIST`.
+- `nplus1`: Yields a `Profiler` instance, active from the fixture's setup to its teardown. Test fails on N+1 detection, even one the test catches. Applies `NPLUS1_WHITELIST`.
 
 ### Markers
 

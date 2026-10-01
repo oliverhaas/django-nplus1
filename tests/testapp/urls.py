@@ -4,6 +4,7 @@ from testapp import views
 urlpatterns = [
     path("lazy_loop/", views.lazy_loop),
     path("async_lazy_loop/", views.async_lazy_loop),
+    path("lazy_loop_caught_by_template/", views.lazy_loop_caught_by_template),
     path("unused_select/", views.unused_select),
     path("unused_select_then_error/", views.unused_select_then_error),
     path("raw_sql_loop/", views.raw_sql_loop),
