@@ -998,7 +998,7 @@
 <ul>
 <li>Per-request <code>unused_eager_load</code> detection is off for the whole session.</li>
 <li>Every detection scope opened during the run (by <code>NPlus1Middleware</code>, the Celery integration, <code>Profiler</code>, the pytest marker and fixture, or a manual <code>with DetectionContext():</code>) records its eager loads, field loads and reads in a session-wide tracker.</li>
-<li>Django's <code>DeferredAttribute</code> becomes a data descriptor, so every read of a loaded field goes through it and counts as a read. Field values stay in the instance <code>__dict__</code>, so models behave as they do without corpus mode.</li>
+<li>Django's <code>DeferredAttribute</code> becomes a data descriptor, so every read of a loaded field goes through it and counts as a read. Field values stay in the instance <code>__dict__</code>, so models behave as they do without corpus mode. Reads get slower: about 0.2 µs per read outside a scope and 1.5 µs inside one, against 0.02 µs without corpus mode.</li>
 <li>ORM calls outside a scope (test setup, factories, direct queryset assertions) are ignored.</li>
 <li>At the end of the session the findings are printed in a "django-nplus1 corpus" section of the terminal summary, and the run fails.</li>
 </ul>
@@ -1053,7 +1053,7 @@
 <h2 id="pytest-xdist">pytest-xdist<a class="headerlink" href="#pytest-xdist" title="Permanent link">&para;</a></h2>
 <p>Corpus mode works with pytest-xdist. Each worker hands its tracker to the controller when it finishes, and the controller reports once for the whole session. No files are written.</p>
 <h2 id="for-plugin-authors">For plugin authors<a class="headerlink" href="#for-plugin-authors" title="Permanent link">&para;</a></h2>
-<p>Listeners connected with <code>django_nplus1.signals.connect()</code> receive each payload as the <code>args</code> tuple. Rows are identified by keys of the form <code>"app_label.ModelName:pk"</code>, and call sites are <code>(filename, lineno, funcname)</code> tuples.</p>
+<p>Connect a listener with <code>django_nplus1.signals.connect()</code> inside a detection scope. It receives signals until that scope ends. Outside a scope, <code>connect()</code> does nothing. Listeners receive each payload as the <code>args</code> tuple. Rows are identified by keys of the form <code>"app_label.ModelName:pk"</code>, and call sites are <code>(filename, lineno, funcname)</code> tuples.</p>
 <ul>
 <li><code>EAGER_LOAD</code> carries <code>(model, field, keys, group, call_site)</code>. <code>group</code> numbers the query that loaded the rows. <code>call_site</code> is the line that declared the eager load. It is resolved in corpus mode only and is <code>None</code> otherwise.</li>
 <li><code>FIELD_LOAD</code> carries <code>(model, attname, keys, call_site)</code>, once for each loaded concrete field other than the primary key. <code>call_site</code> is the line that started the queryset.</li>

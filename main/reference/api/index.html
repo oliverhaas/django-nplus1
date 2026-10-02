@@ -812,6 +812,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#call-sites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Call Sites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#exceptions" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1105,6 +1116,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#call-sites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Call Sites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#exceptions" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1239,7 +1261,8 @@
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="s2">"django_nplus1.NPlus1Middleware"</span><span class="p">,</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="p">]</span>
 </span></code></pre></div>
-<p>It reads the <code>NPLUS1_*</code> settings when Django creates it, so invalid settings and whitelist entries naming unknown models fail at startup. With <code>NPLUS1_RAISE</code>, an exception raised by the view wins over a detection made at the end of the request. A detection that the view or a template catches, as the <code>{% if %}</code> tag does when a comparison raises, is raised again at the end of the request.</p>
+<p>It reads the <code>NPLUS1_*</code> settings when Django creates it, so invalid settings and whitelist entries naming unknown models fail at startup, as does a missing <code>django_nplus1</code> in <code>INSTALLED_APPS</code>. With <code>NPLUS1_RAISE</code>, an exception raised by the view wins over a detection made at the end of the request. A detection that the view or a template catches, as the <code>{% if %}</code> tag does when a comparison raises, is raised again at the end of the request.</p>
+<p>Detection ends when the view returns its response. Queries that run while the server iterates a <code>StreamingHttpResponse</code> or <code>FileResponse</code> body aren't checked.</p>
 <h2 id="profiler">Profiler<a class="headerlink" href="#profiler" title="Permanent link">&para;</a></h2>
 <h3 id="profiler_1"><code>Profiler</code><a class="headerlink" href="#profiler_1" title="Permanent link">&para;</a></h3>
 <p>Context manager for manual N+1 detection. It raises <code>NPlus1Error</code> on the first detection.</p>
@@ -1269,7 +1292,10 @@
 <li><code>whitelist</code>: Entries in the same format as <code>Profiler(whitelist=...)</code>.</li>
 <li><code>sender</code>: The <code>sender</code> of the <code>nplus1_detected</code> signal. Default: the scope's class.</li>
 </ul>
-<p>Scopes nest. A detection inside an inner scope goes to the notifiers of every enclosing scope, and notifiers built from the same settings report it once. A whitelist entry of any enclosing scope suppresses it. Entering a scope that is already active raises <code>RuntimeError</code>.</p>
+<p>Scopes nest. A detection inside an inner scope goes to the notifiers of every enclosing scope, and notifiers built from the same settings report it once. A whitelist entry of any enclosing scope suppresses it. Rows loaded in an enclosing scope count in the scopes inside it, so reading a relation row by row in an inner scope is an N+1 there too. Entering a scope that is already active raises <code>RuntimeError</code>.</p>
+<p>A scope keeps a key for every row loaded in it until it ends, about 160 bytes per row. A task that streams ten million rows with <code>.iterator()</code> inside one scope holds about 1.6 GB.</p>
+<p>Scopes follow the <code>contextvars</code> context. A thread started inside a scope isn't checked unless it runs in a copy of the context, as with <code>threading.Thread(context=contextvars.copy_context())</code>, <code>asyncio.to_thread()</code> or <code>sync_to_async()</code>. On free-threaded Python builds, new threads get a copy by default.</p>
+<p>Inside a scope, a <code>Prefetch(to_attr=...)</code> list is a <code>list</code> subclass that records reads, so <code>type(value) is list</code> is false for it. Copies and pickles of it are plain lists.</p>
 <p>A detection that a notifier raises fails the scope even if code in the block catches it: the scope raises it again on exit. It also replaces an exception the block raises afterwards, which is often a consequence of the caught detection. A <code>BaseException</code> such as <code>KeyboardInterrupt</code> is never replaced, and a block that fails drops the detections made at exit, such as unused eager loads.</p>
 <h2 id="nplus1_allow"><code>nplus1_allow</code><a class="headerlink" href="#nplus1_allow" title="Permanent link">&para;</a></h2>
 <p>Context manager to locally suppress N+1 detection for specific code blocks. Useful for incrementally adopting detection in existing projects.</p>
@@ -1315,15 +1341,19 @@
 <p><strong>Arguments sent:</strong></p>
 <ul>
 <li><code>sender</code>: The class of the innermost scope that made the detection: <code>NPlus1Middleware</code> for requests, <code>Profiler</code> for <code>Profiler</code>, the pytest marker and the <code>nplus1</code> fixture, and <code>DetectionContext</code> for Celery tasks. A <code>DetectionContext</code> created with <code>sender=</code> sends that value.</li>
-<li><code>message</code>: A <code>Message</code> instance with <code>.model</code>, <code>.field</code>, <code>.label</code>, and <code>.message</code> attributes. <code>.caller</code> is the <code>(filename, lineno, funcname)</code> of the line that triggered the detection, or <code>None</code> when there is none, as for an unused eager load. With <code>NPLUS1_SHOW_ALL_CALLERS</code>, <code>.callers</code> holds a stack for each repeated access instead.</li>
+<li><code>message</code>: A <code>Message</code> instance with <code>.model</code>, <code>.field</code>, <code>.label</code>, and <code>.message</code> attributes. <code>.caller</code> is the <code>(filename, lineno, funcname)</code> of the line that triggered the detection, or <code>None</code> when there is none, as for an unused eager load. With <code>NPLUS1_SHOW_ALL_CALLERS</code>, <code>.callers</code> holds a stack for each repeated access instead. For a <code>duplicate_query</code>, <code>.model</code> is a placeholder class named <code>_SQL</code> and <code>.field</code> is the whole query with literals replaced by <code>?</code>, while <code>.message</code> shows its first 120 characters.</li>
 </ul>
+<p>The signal is sent with <code>send_robust()</code>, so a receiver that raises is logged on the <code>django.dispatch</code> logger and detection goes on. Async receivers work in sync and async views.</p>
 <h2 id="duplicate-query-detection">Duplicate Query Detection<a class="headerlink" href="#duplicate-query-detection" title="Permanent link">&para;</a></h2>
-<p>The primary detection works at the ORM descriptor level. For raw SQL, <code>.raw()</code>, and other paths that bypass the ORM, enable SQL-level duplicate query detection:</p>
+<p>The other detectors work at the ORM descriptor level. For raw SQL, <code>.raw()</code>, and other paths that bypass the ORM descriptors, enable SQL-level duplicate query detection:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">NPLUS1_DETECT_DUPLICATE_QUERIES</span> <span class="o">=</span> <span class="kc">True</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">NPLUS1_DUPLICATE_QUERY_THRESHOLD</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># default</span>
 </span></code></pre></div>
-<p>When enabled, every query on every database connection is fingerprinted (literals replaced with <code>?</code>), and repeated identical queries from the same call-site are flagged. This works in every detection scope.</p>
-<p>The call site is the innermost frame of your code. Frames from the standard library, installed packages, and console-script launchers such as <code>bin/pytest</code> don't count. Queries with no frame of your code on the stack aren't counted, nor are queries Django runs while opening a connection (backend setup and <code>connection_created</code> receivers such as <code>django.contrib.postgres</code>' type lookups).</p>
+<p>When enabled, every query on every database connection is fingerprinted (literals replaced with <code>?</code>), and repeated identical queries from the same call site are flagged. This works in every detection scope. ORM queries are fingerprinted too, so lazy-load and <code>.get()</code> loops are also reported as <code>duplicate_query</code>.</p>
+<p>Queries with no frame of your code on the stack aren't counted, nor are queries Django runs while opening a connection (backend setup and <code>connection_created</code> receivers such as <code>django.contrib.postgres</code>' type lookups).</p>
+<h2 id="call-sites">Call Sites<a class="headerlink" href="#call-sites" title="Permanent link">&para;</a></h2>
+<p>A detection's call site is the innermost frame of your code on the stack. <code>.get()</code> loops and duplicate queries are counted per call site. Frames from the standard library, installed packages, django-nplus1 itself and console-script launchers such as <code>bin/pytest</code> don't count. If your project is installed in <code>site-packages</code>, list its packages in <a href="../../user-guide/configuration/#nplus1_project_packages"><code>NPLUS1_PROJECT_PACKAGES</code></a>.</p>
+<p>Async ORM calls such as <code>aget()</code> run in a worker thread. Their call site is the line in your coroutine that awaited them.</p>
 <h2 id="exceptions">Exceptions<a class="headerlink" href="#exceptions" title="Permanent link">&para;</a></h2>
 <h3 id="nplus1error"><code>NPlus1Error</code><a class="headerlink" href="#nplus1error" title="Permanent link">&para;</a></h3>
 <p>Raised on a detection by <code>Profiler</code>, and by the middleware and Celery tasks when <code>NPLUS1_RAISE = True</code> and <code>NPLUS1_ERROR</code> names no other class. Also raised at startup when <code>NPLUS1_WHITELIST</code> names a model that doesn't exist.</p>
@@ -1331,7 +1361,7 @@
 </span></code></pre></div>
 <h2 id="celery-integration">Celery Integration<a class="headerlink" href="#celery-integration" title="Permanent link">&para;</a></h2>
 <p>Per-task N+1 detection for Celery workers. Each task run gets its own detection scope, like a request under the middleware.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>pip<span class="w"> </span>install<span class="w"> </span>django-nplus1<span class="o">[</span>celery<span class="o">]</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"django-nplus1[celery]"</span>
 </span></code></pre></div>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># settings.py</span>
 </span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">NPLUS1_CELERY</span> <span class="o">=</span> <span class="kc">True</span>
@@ -1348,11 +1378,12 @@
 <li>A detection made when a task ends, such as an unused eager load, or one that the task catches, can't fail the task, because Celery has already recorded its result. It is logged at ERROR level on the <code>django_nplus1</code> logger instead. For a task run with <code>.apply()</code> inside another scope, such as a request or the <code>nplus1</code> test fixture, that scope reports the detection when it ends.</li>
 <li>When detection can't start for a task, the task runs without it and the error is logged at ERROR level.</li>
 <li><code>nplus1_allow()</code> doesn't reach tasks sent to a worker, because context variables don't travel with the task message. A task run with <code>.apply()</code> inside another task or a request nests in that scope, so an enclosing <code>nplus1_allow()</code> covers it.</li>
+<li>With <code>NPLUS1_RAISE</code>, a detection fails the task, and a task with <code>autoretry_for=(Exception,)</code> is retried for it. Raise only in test settings.</li>
 </ul>
 <h2 id="pytest-plugin">pytest Plugin<a class="headerlink" href="#pytest-plugin" title="Permanent link">&para;</a></h2>
 <h3 id="fixtures">Fixtures<a class="headerlink" href="#fixtures" title="Permanent link">&para;</a></h3>
 <ul>
-<li><code>nplus1</code>: Yields a <code>Profiler</code> instance, active from the fixture's setup to its teardown. Test fails on N+1 detection, even one the test catches. Applies <code>NPLUS1_WHITELIST</code>.</li>
+<li><code>nplus1</code>: Yields a <code>Profiler</code> instance, active from the fixture's setup to its teardown. Test fails on N+1 detection. A detection the test catches, or an unused eager load, makes it error at teardown. Applies <code>NPLUS1_WHITELIST</code>.</li>
 </ul>
 <h3 id="markers">Markers<a class="headerlink" href="#markers" title="Permanent link">&para;</a></h3>
 <ul>

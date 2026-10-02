@@ -864,7 +864,7 @@
 <li>Deferred-field access from <code>.defer()</code> / <code>.only()</code></li>
 <li><code>Model.objects.get()</code> repeated in a loop</li>
 <li>Unused <code>select_related</code> / <code>prefetch_related</code></li>
-<li>Duplicate raw SQL (opt-in via <code>NPLUS1_DETECT_DUPLICATE_QUERIES</code>)</li>
+<li>Duplicate SQL queries, including raw SQL (opt-in via <code>NPLUS1_DETECT_DUPLICATE_QUERIES</code>)</li>
 <li>Eager loads and fields that no test in the session reads (opt-in <a href="user-guide/corpus-mode/">corpus mode</a>)</li>
 </ul>
 <p>Activates via:</p>

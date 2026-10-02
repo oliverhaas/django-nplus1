@@ -633,6 +633,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#nplus1_project_packages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        NPLUS1_PROJECT_PACKAGES
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#nplus1_detect_duplicate_queries" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1069,6 +1080,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#nplus1_project_packages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        NPLUS1_PROJECT_PACKAGES
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#nplus1_detect_duplicate_queries" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1171,7 +1193,7 @@
 
 
 <h1 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h1>
-<p>All settings are optional and configured in your Django settings module. Invalid values raise <code>ImproperlyConfigured</code> when the middleware is created or Celery detection is set up. The thresholds must be integers of at least 1, and every <code>Profiler</code> or <code>DetectionContext</code> checks them when it starts, including the ones the pytest marker and fixture create.</p>
+<p>All settings are optional and configured in your Django settings module. The middleware checks them when Django creates it, and the Celery integration when it is set up, so an invalid value raises <code>ImproperlyConfigured</code> at startup. Only the settings in use are checked: <code>NPLUS1_LOGGER</code> and <code>NPLUS1_LOG_LEVEL</code> while <code>NPLUS1_LOG</code> is on, and <code>NPLUS1_ERROR</code> while <code>NPLUS1_RAISE</code> is on. A whitelist entry that names an unknown model raises <code>NPlus1Error</code> instead, see <a href="../whitelisting/">Whitelisting</a>. Every <code>Profiler</code> or <code>DetectionContext</code> also checks <code>NPLUS1_PROJECT_PACKAGES</code> and the thresholds it uses when it starts, including the ones the pytest marker and fixture create.</p>
 <h2 id="settings-reference">Settings Reference<a class="headerlink" href="#settings-reference" title="Permanent link">&para;</a></h2>
 <h3 id="nplus1_log"><code>NPLUS1_LOG</code><a class="headerlink" href="#nplus1_log" title="Permanent link">&para;</a></h3>
 <p>Enable/disable logging of detected issues. Default: <code>True</code>.</p>
@@ -1211,51 +1233,57 @@
 <p>When enabled, messages include labeled <code>CALL 1:</code>, <code>CALL 2:</code> sections with full stack traces.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">NPLUS1_SHOW_ALL_CALLERS</span> <span class="o">=</span> <span class="kc">True</span>
 </span></code></pre></div>
+<h3 id="nplus1_project_packages"><code>NPLUS1_PROJECT_PACKAGES</code><a class="headerlink" href="#nplus1_project_packages" title="Permanent link">&para;</a></h3>
+<p>Packages that count as your code even when they are installed in <code>site-packages</code>. Default: <code>[]</code>.</p>
+<p>A detection points at the innermost frame of your code on the call stack, and <code>.get()</code> loops and duplicate queries are counted per such call site. Frames from the standard library, installed packages and django-nplus1 itself are skipped. If your project is installed as a package, as in some Docker images, none of its frames count either: <code>.get()</code> loops and duplicate queries go undetected, N+1 messages lose their file and line, and <code># nplus1: ignore</code> comments have no effect. List your project's top-level packages here. Their submodules count too.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">NPLUS1_PROJECT_PACKAGES</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"myproject"</span><span class="p">]</span>
+</span></code></pre></div>
+<p>The value must be a list or tuple of module names.</p>
 <h3 id="nplus1_detect_duplicate_queries"><code>NPLUS1_DETECT_DUPLICATE_QUERIES</code><a class="headerlink" href="#nplus1_detect_duplicate_queries" title="Permanent link">&para;</a></h3>
 <p>Enable SQL-level duplicate query detection. Default: <code>False</code>.</p>
-<p>The primary detection works at the ORM descriptor level, which provides exact model/field identification but only catches queries going through the ORM. This setting enables a secondary detector that fingerprints raw SQL queries and flags repeated identical queries from the same call-site.</p>
-<p>This catches N+1 patterns from <code>cursor.execute()</code>, <code>QuerySet.raw()</code>, and any other path that bypasses the ORM descriptors.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">NPLUS1_DETECT_DUPLICATE_QUERIES</span> <span class="o">=</span> <span class="kc">True</span>
+<p>The other detectors work at the ORM descriptor level, which names the exact model and field but only sees queries that go through the descriptors. This setting adds a detector that fingerprints every SQL query, with literals replaced by <code>?</code>, and flags the same fingerprint run repeatedly from the same call site.</p>
+<p>This catches N+1 patterns from <code>cursor.execute()</code>, <code>QuerySet.raw()</code>, and any other path that bypasses the ORM descriptors. ORM queries are fingerprinted too, so a lazy-load or <code>.get()</code> loop is also reported as <code>duplicate_query</code>.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">NPLUS1_DETECT_DUPLICATE_QUERIES</span> <span class="o">=</span> <span class="kc">True</span>
 </span></code></pre></div>
 <p>It watches every database connection. Queries Django runs while opening a connection, and queries with no frame of your code on the call stack, are not counted.</p>
 <h3 id="nplus1_duplicate_query_threshold"><code>NPLUS1_DUPLICATE_QUERY_THRESHOLD</code><a class="headerlink" href="#nplus1_duplicate_query_threshold" title="Permanent link">&para;</a></h3>
 <p>Number of repeated identical SQL queries from the same call-site before detection fires. Default: <code>2</code>. Only relevant when <code>NPLUS1_DETECT_DUPLICATE_QUERIES</code> is enabled.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">NPLUS1_DUPLICATE_QUERY_THRESHOLD</span> <span class="o">=</span> <span class="mi">3</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">NPLUS1_DUPLICATE_QUERY_THRESHOLD</span> <span class="o">=</span> <span class="mi">3</span>
 </span></code></pre></div>
 <h3 id="nplus1_whitelist"><code>NPLUS1_WHITELIST</code><a class="headerlink" href="#nplus1_whitelist" title="Permanent link">&para;</a></h3>
-<p>List of patterns to ignore. Applied by the middleware, the Celery integration, corpus mode, and the pytest marker and <code>nplus1</code> fixture. See <a href="../whitelisting/">Whitelisting</a> for details.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">NPLUS1_WHITELIST</span> <span class="o">=</span> <span class="p">[</span>
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>    <span class="p">{</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"myapp.User"</span><span class="p">,</span> <span class="s2">"field"</span><span class="p">:</span> <span class="s2">"profile"</span><span class="p">},</span>
-</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    <span class="p">{</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"auth.*"</span><span class="p">},</span>
-</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="p">]</span>
+<p>List of patterns to ignore. Applied by the middleware, the Celery integration, corpus mode, and the pytest marker and <code>nplus1</code> fixture. A <code>model</code> pattern matches <code>"app_label.ModelName"</code>, not the bare class name. See <a href="../whitelisting/">Whitelisting</a> for details.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="n">NPLUS1_WHITELIST</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>    <span class="p">{</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"myapp.User"</span><span class="p">,</span> <span class="s2">"field"</span><span class="p">:</span> <span class="s2">"profile"</span><span class="p">},</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>    <span class="p">{</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"auth.*"</span><span class="p">},</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="p">]</span>
 </span></code></pre></div>
 <h3 id="nplus1_celery"><code>NPLUS1_CELERY</code><a class="headerlink" href="#nplus1_celery" title="Permanent link">&para;</a></h3>
-<p>Enable per-task N+1 detection inside Celery workers. Default: <code>False</code>. Requires the <code>celery</code> extra (<code>pip install django-nplus1[celery]</code>). See <a href="../../reference/api/#celery-integration">Celery integration</a> for details.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="n">NPLUS1_CELERY</span> <span class="o">=</span> <span class="kc">True</span>
+<p>Enable per-task N+1 detection inside Celery workers. Default: <code>False</code>. Requires the <code>celery</code> extra (<code>pip install "django-nplus1[celery]"</code>). See <a href="../../reference/api/#celery-integration">Celery integration</a> for details.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">NPLUS1_CELERY</span> <span class="o">=</span> <span class="kc">True</span>
 </span></code></pre></div>
 <h3 id="nplus1_field_exclude"><code>NPLUS1_FIELD_EXCLUDE</code><a class="headerlink" href="#nplus1_field_exclude" title="Permanent link">&para;</a></h3>
 <p>Models whose fields corpus mode never reports as <code>unused_field_load</code>, as <code>app_label.ModelName</code> patterns with fnmatch wildcards. Default: <code>[]</code>.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">NPLUS1_FIELD_EXCLUDE</span> <span class="o">=</span> <span class="p">[</span>
-</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>    <span class="s2">"auth.User"</span><span class="p">,</span>
-</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>    <span class="s2">"contenttypes.*"</span><span class="p">,</span>
-</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="p">]</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="n">NPLUS1_FIELD_EXCLUDE</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>    <span class="s2">"auth.User"</span><span class="p">,</span>
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>    <span class="s2">"contenttypes.*"</span><span class="p">,</span>
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="p">]</span>
 </span></code></pre></div>
 <h3 id="nplus1_eager_corpus"><code>NPLUS1_EAGER_CORPUS</code><a class="headerlink" href="#nplus1_eager_corpus" title="Permanent link">&para;</a></h3>
 <p>Turn on corpus mode for pytest runs, which reports the eager loads and loaded fields that no test in the session read. Default: <code>False</code>. Same as passing <code>--nplus1-eager-corpus</code>. See <a href="../corpus-mode/">Corpus Mode</a>.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="n">NPLUS1_EAGER_CORPUS</span> <span class="o">=</span> <span class="kc">True</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="n">NPLUS1_EAGER_CORPUS</span> <span class="o">=</span> <span class="kc">True</span>
 </span></code></pre></div>
 <h2 id="recommended-test-configuration">Recommended Test Configuration<a class="headerlink" href="#recommended-test-configuration" title="Permanent link">&para;</a></h2>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># settings/testing.py</span>
-</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="n">MIDDLEWARE</span> <span class="o">=</span> <span class="p">[</span>
-</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>    <span class="o">...</span><span class="p">,</span>
-</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>    <span class="s2">"django_nplus1.NPlus1Middleware"</span><span class="p">,</span>
-</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="p">]</span>
-</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="n">NPLUS1_RAISE</span> <span class="o">=</span> <span class="kc">True</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1"># settings/testing.py</span>
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="n">MIDDLEWARE</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>    <span class="o">...</span><span class="p">,</span>
+</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>    <span class="s2">"django_nplus1.NPlus1Middleware"</span><span class="p">,</span>
+</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="p">]</span>
+</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="n">NPLUS1_RAISE</span> <span class="o">=</span> <span class="kc">True</span>
 </span></code></pre></div>
 <p>Adding the middleware only in test settings catches N+1 queries in your actual view code paths. For existing projects that surface many issues at first, whitelist the known problems and fix them incrementally:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="n">NPLUS1_WHITELIST</span> <span class="o">=</span> <span class="p">[</span>
-</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>    <span class="p">{</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"myapp.Author"</span><span class="p">,</span> <span class="s2">"field"</span><span class="p">:</span> <span class="s2">"books"</span><span class="p">},</span>
-</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="p">]</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="n">NPLUS1_WHITELIST</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>    <span class="p">{</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"myapp.Author"</span><span class="p">,</span> <span class="s2">"field"</span><span class="p">:</span> <span class="s2">"books"</span><span class="p">},</span>
+</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="p">]</span>
 </span></code></pre></div>
 <p>See <a href="../whitelisting/">Whitelisting</a> for the full format.</p>
 

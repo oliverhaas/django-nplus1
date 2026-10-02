@@ -926,6 +926,7 @@
 </span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="s2">"django_nplus1"</span><span class="p">,</span>
 </span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="p">]</span>
 </span></code></pre></div>
+<p>The app installs the ORM hooks that detection relies on. Without it, the middleware, Celery detection and every detection scope raise <code>ImproperlyConfigured</code> when they start.</p>
 <p>Then add the middleware to your <strong>test settings</strong> and enable raising on detection:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># settings/testing.py</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">MIDDLEWARE</span> <span class="o">=</span> <span class="p">[</span>
@@ -947,7 +948,7 @@
 <p>The middleware can also be added to your base or development settings to log warnings during normal use. For more granular control, see the <a href="../../user-guide/pytest-plugin/">pytest plugin</a> (<code>@pytest.mark.nplus1</code> marker) and the <a href="../../reference/api/#profiler">Profiler</a> context manager.</p>
 <h2 id="celery-integration">Celery Integration<a class="headerlink" href="#celery-integration" title="Permanent link">&para;</a></h2>
 <p>The equivalent of the middleware for Celery tasks. Install the <code>celery</code> extra and enable the integration:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>pip<span class="w"> </span>install<span class="w"> </span>django-nplus1<span class="o">[</span>celery<span class="o">]</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"django-nplus1[celery]"</span>
 </span></code></pre></div>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># settings.py (or settings/testing.py)</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">NPLUS1_CELERY</span> <span class="o">=</span> <span class="kc">True</span>

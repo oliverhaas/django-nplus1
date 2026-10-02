@@ -965,7 +965,7 @@
 </tr>
 </tbody>
 </table>
-<p>A <code>duplicate_query</code> detection's field is the query with literals replaced by <code>?</code>, cut to 120 characters. Match it to suppress one query shape instead of every duplicate. In these patterns <code>[</code> matches a literal bracket:</p>
+<p>A <code>duplicate_query</code> detection's field is the whole query with literals replaced by <code>?</code>. The message shows only its first 120 characters, but patterns match against the whole query. Match it to suppress one query shape instead of every duplicate. In these patterns <code>[</code> matches a literal bracket:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">NPLUS1_WHITELIST</span> <span class="o">=</span> <span class="p">[</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="p">{</span><span class="s2">"label"</span><span class="p">:</span> <span class="s2">"duplicate_query"</span><span class="p">,</span> <span class="s2">"field"</span><span class="p">:</span> <span class="s1">'*FROM "django_content_type"*'</span><span class="p">},</span>
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="p">]</span>
@@ -978,7 +978,7 @@
 <li><code>"*"</code> matches everything (not recommended for global whitelist)</li>
 </ul>
 <p>An entry for a model also covers its proxy models and multi-table inheritance children.</p>
-<p><code>NPLUS1_WHITELIST</code> is checked against your models when the middleware is created or Celery detection is set up. An unknown model raises <code>NPlus1Error</code> with suggestions. An unknown field only warns, because a <code>Prefetch(to_attr=...)</code> name is no model field. Column names such as <code>user_id</code> count as fields. Entries using wildcards aren't checked.</p>
+<p><code>NPLUS1_WHITELIST</code> is checked against your models when the middleware is created, when Celery detection is set up, and when a test with the pytest marker or the <code>nplus1</code> fixture starts. An unknown model raises <code>NPlus1Error</code> with suggestions. An unknown field only warns, because a <code>Prefetch(to_attr=...)</code> name is no model field. Column names such as <code>user_id</code> count as fields. Entries using wildcards aren't checked.</p>
 <h2 id="local-suppression-nplus1_allow">Local Suppression (<code>nplus1_allow</code>)<a class="headerlink" href="#local-suppression-nplus1_allow" title="Permanent link">&para;</a></h2>
 <p>For suppressing detection in specific code blocks, use the <code>nplus1_allow()</code> context manager:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1</span><span class="w"> </span><span class="kn">import</span> <span class="n">nplus1_allow</span>
@@ -1001,7 +1001,7 @@
 </span></code></pre></div>
 <p>Uses the same whitelist format as <code>Profiler(whitelist=...)</code> and <code>@pytest.mark.nplus1(whitelist=...)</code>. An empty list suppresses nothing. Supports nesting: inner calls add to the outer rules; exiting an inner block restores the previous state. Works in every detection scope.</p>
 <p>An unused eager load is reported when the scope ends, but it is suppressed when the query that loaded it ran inside the block.</p>
-<p>This is the recommended approach for incrementally adopting detection in existing projects: enable <code>NPLUS1_RAISE = True</code> in tests, then wrap known N+1 patterns with <code>nplus1_allow()</code> and fix them over time.</p>
+<p>Use it for code that is fine as it is, such as a loop over a few rows that a page never shows more of. To adopt detection in an existing project, list the known N+1 queries in <code>NPLUS1_WHITELIST</code> instead and remove the entries as you fix them.</p>
 <h2 id="inline-suppression-nplus1-ignore">Inline Suppression (<code># nplus1: ignore</code>)<a class="headerlink" href="#inline-suppression-nplus1-ignore" title="Permanent link">&para;</a></h2>
 <p>For per-line suppression co-located with the offending code, add a trailing comment to the call site:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Suppress any detection on this line</span>
@@ -1024,7 +1024,7 @@
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="k">with</span> <span class="n">Profiler</span><span class="p">(</span><span class="n">whitelist</span><span class="o">=</span><span class="p">[{</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"User"</span><span class="p">,</span> <span class="s2">"field"</span><span class="p">:</span> <span class="s2">"profile"</span><span class="p">}]):</span>
 </span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="o">...</span>
 </span></code></pre></div>
-<p><code>Profiler</code>, <code>nplus1_allow()</code>, and the pytest marker match a <code>model</code> pattern against both the class name (<code>"User"</code>) and <code>"app_label.ModelName"</code> (<code>"auth.User"</code>), so patterns copied from <code>NPLUS1_WHITELIST</code> work unchanged. The pytest marker and <code>nplus1</code> fixture also apply <code>NPLUS1_WHITELIST</code> itself.</p>
+<p><code>Profiler</code>, <code>DetectionContext</code>, <code>nplus1_allow()</code>, and the pytest marker's <code>whitelist</code> match a <code>model</code> pattern against both the class name (<code>"User"</code>) and <code>"app_label.ModelName"</code> (<code>"auth.User"</code>), so patterns copied from <code>NPLUS1_WHITELIST</code> work unchanged. <code>NPLUS1_WHITELIST</code> itself matches <code>"app_label.ModelName"</code> only, also where the pytest marker and the <code>nplus1</code> fixture apply it.</p>
 <p>A whitelist also covers the scopes nested inside its own. The marker's whitelist applies to views that the test requests through the test client, even though the middleware opens a scope of its own.</p>
 
 

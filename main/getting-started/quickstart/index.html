@@ -1133,7 +1133,7 @@
 <div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># settings.py (or settings/testing.py)</span>
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">NPLUS1_CELERY</span> <span class="o">=</span> <span class="kc">True</span>
 </span></code></pre></div>
-<p>Each task gets its own detection scope, so N+1 queries in tasks run by a worker or with <code>task.apply()</code> are reported the same way as in HTTP requests. One difference: an unused eager load is only found when the task ends, too late to fail it, so it is logged at ERROR level even with <code>NPLUS1_RAISE</code>.</p>
+<p>Each task gets its own detection scope, so N+1 queries in tasks run by a worker or with <code>task.apply()</code> are reported the same way as in HTTP requests. One difference: an unused eager load is only found when the task ends, too late to fail it, so it is logged at ERROR level even with <code>NPLUS1_RAISE</code>. For a task run with <code>task.apply()</code> inside a request or the <code>nplus1</code> fixture, the request or fixture raises it.</p>
 
 
 
