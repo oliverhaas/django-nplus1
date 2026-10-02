@@ -1,11 +1,10 @@
 import sys
 import sysconfig
+import textwrap
 from pathlib import Path
 
 import pytest
 from testapp.models import Occupation
-
-from django_nplus1 import NPlus1Error
 
 
 def occupation_users():
@@ -15,18 +14,6 @@ def occupation_users():
 @pytest.fixture
 def occupation_whitelisted_in_settings(settings):
     settings.NPLUS1_WHITELIST = [{"model": "testapp.Occupation"}]
-
-
-@pytest.mark.django_db
-def test_nplus1_fixture_raises_on_detection(objects, nplus1):
-    with pytest.raises(NPlus1Error, match="Occupation.user"):
-        occupation_users()
-
-
-@pytest.mark.django_db
-def test_nplus1_fixture_catches_detection_inside_a_request(objects, client, nplus1):
-    with pytest.raises(NPlus1Error, match="Occupation.user"):
-        client.get("/lazy_loop/")
 
 
 @pytest.mark.nplus1(whitelist=[{"model": "testapp.Occupation"}])
@@ -110,6 +97,109 @@ def test_detection_works_without_contenttypes(django_pytester, monkeypatch):
     result = django_pytester.runpytest_subprocess()
     result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines(["*NPlus1Error*Book.shelf*"])
+
+
+DETECTING_TESTS = """
+import contextlib
+
+import pytest
+from django.test import TestCase
+from testapp.models import Occupation, User
+
+from django_nplus1 import NPlus1Error
+
+
+def create_occupations():
+    for _ in range(2):
+        Occupation.objects.create(user=User.objects.create())
+
+
+def touch_users():
+    for occupation in Occupation.objects.all():
+        occupation.user
+
+
+@pytest.fixture
+def occupations(db):
+    create_occupations()
+"""
+
+
+def test_detection_fails_the_test_once(django_pytester):
+    django_pytester.makepyfile(
+        DETECTING_TESTS
+        + textwrap.dedent(
+            """
+            @pytest.fixture
+            def lazy_load_in_setup(occupations, nplus1):
+                touch_users()
+
+
+            @pytest.fixture
+            def lazy_load_in_teardown(occupations, nplus1):
+                yield
+                touch_users()
+
+
+            @pytest.fixture
+            def request_in_teardown(occupations, client, nplus1):
+                yield
+                client.get("/lazy_loop/")
+
+
+            def test_fixture(occupations, nplus1):
+                touch_users()
+
+
+            def test_fixture_in_request(occupations, client, nplus1):
+                client.get("/lazy_loop/")
+
+
+            def test_lazy_load_in_fixture_setup(lazy_load_in_setup):
+                pass
+
+
+            def test_lazy_load_in_fixture_teardown(lazy_load_in_teardown):
+                pass
+
+
+            def test_request_in_fixture_teardown(request_in_teardown):
+                pass
+
+
+            @pytest.mark.usefixtures("nplus1")
+            class TestUnittest(TestCase):
+                def test_fixture(self):
+                    create_occupations()
+                    touch_users()
+            """,
+        ),
+    )
+    result = django_pytester.runpytest_subprocess()
+    result.assert_outcomes(failed=3, passed=2, errors=3)
+    result.stdout.no_fnmatch_line("*ExceptionGroup*")
+
+
+def test_detection_caught_by_the_test_still_fails_it(django_pytester):
+    django_pytester.makepyfile(
+        DETECTING_TESTS
+        + textwrap.dedent(
+            """
+            def test_fixture(occupations, nplus1):
+                with contextlib.suppress(NPlus1Error):
+                    touch_users()
+
+
+            @pytest.mark.nplus1
+            def test_marker(occupations):
+                with contextlib.suppress(NPlus1Error):
+                    touch_users()
+            """,
+        ),
+    )
+    result = django_pytester.runpytest_subprocess()
+    result.assert_outcomes(passed=1, errors=1, failed=1)
+    result.stdout.fnmatch_lines(["*ERROR at teardown of test_fixture*", "E *NPlus1Error*Occupation.user*"])
 
 
 def test_marker_skips_test_database_setup(django_pytester):

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Breaking:** A detection that code inside a scope catches, as Django's `{% if %}` tag does when a comparison raises, now fails the scope when it ends. This applies to `NPlus1Middleware` with `NPLUS1_RAISE`, `Profiler`, `DetectionContext`, `@pytest.mark.nplus1` and the `nplus1` fixture. The caught detection replaces an exception that the block raises later, but never a `BaseException` such as `KeyboardInterrupt`.
+- **Breaking:** With the marker or the fixture, a test fails on a detection even inside `pytest.raises(NPlus1Error)`. To check that code makes an N+1 query, use a `Profiler` in a test without them, as in [Asserting a Detection](../user-guide/pytest-plugin.md#asserting-a-detection).
+- A fixture of your own that yields inside `with Profiler():` can't see the test's exception, so a detection that fails the test fails its teardown too. Have it request the `nplus1` fixture instead.
+- A detection that a Celery task catches is logged at ERROR level when the task ends. The log message reads `detection not raised by task <id>` instead of `detection at the end of task <id> raised`.
+- When a test that uses the `nplus1` fixture fails, it no longer also errors at teardown on an unused eager load. The failure can stop the test before it reads the eager load.
+- With `NPLUS1_RAISE`, a Celery task that fails no longer logs an unused eager load found when it ends, for the same reason.
+
 ## 0.4.0
 
 ### Breaking changes

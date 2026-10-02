@@ -1,3 +1,5 @@
+import contextlib
+
 import pytest
 from testapp.models import Occupation, User
 
@@ -70,3 +72,39 @@ def test_detection_at_exit_still_ends_the_scope(objects, settings):
         list(User.objects.select_related("occupation"))
     for _ in range(2):
         list(User.objects.all())
+
+
+@pytest.mark.parametrize(
+    ("block_error", "raised"),
+    [(RuntimeError, NPlus1Error), (KeyboardInterrupt, KeyboardInterrupt)],
+    ids=["exception", "base-exception"],
+)
+def test_caught_detection_replaces_only_an_exception_of_the_block(objects, block_error, raised):
+    with pytest.raises(raised), Profiler():
+        with contextlib.suppress(Exception):
+            occupation_users()
+        raise block_error
+
+
+def test_enclosing_scope_raises_detection_caught_outside_the_inner_scope(objects):
+    with (
+        pytest.raises(NPlus1Error, match="Occupation.user"),
+        Profiler(),
+        contextlib.suppress(NPlus1Error),
+        Profiler(),
+    ):
+        occupation_users()
+
+
+def test_enclosing_scope_ignores_detection_dropped_by_failed_inner_block(objects):
+    with Profiler(), pytest.raises(RuntimeError, match="body failed"), DetectionContext():
+        list(User.objects.select_related("occupation"))
+        raise RuntimeError("body failed")
+
+
+def test_reentered_scope_forgets_the_detection_of_its_last_run(objects):
+    profiler = Profiler()
+    with pytest.raises(NPlus1Error), profiler, contextlib.suppress(NPlus1Error):
+        occupation_users()
+    with profiler:
+        pass

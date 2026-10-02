@@ -1,6 +1,7 @@
 from asgiref.sync import sync_to_async
 from django.db import connection
 from django.http import HttpResponse
+from django.template import engines
 from testapp import models
 
 
@@ -14,6 +15,13 @@ def lazy_loop(request):
 
 async def async_lazy_loop(request):
     return HttpResponse(await sync_to_async(occupation_users)())
+
+
+def lazy_loop_caught_by_template(request):
+    template = engines["django"].from_string(
+        '{% for occupation in occupations %}{% if occupation.user.name != "" %}{{ occupation.pk }}{% endif %}{% endfor %}',
+    )
+    return HttpResponse(template.render({"occupations": models.Occupation.objects.order_by("pk")}))
 
 
 def unused_select(request):

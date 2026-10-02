@@ -65,7 +65,7 @@ Lazy loads, `.get()`-in-a-loop, unused eager loads, and duplicate queries are al
 **Limitations:**
 
 - `nplus1_allow()` context does not propagate across task boundaries. If a view calls `task.delay()` inside an `nplus1_allow()` block, the allow rules do not carry into the worker (ContextVars don't survive serialization).
-- A detection made when a task ends, such as an unused eager load, can't fail the task, because Celery has already recorded its result. It is logged at ERROR level on the `django_nplus1` logger instead.
+- A detection made when a task ends, such as an unused eager load, or one that the task catches, can't fail the task, because Celery has already recorded its result. It is logged at ERROR level on the `django_nplus1` logger instead. For a task run with `.apply()` inside another scope, such as a request or the `nplus1` test fixture, that scope reports the detection when it ends.
 
 ## Credits
 

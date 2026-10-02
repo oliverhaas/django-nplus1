@@ -37,6 +37,21 @@ def test_with_whitelist(client):
     client.get("/my-view/")
 ```
 
+## Asserting a Detection
+
+The marker and the fixture fail a test on a detection even when something catches it: the code under test, as Django's `{% if %}` tag does when a comparison raises, or a `pytest.raises(NPlus1Error)` in the test. To check that code makes an N+1 query, use a `Profiler` in a test without the marker or the fixture:
+
+```python
+import pytest
+
+from django_nplus1 import NPlus1Error, Profiler
+
+
+def test_my_view_makes_an_n_plus_1(client):
+    with pytest.raises(NPlus1Error), Profiler():
+        client.get("/my-view/")
+```
+
 ## Whitelisting
 
 The marker and the `nplus1` fixture apply `NPLUS1_WHITELIST` from your settings, plus the marker's own `whitelist`. See [Whitelisting](whitelisting.md) for the pattern format.

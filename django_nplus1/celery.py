@@ -4,6 +4,7 @@ Enable it with ``NPLUS1_CELERY = True``, or call ``setup_celery_detection()``.
 """
 
 import logging
+import sys
 import threading
 from collections import defaultdict
 from typing import Any
@@ -32,18 +33,37 @@ def _on_prerun(sender: Any = None, task_id: str = "", **kwargs: Any) -> None:
     _active_scopes[task_id].append(scope)
 
 
-def _on_postrun(sender: Any = None, task_id: str = "", **kwargs: Any) -> None:
+def _on_postrun(
+    sender: Any = None,
+    task_id: str = "",
+    retval: Any = None,
+    state: str | None = None,
+    **kwargs: Any,
+) -> None:
     scopes = _active_scopes.get(task_id)
     if not scopes:
         return
     scope = scopes.pop()
     if not scopes:
         del _active_scopes[task_id]
-    # The task has finished, so a detection raised here can't fail it any more.
+    if state is None:
+        # The task's error is still propagating, as with apply(throw=True).
+        error = sys.exception()
+    elif state != "SUCCESS" and isinstance(retval, BaseException):
+        error = retval
+    else:
+        error = None
+    # Celery has recorded the task's result, so a detection raised here can't change it.
+    outer = scope._outer
     try:
-        scope.__exit__(None, None, None)
-    except Exception:
-        logger.exception("django-nplus1: detection at the end of task %s raised", task_id)
+        if error is None:
+            scope.__exit__(None, None, None)
+        else:
+            scope.__exit__(type(error), error, error.__traceback__)
+    except Exception as exc:
+        # Log a detection unless an enclosing scope raises it when it ends.
+        if outer is None or not any(enclosing._raised is exc for enclosing in outer._chain()):
+            logger.exception("django-nplus1: detection not raised by task %s", task_id)
 
 
 def setup_celery_detection() -> None:

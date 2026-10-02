@@ -39,6 +39,9 @@ class DetectionContext:
         self._listeners: dict[str, Listener] = {}
         self._outer: DetectionContext | None = None
         self._tokens: tuple[Token[Any], Token[Any]] | None = None
+        # A detection that code inside the block catches must still fail the scope.
+        self._raised: Exception | None = None
+        self._exiting = False
 
     def __enter__(self) -> Self:
         if self._tokens is not None:
@@ -61,8 +64,13 @@ class DetectionContext:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        # Tear down every listener even if one raises, so none outlives the scope.
+        """End the scope and raise its detection, even one that the block caught."""
+        # Detections made from here on are raised below, not inside the block.
+        self._exiting = True
+        caught = self._raised
+        outer = self._outer
         error: Exception | None = None
+        # Tear down every listener even if one raises, so none outlives the scope.
         try:
             for listener in self._listeners.values():
                 try:
@@ -71,8 +79,15 @@ class DetectionContext:
                     error = error or exc
         finally:
             self._close()
-        # The block's own exception outranks detections made at teardown.
-        if error is not None and exc_type is None:
+        if exc_type is None:
+            error = caught or error
+        elif caught is not None and caught is not exc_val and issubclass(exc_type, Exception):
+            error = caught
+        else:
+            return
+        if error is not None:
+            if outer is not None:
+                outer._record(error)
             raise error
 
     def _close(self) -> None:
@@ -83,6 +98,13 @@ class DetectionContext:
             _active.reset(active_token)
             signals.teardown_context(registry_token)
         self._outer = None
+        self._raised = None
+        self._exiting = False
+
+    def _record(self, error: Exception) -> None:
+        for scope in self._chain():
+            if scope._raised is None and not scope._exiting:
+                scope._raised = error
 
     def _chain(self) -> Iterator[DetectionContext]:
         scope: DetectionContext | None = self
@@ -118,6 +140,8 @@ class DetectionContext:
             except Exception as exc:  # noqa: BLE001
                 error = error or exc
         if error is not None:
+            if not self._exiting:
+                self._record(error)
             raise error
 
     def _deliver(self, message: Message, notified: list[Notifier]) -> None:

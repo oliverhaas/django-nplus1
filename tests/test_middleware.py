@@ -79,6 +79,12 @@ def test_view_error_wins_over_detection_at_the_end_of_the_request(objects, clien
         client.get("/unused_select_then_error/")
 
 
+def test_detection_caught_by_a_template_fails_the_request(objects, client, settings):
+    settings.NPLUS1_RAISE = True
+    with pytest.raises(NPlus1Error, match="Occupation.user"):
+        client.get("/lazy_loop_caught_by_template/")
+
+
 def test_prefetching_view_passes(objects, client, settings):
     settings.NPLUS1_RAISE = True
     response = client.get("/prefetched_hobbies/")
