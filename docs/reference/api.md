@@ -169,7 +169,7 @@ setup_celery_detection()
 
 **Limitations:**
 
-- A detection made when a task ends, such as an unused eager load, or one that the task catches, can't fail the task, because Celery has already recorded its result. It is logged at ERROR level on the `django_nplus1` logger instead.
+- A detection made when a task ends, such as an unused eager load, or one that the task catches, can't fail the task, because Celery has already recorded its result. It is logged at ERROR level on the `django_nplus1` logger instead. For a task run with `.apply()` inside another scope, such as a request or the `nplus1` test fixture, that scope reports the detection when it ends.
 - When detection can't start for a task, the task runs without it and the error is logged at ERROR level.
 - `nplus1_allow()` doesn't reach tasks sent to a worker, because context variables don't travel with the task message. A task run with `.apply()` inside another task or a request nests in that scope, so an enclosing `nplus1_allow()` covers it.
 

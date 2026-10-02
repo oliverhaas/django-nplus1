@@ -103,7 +103,7 @@ class DetectionContext:
 
     def _record(self, error: Exception) -> None:
         for scope in self._chain():
-            if scope._raised is None:
+            if scope._raised is None and not scope._exiting:
                 scope._raised = error
 
     def _chain(self) -> Iterator[DetectionContext]:

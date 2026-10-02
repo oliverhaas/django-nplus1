@@ -130,12 +130,41 @@ def test_detection_fails_the_test_once(django_pytester):
         DETECTING_TESTS
         + textwrap.dedent(
             """
+            @pytest.fixture
+            def lazy_load_in_setup(occupations, nplus1):
+                touch_users()
+
+
+            @pytest.fixture
+            def lazy_load_in_teardown(occupations, nplus1):
+                yield
+                touch_users()
+
+
+            @pytest.fixture
+            def request_in_teardown(occupations, client, nplus1):
+                yield
+                client.get("/lazy_loop/")
+
+
             def test_fixture(occupations, nplus1):
                 touch_users()
 
 
             def test_fixture_in_request(occupations, client, nplus1):
                 client.get("/lazy_loop/")
+
+
+            def test_lazy_load_in_fixture_setup(lazy_load_in_setup):
+                pass
+
+
+            def test_lazy_load_in_fixture_teardown(lazy_load_in_teardown):
+                pass
+
+
+            def test_request_in_fixture_teardown(request_in_teardown):
+                pass
 
 
             @pytest.mark.usefixtures("nplus1")
@@ -147,7 +176,8 @@ def test_detection_fails_the_test_once(django_pytester):
         ),
     )
     result = django_pytester.runpytest_subprocess()
-    result.assert_outcomes(failed=3)
+    result.assert_outcomes(failed=3, passed=2, errors=3)
+    result.stdout.no_fnmatch_line("*ExceptionGroup*")
 
 
 def test_detection_caught_by_the_test_still_fails_it(django_pytester):

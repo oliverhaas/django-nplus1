@@ -68,6 +68,11 @@ def occupation_users_in_subtask():
     return occupation_users.apply().get()
 
 
+@app.task
+def count_users_with_unused_select_in_subtask():
+    return count_users_with_unused_select.apply().get()
+
+
 @pytest.fixture
 def disconnect_detection():
     yield
@@ -115,14 +120,26 @@ def test_detection_ends_with_the_task(objects, celery_detection, task, state):
 
 @pytest.mark.parametrize(
     ("task", "match"),
-    [(count_users_with_unused_select, "User.occupation"), (occupation_users_or_none, "Occupation.user")],
-    ids=["at-the-end", "caught"],
+    [
+        (count_users_with_unused_select, "User.occupation"),
+        (occupation_users_or_none, "Occupation.user"),
+        (count_users_with_unused_select_in_subtask, "User.occupation"),
+    ],
+    ids=["at-the-end", "caught", "subtask"],
 )
-def test_detection_not_raised_by_the_task_is_logged(objects, celery_detection, caplog, task, match):
+def test_detection_not_raised_by_the_task_is_logged_once(objects, celery_detection, caplog, task, match):
     assert task.apply().successful()
     errors = logged_errors(caplog)
     assert [type(error) for error in errors] == [NPlus1Error]
     assert match in str(errors[0])
+
+
+def test_detection_not_raised_by_a_task_in_teardown_is_logged_once(objects, celery_detection, nplus1, caplog, request):
+    def run_task():
+        count_users_with_unused_select.apply()
+        assert [type(error) for error in logged_errors(caplog)] == [NPlus1Error]
+
+    request.addfinalizer(run_task)
 
 
 def test_detection_in_a_subtask_is_logged_once(objects, disconnect_detection, caplog):

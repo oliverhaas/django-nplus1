@@ -54,13 +54,16 @@ def _on_postrun(
     else:
         error = None
     # Celery has recorded the task's result, so a detection raised here can't change it.
+    outer = scope._outer
     try:
         if error is None:
             scope.__exit__(None, None, None)
         else:
             scope.__exit__(type(error), error, error.__traceback__)
-    except Exception:
-        logger.exception("django-nplus1: detection not raised by task %s", task_id)
+    except Exception as exc:
+        # Log a detection unless an enclosing scope raises it when it ends.
+        if outer is None or not any(enclosing._raised is exc for enclosing in outer._chain()):
+            logger.exception("django-nplus1: detection not raised by task %s", task_id)
 
 
 def setup_celery_detection() -> None:
