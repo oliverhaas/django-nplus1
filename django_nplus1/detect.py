@@ -193,7 +193,7 @@ class LazyListener(Listener):
         self.show_all_callers = bool(getattr(settings, "NPLUS1_SHOW_ALL_CALLERS", False))
         self.loaded: set[str] = set()
         self.ignore: set[str] = set()
-        self.counts: defaultdict[tuple[type, str], int] = defaultdict(int)
+        self.rows: defaultdict[tuple[type, str], set[str]] = defaultdict(set)
         self.stacks: defaultdict[tuple[type, str], list[list[CallSite]]] = defaultdict(list)
         self.reported: set[tuple[type, str]] = set()
         self.prefetch_calls: dict[tuple[type, str], int | None] = {}
@@ -220,7 +220,7 @@ class LazyListener(Listener):
         model, key, field = parser(args, kwargs, context)
         owner = self.owner(key, deferred=bool(context.get("deferred")))
         if owner is not None:
-            self.hit(model, field, owner)
+            self.hit(model, field, key, owner)
 
     def handle_eager(self, args: Any, kwargs: Any, context: Any, ret: Any, parser: Any) -> None:
         # Prefetching for one row of a larger result, once per loop pass, is an N+1 too.
@@ -234,7 +234,7 @@ class LazyListener(Listener):
         if call is not None and owner.prefetch_calls.get((model, field)) == call:
             return
         owner.prefetch_calls[(model, field)] = call
-        self.hit(model, field, owner)
+        self.hit(model, field, keys[0], owner)
 
     def owner(self, key: str, *, deferred: bool = False) -> LazyListener | None:
         """Return the listener of the innermost scope that loaded the row as part of a larger result.
@@ -251,10 +251,13 @@ class LazyListener(Listener):
             listener = listener.parent.outer_listener(LazyListener)
         return None
 
-    def hit(self, model: type, field: str, owner: LazyListener) -> None:
-        """Count a read on rows that ``owner``'s scope loaded, and report it through this scope."""
+    def hit(self, model: type, field: str, row: str, owner: LazyListener) -> None:
+        """Count a read of a row that ``owner``'s scope loaded, and report it through this scope.
+
+        Each row counts once, so reading one row again through another instance is no N+1.
+        """
         key = (model, field)
-        if key in owner.reported:
+        if key in owner.reported or row in owner.rows[key]:
             return
         # Rules need no call site, so check them before walking the stack.
         message = LazyLoadMessage(model, field)
@@ -263,10 +266,10 @@ class LazyListener(Listener):
         message.caller = get_caller()
         if is_inline_ignored(message):
             return
-        owner.counts[key] += 1
+        owner.rows[key].add(row)
         if owner.show_all_callers:
             owner.stacks[key].append(get_stack())
-        if owner.counts[key] < owner.threshold:
+        if len(owner.rows[key]) < owner.threshold:
             return
         owner.reported.add(key)
         if owner.show_all_callers:
@@ -324,7 +327,7 @@ class EagerListener(Listener):
 
 
 class GetLoopListener(Listener):
-    """Reports ``Model.objects.get()`` called repeatedly from the same line."""
+    """Reports ``Model.objects.get()`` reached repeatedly from the same line through the same calls."""
 
     def setup(self) -> None:
         self.threshold = conf.threshold(settings, "NPLUS1_GET_THRESHOLD")
@@ -336,16 +339,17 @@ class GetLoopListener(Listener):
         return {signals.GET_CALL: self.handle_get}
 
     def handle_get(self, args: Any, kwargs: Any, context: Any, ret: Any, parser: Any) -> None:
-        model, caller = parser(args, kwargs, context, ret)
-        key = (model, *caller)
-        if key in self.reported:
+        model, caller, path = parser(args, kwargs, context, ret)
+        site = (model, *caller)
+        if site in self.reported:
             return
         message = GetLoopMessage(model, "get()", caller=caller)
         if self.parent.suppresses(message):
             return
+        key = (model, path)
         self.counts[key] += 1
         if self.counts[key] >= self.threshold:
-            self.reported.add(key)
+            self.reported.add(site)
             self.parent.notify(message)
 
 

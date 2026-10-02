@@ -217,6 +217,13 @@ def reselect_loaded_users():
         user.occupation
 
 
+def read_one_user_through_two_instances():
+    alone = User.objects.get(name="alice")
+    (listed,) = User.objects.filter(name="alice")
+    for user in (alone, listed):
+        user.occupation
+
+
 @pytest.mark.parametrize(
     "scenario",
     [
@@ -235,6 +242,7 @@ def reselect_loaded_users():
         render_prefetched_hobbies,
         list_values_across_m2m,
         reselect_loaded_users,
+        read_one_user_through_two_instances,
     ],
     ids=lambda scenario: scenario.__name__,
 )
@@ -267,6 +275,66 @@ def test_get_in_loop_is_detected(objects, detected, loop):
     with DetectionContext():
         loop()
     assert [(m.label, m.model, m.field) for m in detected] == [("get_in_loop", User, "get()")]
+
+
+LOOKUPS = """\
+from testapp.models import User
+
+
+def flag(name):
+    try:
+        return User.objects.get(name=name)
+    except User.DoesNotExist:
+        return User.objects.get_or_create(name=name)[0]
+
+
+def find(path):
+    try:
+        return User.objects.get(name=path)
+    except User.DoesNotExist:
+        return None
+
+
+def redirect(path):
+    found = find(path)
+    if found is None and "?" in path:
+        found = find(path.partition("?")[0])
+    return found
+"""
+
+
+@pytest.fixture
+def installed_lookups(tmp_path, monkeypatch):
+    """A third-party module that looks a row up again another way when the first lookup finds none."""
+    directory = tmp_path / "site-packages"
+    directory.mkdir()
+    (directory / "installed_lookups.py").write_text(LOOKUPS)
+    monkeypatch.syspath_prepend(directory)
+    yield importlib.import_module("installed_lookups")
+    sys.modules.pop("installed_lookups", None)
+
+
+@pytest.mark.parametrize(
+    ("lookup", "expected"),
+    [
+        pytest.param(lambda lookups: lookups.flag("missing"), [], id="create-missing"),
+        pytest.param(lambda lookups: lookups.redirect("/missing/?x=1"), [], id="retry-without-query"),
+        pytest.param(
+            lambda lookups: [lookups.flag(name) for name in ("a", "b")],
+            [("get_in_loop", User, "get()")],
+            id="in-a-loop",
+        ),
+    ],
+)
+def test_library_fallback_lookups_are_a_get_loop_only_when_called_in_a_loop(
+    detected,
+    installed_lookups,
+    lookup,
+    expected,
+):
+    with DetectionContext():
+        lookup(installed_lookups)
+    assert [(m.label, m.model, m.field) for m in detected] == expected
 
 
 def test_rows_fetched_one_by_one_count_again_when_loaded_together(objects, detected):

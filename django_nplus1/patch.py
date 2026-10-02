@@ -28,7 +28,7 @@ from django.db.models.query_utils import DeferredAttribute
 
 from django_nplus1 import corpus, signals, util
 from django_nplus1.fields import emit_field_loads
-from django_nplus1.util import CallSite, get_caller, to_key
+from django_nplus1.util import CallPath, CallSite, get_call_path, get_caller, to_key
 
 if TYPE_CHECKING:
     import types
@@ -121,8 +121,8 @@ def parse_get(args: Any, kwargs: Any, context: Any, ret: Any) -> list[str]:
     return [to_key(ret)] if isinstance(ret, Model) else []
 
 
-def parse_get_call(args: Any, kwargs: Any, context: Any, ret: Any) -> tuple[type[Model], CallSite]:
-    return args[0].model, context["caller"]
+def parse_get_call(args: Any, kwargs: Any, context: Any, ret: Any) -> tuple[type[Model], CallSite, CallPath]:
+    return args[0].model, context["caller"], context["path"]
 
 
 def is_single(low: int, high: int | None) -> bool:
@@ -377,13 +377,18 @@ for _name in ("__getitem__", "contains", "count", "exists"):
 _original_get = query.QuerySet.get
 
 
-def _send_get_call(queryset: query.QuerySet[Any], kwargs: dict[str, Any], caller: CallSite | None) -> None:
-    if caller is not None:
+def _send_get_call(
+    queryset: query.QuerySet[Any],
+    kwargs: dict[str, Any],
+    call: tuple[CallSite, CallPath] | None,
+) -> None:
+    if call is not None:
+        caller, path = call
         signals.send(
             signals.GET_CALL,
             args=(queryset,),
             kwargs=kwargs,
-            context={"caller": caller},
+            context={"caller": caller, "path": path},
             ret=None,
             parser=parse_get_call,
         )
@@ -393,16 +398,16 @@ def _get(self: query.QuerySet[Any], *args: Any, **kwargs: Any) -> Any:
     if not signals.active():
         return _original_get(self, *args, **kwargs)
     mode = _in_descriptor_load.get()
-    caller = get_caller() if mode is None else None
+    call = get_call_path() if mode is None else None
     try:
         ret = _original_get(self, *args, **kwargs)
     except ObjectDoesNotExist, MultipleObjectsReturned:
-        _send_get_call(self, kwargs, caller)
+        _send_get_call(self, kwargs, call)
         raise
     # A deferred field load refetches the instance itself; it isn't loaded singly.
     if mode != "deferred":
         signals.send(signals.IGNORE_LOAD, args=(self,), kwargs=kwargs, context={}, ret=ret, parser=parse_get)
-    _send_get_call(self, kwargs, caller)
+    _send_get_call(self, kwargs, call)
     return ret
 
 

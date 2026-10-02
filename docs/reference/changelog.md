@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Detection
+
+- `NPLUS1_THRESHOLD` counts rows, not reads. One row read through two instances, such as one from `.get()` and one from a queryset, is no longer reported as an N+1.
+- `.get()` calls are counted per call site and the calls that lead from it to `.get()`. A library call that looks a row up a second way is no longer reported as `get_in_loop`, as when waffle creates a missing switch with `get_or_create()`, wagtail's redirect middleware retries a path without its query string, or `ContentType.objects.get_for_model()` creates a missing content type. Calling such a library function in a loop is still reported.
+
 ## 0.6.0 (2026-10-02)
 
 ### Breaking changes

@@ -56,7 +56,7 @@ NPLUS1_ERROR = "myapp.exceptions.QueryError"
 
 ### `NPLUS1_THRESHOLD`
 
-Number of repeated lazy accesses of the same model/field pair before detection fires. Default: `2`.
+Number of rows that load the same relation or deferred field one at a time before detection fires. A row counts once, however many of its instances read it. Default: `2`.
 
 ```python
 NPLUS1_THRESHOLD = 2
@@ -64,7 +64,7 @@ NPLUS1_THRESHOLD = 2
 
 ### `NPLUS1_GET_THRESHOLD`
 
-Number of repeated `.get()` calls from the same call-site before detection fires. Default: `2`.
+Number of `.get()` calls from the same call site, through the same chain of calls, before detection fires. Default: `2`.
 
 ```python
 NPLUS1_GET_THRESHOLD = 2

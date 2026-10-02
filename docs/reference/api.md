@@ -144,7 +144,7 @@ Queries with no frame of your code on the stack aren't counted, nor are queries 
 
 ## Call Sites
 
-A detection's call site is the innermost frame of your code on the stack. `.get()` loops and duplicate queries are counted per call site. Frames from the standard library, installed packages, django-nplus1 itself and console-script launchers such as `bin/pytest` don't count. If your project is installed in `site-packages`, list its packages in [`NPLUS1_PROJECT_PACKAGES`](../user-guide/configuration.md#nplus1_project_packages).
+A detection's call site is the innermost frame of your code on the stack. Duplicate queries are counted per call site, and `.get()` loops per call site and the calls that lead from it to `.get()`. Frames from the standard library, installed packages, django-nplus1 itself and console-script launchers such as `bin/pytest` don't count. If your project is installed in `site-packages`, list its packages in [`NPLUS1_PROJECT_PACKAGES`](../user-guide/configuration.md#nplus1_project_packages).
 
 Async ORM calls such as `aget()` run in a worker thread. Their call site is the line in your coroutine that awaited them.
 

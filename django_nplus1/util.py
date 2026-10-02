@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from django.db.models import Model
 
 CallSite = tuple[str, int, str]
+CallPath = tuple[tuple[str, int], ...]
 
 _PACKAGE_DIR = str(Path(__file__).parent)
 # "scripts" holds console-script launchers such as bin/pytest. Frame filenames can
@@ -103,6 +104,22 @@ def get_caller() -> CallSite | None:
     for frame in _frames(sys._getframe(1)):
         if not _is_internal_frame(frame):
             return (frame.f_code.co_filename, frame.f_lineno, frame.f_code.co_name)
+    return None
+
+
+def get_call_path() -> tuple[CallSite, CallPath] | None:
+    """
+    Return the call site of the first project frame and the (filename, lineno) of
+    each call that leads from it to the caller, or None when every frame is internal.
+    """
+    path = []
+    for frame in _frames(sys._getframe(1)):
+        # Lines, not instruction offsets: the coroutines awaiting a sync_to_async()
+        # call can still be suspending in their own thread.
+        lineno = frame.f_lineno
+        path.append((frame.f_code.co_filename, lineno))
+        if not _is_internal_frame(frame):
+            return (frame.f_code.co_filename, lineno, frame.f_code.co_name), tuple(path)
     return None
 
 
