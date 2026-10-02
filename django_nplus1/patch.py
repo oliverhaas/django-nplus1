@@ -12,7 +12,9 @@ import sys
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
+from asgiref.sync import SyncToAsync
 from django.apps import apps
+from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 from django.db import connections
 from django.db.backends.base.base import BaseDatabaseWrapper
 from django.db.models import Model, Prefetch, query
@@ -24,12 +26,13 @@ from django.db.models.fields.related_descriptors import (
 )
 from django.db.models.query_utils import DeferredAttribute
 
-from django_nplus1 import corpus, signals
+from django_nplus1 import corpus, signals, util
 from django_nplus1.fields import emit_field_loads
 from django_nplus1.util import CallSite, get_caller, to_key
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Generator, Iterator, Sequence
+    import types
+    from collections.abc import AsyncIterator, Callable, Generator, Iterator, Sequence
 
 # (model, relation name, instance key) of the instance a relation is read on.
 Relation = tuple[type[Model], str, str]
@@ -55,6 +58,14 @@ _populator_path: ContextVar[str] = ContextVar("nplus1_populator_path", default="
 # The declaration site of the Prefetch whose rows are being fetched.
 _prefetch_site: ContextVar[CallSite | None] = ContextVar("nplus1_prefetch_site", default=None)
 
+# True inside prefetch_one_level(). Its relation reads only match rows to instances,
+# but a deferred field it reads is still loaded one row at a time.
+_in_prefetch_level: ContextVar[bool] = ContextVar("nplus1_in_prefetch_level", default=False)
+
+# The queryset whose rows .iterator() or .aiterator() is fetching. With chunk_size and
+# prefetch_related(), Django prefetches for each chunk before it hands out the rows.
+_iterating: ContextVar[query.QuerySet[Any] | None] = ContextVar("nplus1_iterating", default=None)
+
 # "relation" or "deferred" while a descriptor loads a value that isn't cached. The
 # queries it runs belong to that one lazy load, not to a get() call or an eager load.
 _in_descriptor_load: ContextVar[str | None] = ContextVar("nplus1_in_descriptor_load", default=None)
@@ -66,6 +77,10 @@ _in_connection_setup: ContextVar[bool] = ContextVar("nplus1_in_connection_setup"
 # The rows of one prefetch_one_level() call or one select_related() evaluation form a
 # group. Reading the relation on any row of a group marks the group used.
 _group_seq = itertools.count()
+
+# Under Django 6.1 fetch modes a read loads one row only through fetch_one().
+# FETCH_PEERS loads every peer in one query and FETCH_RAISE loads nothing.
+_FETCH_MODES = hasattr(DeferredAttribute, "fetch_one")
 
 
 @contextlib.contextmanager
@@ -87,6 +102,8 @@ def _relation(instance: Model, name: str) -> Relation:
 
 
 def _send_lazy(relation: Relation, **context: Any) -> None:
+    if _in_prefetch_level.get() and not context.get("deferred"):
+        return
     model, name, key = relation
     signals.emit(signals.LAZY_LOAD, model, key, name, **context)
 
@@ -189,6 +206,9 @@ def _patch_contenttypes() -> None:
     def _create_generic_related_manager(superclass: Any, rel: Any) -> Any:
         return _tag_manager(create_generic_related_manager(superclass, rel), rel.field.name)
 
+    def has_target(field: Any, instance: Model) -> bool:
+        return instance.__dict__.get(field.model._meta.get_field(field.ct_field).attname) is not None
+
     @functools.wraps(original_get)
     def get(self: Any, instance: Model | None, cls: type | None = None) -> Any:
         if instance is None or not signals.active():
@@ -197,13 +217,24 @@ def _patch_contenttypes() -> None:
         relation = _relation(instance, field.cache_name)
         if field.is_cached(instance):
             _send_touch(relation)
-        elif instance.__dict__.get(field.model._meta.get_field(field.ct_field).attname) is not None:
+        elif not _FETCH_MODES and has_target(field, instance):
             _send_lazy(relation)
         with _setting(_in_descriptor_load, "relation"):
             return original_get(self, instance, cls)
 
     _patch(create_generic_related_manager, _create_generic_related_manager)
     descriptor_cls.__get__ = get
+    if not _FETCH_MODES:
+        return
+    original_fetch_one = descriptor_cls.fetch_one
+
+    @functools.wraps(original_fetch_one)
+    def fetch_one(self: Any, instance: Model) -> None:
+        if signals.active() and has_target(self.field, instance):
+            _send_lazy(_relation(instance, self.field.cache_name))
+        original_fetch_one(self, instance)
+
+    descriptor_cls.fetch_one = fetch_one
 
 
 if apps.is_installed("django.contrib.contenttypes"):
@@ -254,17 +285,19 @@ def _fetch_all(self: query.QuerySet[Any]) -> None:
     if not signals.active():
         _original_fetch_all(self)
         return
-    was_empty = self._result_cache is None
     relation = self.__dict__.get("_nplus1_relation")
-    if relation is not None:
-        if was_empty:
+    if self._result_cache is None:
+        if relation is not None:
             _send_lazy(relation)
-        elif self._prefetch_done:  # type: ignore[attr-defined]
-            _send_touch(relation)
-    with _setting(_current_select_sites, self.query.__dict__.get("_nplus1_select_sites")):
-        _original_fetch_all(self)
-    if was_empty:
-        _send_loads(self, self._result_cache or [])
+        iterable: Any = self._iterable_class(self)
+        with _setting(_current_select_sites, self.query.__dict__.get("_nplus1_select_sites")):
+            rows = list(iterable)
+        self._result_cache = rows
+        # A prefetch that reads deferred fields of these rows loads them one by one.
+        _send_loads(self, rows)
+    elif relation is not None and self._prefetch_done:  # type: ignore[attr-defined]
+        _send_touch(relation)
+    _original_fetch_all(self)
 
 
 query.QuerySet._fetch_all = _fetch_all  # type: ignore[method-assign]
@@ -284,7 +317,7 @@ def _iterator(self: query.QuerySet[Any], use_chunked_fetch: bool, chunk_size: in
     sites = self.query.__dict__.get("_nplus1_select_sites")
     try:
         while True:
-            with _setting(_current_select_sites, sites):
+            with _setting(_current_select_sites, sites), _setting(_iterating, self):
                 row = next(rows, _END)
             if row is _END:
                 return
@@ -295,6 +328,33 @@ def _iterator(self: query.QuerySet[Any], use_chunked_fetch: bool, chunk_size: in
 
 
 query.QuerySet._iterator = _iterator  # type: ignore[attr-defined]
+
+_original_aiterator = query.QuerySet.aiterator
+
+
+async def _aiterator(self: query.QuerySet[Any], chunk_size: int = 2000) -> AsyncIterator[Any]:
+    rows = _original_aiterator(self, chunk_size)
+    try:
+        if not signals.active():
+            async for row in rows:
+                yield row
+            return
+        relation = self.__dict__.get("_nplus1_relation")
+        if relation is not None:
+            _send_lazy(relation)
+        sites = self.query.__dict__.get("_nplus1_select_sites")
+        while True:
+            with _setting(_current_select_sites, sites), _setting(_iterating, self):
+                row = await anext(rows, _END)
+            if row is _END:
+                return
+            _send_loads(self, [row])
+            yield row
+    finally:
+        await rows.aclose()  # type: ignore[attr-defined]
+
+
+query.QuerySet.aiterator = _aiterator  # type: ignore[method-assign]
 
 
 def _touching_prefetched(method: Any) -> Any:
@@ -317,24 +377,32 @@ for _name in ("__getitem__", "contains", "count", "exists"):
 _original_get = query.QuerySet.get
 
 
+def _send_get_call(queryset: query.QuerySet[Any], kwargs: dict[str, Any], caller: CallSite | None) -> None:
+    if caller is not None:
+        signals.send(
+            signals.GET_CALL,
+            args=(queryset,),
+            kwargs=kwargs,
+            context={"caller": caller},
+            ret=None,
+            parser=parse_get_call,
+        )
+
+
 def _get(self: query.QuerySet[Any], *args: Any, **kwargs: Any) -> Any:
     if not signals.active():
         return _original_get(self, *args, **kwargs)
     mode = _in_descriptor_load.get()
     caller = get_caller() if mode is None else None
-    ret = _original_get(self, *args, **kwargs)
+    try:
+        ret = _original_get(self, *args, **kwargs)
+    except ObjectDoesNotExist, MultipleObjectsReturned:
+        _send_get_call(self, kwargs, caller)
+        raise
     # A deferred field load refetches the instance itself; it isn't loaded singly.
     if mode != "deferred":
         signals.send(signals.IGNORE_LOAD, args=(self,), kwargs=kwargs, context={}, ret=ret, parser=parse_get)
-    if caller is not None:
-        signals.send(
-            signals.GET_CALL,
-            args=(self,),
-            kwargs=kwargs,
-            context={"caller": caller},
-            ret=ret,
-            parser=parse_get_call,
-        )
+    _send_get_call(self, kwargs, caller)
     return ret
 
 
@@ -362,18 +430,26 @@ def _deferred_get(self: DeferredAttribute, instance: Model | None, cls: type[Mod
 
 DeferredAttribute.__get__ = _deferred_get  # type: ignore[method-assign]
 
-_original_check_parent_chain = DeferredAttribute._check_parent_chain  # type: ignore[attr-defined]
+# deferred=True so LazyListener skips the relation-only ignore set.
+if _FETCH_MODES:
+    _original_deferred_fetch_one = DeferredAttribute.fetch_one
 
+    def _deferred_fetch_one(self: DeferredAttribute, instance: Model) -> None:
+        if signals.active():
+            _send_lazy(_relation(instance, self.field.name), deferred=True)
+        _original_deferred_fetch_one(self, instance)
 
-def _check_parent_chain(self: DeferredAttribute, instance: Model) -> Any:
-    value = _original_check_parent_chain(self, instance)
-    if value is None and signals.active():
-        # deferred=True so LazyListener skips the relation-only self.ignore set.
-        _send_lazy(_relation(instance, self.field.name), deferred=True)
-    return value
+    DeferredAttribute.fetch_one = _deferred_fetch_one  # type: ignore[method-assign]
+else:
+    _original_check_parent_chain = DeferredAttribute._check_parent_chain  # type: ignore[attr-defined]
 
+    def _check_parent_chain(self: DeferredAttribute, instance: Model) -> Any:
+        value = _original_check_parent_chain(self, instance)
+        if value is None and signals.active():
+            _send_lazy(_relation(instance, self.field.name), deferred=True)
+        return value
 
-DeferredAttribute._check_parent_chain = _check_parent_chain  # type: ignore[attr-defined]
+    DeferredAttribute._check_parent_chain = _check_parent_chain  # type: ignore[attr-defined]
 
 
 class _PrefetchedList(list[Any]):
@@ -447,9 +523,9 @@ def _prefetch_one_level(
     if not signals.active():
         return _original_prefetch_one_level(instances, prefetcher, lookup, level)
     site = lookup.__dict__.get("_nplus1_site")
-    with _setting(_prefetch_site, site), signals.suppress(signals.LAZY_LOAD):
+    with _setting(_prefetch_site, site), _setting(_in_prefetch_level, True):
         result = _original_prefetch_one_level(instances, prefetcher, lookup, level)
-    # Django 6.1 fetch modes prefetch on attribute access. That is a lazy load.
+    # Within a descriptor load this is FETCH_PEERS, not a prefetch_related() that can go unused.
     if _in_descriptor_load.get() is None:
         _send_prefetch(instances, lookup, level, site)
     return result
@@ -477,8 +553,16 @@ def _standalone_prefetch_related_objects(model_instances: Any, *related_lookups:
     if not signals.active():
         _original_prefetch_related_objects(model_instances, *related_lookups)
         return
+    queryset = _iterating.get()
+    if queryset is not None and related_lookups == tuple(queryset._prefetch_related_lookups):  # type: ignore[attr-defined]
+        # A chunk of .iterator() rows, which are handed out after the prefetch.
+        _send_loads(queryset, list(model_instances))
     # Django reads relations while it walks the lookups. Only the caller's reads are touches.
-    with _setting(_prefetch_call_id, next(_prefetch_call_seq)), signals.suppress(signals.TOUCH):
+    with (
+        _setting(_iterating, None),
+        _setting(_prefetch_call_id, next(_prefetch_call_seq)),
+        signals.suppress(signals.TOUCH),
+    ):
         _original_prefetch_related_objects(model_instances, *related_lookups)
 
 
@@ -631,3 +715,21 @@ def _wrapper_init(self: BaseDatabaseWrapper, *args: Any, **kwargs: Any) -> None:
 BaseDatabaseWrapper.__init__ = _wrapper_init  # type: ignore[method-assign]
 for _connection in connections.all(initialized_only=True):
     _add_query_hook(_connection)
+
+_original_sync_to_async_call = SyncToAsync.__call__
+
+
+async def _sync_to_async_call(self: Any, *args: Any, **kwargs: Any) -> Any:
+    if not signals.active():
+        return await _original_sync_to_async_call(self, *args, **kwargs)
+    # Once suspended, a coroutine's frame no longer links to the one awaiting it.
+    frames = []
+    frame: types.FrameType | None = sys._getframe(1)
+    while frame is not None:
+        frames.append(frame)
+        frame = frame.f_back
+    with _setting(util.async_caller_frames, tuple(frames)):
+        return await _original_sync_to_async_call(self, *args, **kwargs)
+
+
+SyncToAsync.__call__ = _sync_to_async_call  # type: ignore[method-assign]

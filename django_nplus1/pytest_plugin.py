@@ -1,11 +1,15 @@
 from collections.abc import Generator  # noqa: TC003 - pluggy evaluates hook annotations
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from django.core.exceptions import ImproperlyConfigured
 
 from django_nplus1 import corpus
+from django_nplus1.middleware import whitelist_rules
 from django_nplus1.profiler import Profiler
+
+if TYPE_CHECKING:
+    from django_nplus1.detect import Rule
 
 _CORPUS_ACTIVE = pytest.StashKey[bool]()
 _CORPUS_FINDINGS = pytest.StashKey[str]()
@@ -24,10 +28,10 @@ def _setting(name: str, default: Any) -> Any:
         return default
 
 
-def _whitelist(item: pytest.Item) -> list[dict[str, Any]]:
+def _whitelist(item: pytest.Item) -> list[Rule | dict[str, Any]]:
     marker = item.get_closest_marker("nplus1")
     marker_whitelist = marker.kwargs.get("whitelist") if marker is not None else None
-    return [*_setting("NPLUS1_WHITELIST", []), *(marker_whitelist or [])]
+    return [*whitelist_rules(), *(marker_whitelist or [])]
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:

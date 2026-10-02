@@ -126,7 +126,7 @@ class Message:
 
     @property
     def message(self) -> str:
-        base = self.formatter.format(label=self.label, model=self.model.__name__, field=self.field)
+        base = self.formatter.format(label=self.label, model=self.model.__name__, field=self.field_text())
         if self.callers:
             parts = [base, " with calls:"]
             for i, stack in enumerate(self.callers, 1):
@@ -137,6 +137,9 @@ class Message:
             filename, lineno, funcname = self.caller
             return f"{base} at {filename}:{lineno} in {funcname}"
         return base
+
+    def field_text(self) -> str:
+        return self.field
 
     def match(self, rules: Sequence[Rule]) -> bool:
         return any(rule.compare(self.label, self.model, self.field) for rule in rules)
@@ -160,6 +163,10 @@ class GetLoopMessage(Message):
 class DuplicateQueryMessage(Message):
     label = "duplicate_query"
     formatter = "Potential n+1 query detected: duplicate query `{field}`"
+
+    def field_text(self) -> str:
+        # field keeps the whole query, so a whitelist pattern can match any part of it.
+        return _shorten(self.field)
 
 
 class Listener:
@@ -201,34 +208,53 @@ class LazyListener(Listener):
         }
 
     def handle_load(self, args: Any, kwargs: Any, context: Any, ret: Any, parser: Any) -> None:
-        self.loaded.update(parser(args, kwargs, context, ret))
+        keys = parser(args, kwargs, context, ret)
+        self.loaded.update(keys)
+        # Rows fetched on their own before are now part of a larger result.
+        self.ignore.difference_update(keys)
 
     def handle_ignore(self, args: Any, kwargs: Any, context: Any, ret: Any, parser: Any) -> None:
         self.ignore.update(parser(args, kwargs, context, ret))
 
     def handle_lazy(self, args: Any, kwargs: Any, context: Any, ret: Any, parser: Any) -> None:
         model, key, field = parser(args, kwargs, context)
-        # self.ignore only covers relations. A row fetched on its own still loads each
-        # deferred field in a query of its own.
-        if key in self.loaded and (context.get("deferred") or key not in self.ignore):
-            self.hit(model, field)
+        owner = self.owner(key, deferred=bool(context.get("deferred")))
+        if owner is not None:
+            self.hit(model, field, owner)
 
     def handle_eager(self, args: Any, kwargs: Any, context: Any, ret: Any, parser: Any) -> None:
         # Prefetching for one row of a larger result, once per loop pass, is an N+1 too.
         if context.get("select_related") or context.get("queryset_prefetch"):
             return
         model, field, keys, _group, _site = parser(args, kwargs, context)
-        if len(keys) != 1 or keys[0] not in self.loaded or keys[0] in self.ignore:
+        owner = self.owner(keys[0]) if len(keys) == 1 else None
+        if owner is None:
             return
         call = context.get("prefetch_call")
-        if call is not None and self.prefetch_calls.get((model, field)) == call:
+        if call is not None and owner.prefetch_calls.get((model, field)) == call:
             return
-        self.prefetch_calls[(model, field)] = call
-        self.hit(model, field)
+        owner.prefetch_calls[(model, field)] = call
+        self.hit(model, field, owner)
 
-    def hit(self, model: type, field: str) -> None:
+    def owner(self, key: str, *, deferred: bool = False) -> LazyListener | None:
+        """Return the listener of the innermost scope that loaded the row as part of a larger result.
+
+        None if no scope did, or if a relation is read on a row that was fetched on its
+        own since. Deferred fields still load in a query per row on such a row.
+        """
+        listener: LazyListener | None = self
+        while listener is not None:
+            if not deferred and key in listener.ignore:
+                return None
+            if key in listener.loaded:
+                return listener
+            listener = listener.parent.outer_listener(LazyListener)
+        return None
+
+    def hit(self, model: type, field: str, owner: LazyListener) -> None:
+        """Count a read on rows that ``owner``'s scope loaded, and report it through this scope."""
         key = (model, field)
-        if key in self.reported:
+        if key in owner.reported:
             return
         # Rules need no call site, so check them before walking the stack.
         message = LazyLoadMessage(model, field)
@@ -237,14 +263,14 @@ class LazyListener(Listener):
         message.caller = get_caller()
         if is_inline_ignored(message):
             return
-        self.counts[key] += 1
-        if self.show_all_callers:
-            self.stacks[key].append(get_stack())
-        if self.counts[key] < self.threshold:
+        owner.counts[key] += 1
+        if owner.show_all_callers:
+            owner.stacks[key].append(get_stack())
+        if owner.counts[key] < owner.threshold:
             return
-        self.reported.add(key)
-        if self.show_all_callers:
-            message = LazyLoadMessage(model, field, callers=self.stacks.pop(key))
+        owner.reported.add(key)
+        if owner.show_all_callers:
+            message = LazyLoadMessage(model, field, callers=owner.stacks.pop(key))
         self.parent.notify(message)
 
 
@@ -255,7 +281,9 @@ class EagerListener(Listener):
         # (model, field) -> group -> (row keys, declaration site). A read of any row
         # of a group uses the group.
         self.groups: defaultdict[tuple[type, str], dict[int, tuple[set[str], CallSite | None]]] = defaultdict(dict)
-        self.allowed: set[int] = set()
+        # Groups that were read or are allowed. .iterator() adds rows to a group after
+        # the loop has read earlier ones.
+        self.settled: set[int] = set()
         super().setup()
 
     def handlers(self) -> dict[str, Callable[..., None]]:
@@ -263,6 +291,9 @@ class EagerListener(Listener):
 
     def teardown(self) -> None:
         super().teardown()
+        # A failed block can end before it reads its eager loads.
+        if self.parent.failed:
+            return
         for (model, field), groups in self.groups.items():
             if groups:
                 _keys, site = next(iter(groups.values()))
@@ -270,14 +301,14 @@ class EagerListener(Listener):
 
     def handle_eager(self, args: Any, kwargs: Any, context: Any, ret: Any, parser: Any) -> None:
         model, field, keys, group, site = parser(args, kwargs, context)
-        if group in self.allowed:
+        if group in self.settled:
             return
         groups = self.groups[(model, field)]
         entry = groups.get(group)
         if entry is not None:
             entry[0].update(keys)
         elif is_allowed(EagerLoadMessage(model, field)):
-            self.allowed.add(group)
+            self.settled.add(group)
         else:
             groups[group] = (set(keys), site)
 
@@ -289,6 +320,7 @@ class EagerListener(Listener):
         for group, (loaded, _site) in list(groups.items()):
             if not loaded.isdisjoint(keys):
                 del groups[group]
+                self.settled.add(group)
 
 
 class GetLoopListener(Listener):
@@ -378,7 +410,7 @@ class DuplicateQueryListener(Listener):
         key = (fingerprint, *caller)
         if key in self.reported:
             return
-        message = DuplicateQueryMessage(_SQL, _shorten(fingerprint), caller=caller)
+        message = DuplicateQueryMessage(_SQL, fingerprint, caller=caller)
         if self.parent.suppresses(message):
             return
         self.counts[key] += 1

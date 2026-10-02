@@ -2,6 +2,7 @@ import contextvars
 import threading
 
 import pytest
+from asgiref.sync import async_to_sync
 from testapp.models import Occupation
 
 from django_nplus1 import DetectionContext, NPlus1Error, NPlus1Middleware, Profiler, nplus1_detected, signals
@@ -52,6 +53,41 @@ def test_middleware_sends_detection_unless_whitelisted(objects, client, settings
     response = client.get("/lazy_loop/")
     assert response.status_code == 200
     assert senders == expected
+
+
+@pytest.mark.django_db
+def test_failing_receiver_is_logged_and_detection_goes_on(objects, caplog):
+    def fail(sender, message, **kwargs):
+        raise RuntimeError("receiver failed")
+
+    nplus1_detected.connect(fail)
+    try:
+        with pytest.raises(NPlus1Error, match="Occupation.user"), Profiler():
+            occupation_users()
+    finally:
+        nplus1_detected.disconnect(fail)
+    assert [(r.name, type(r.exc_info[1])) for r in caplog.records if r.exc_info] == [("django.dispatch", RuntimeError)]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("receiver_is_async", [False, True], ids=["sync", "async"])
+def test_receiver_gets_detection_at_the_end_of_an_async_request(objects, async_client, receiver_is_async):
+    labels = []
+
+    def receiver(sender, message, **kwargs):
+        labels.append(message.label)
+
+    async def async_receiver(sender, message, **kwargs):
+        receiver(sender, message)
+
+    connected = async_receiver if receiver_is_async else receiver
+    nplus1_detected.connect(connected)
+    try:
+        response = async_to_sync(async_client.get)("/async_unused_select/")
+    finally:
+        nplus1_detected.disconnect(connected)
+    assert response.status_code == 200
+    assert labels == ["unused_eager_load"]
 
 
 def test_suppress_leaves_other_threads_of_the_scope_alone():

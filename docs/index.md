@@ -19,7 +19,7 @@ Detects:
 - Deferred-field access from `.defer()` / `.only()`
 - `Model.objects.get()` repeated in a loop
 - Unused `select_related` / `prefetch_related`
-- Duplicate raw SQL (opt-in via `NPLUS1_DETECT_DUPLICATE_QUERIES`)
+- Duplicate SQL queries, including raw SQL (opt-in via `NPLUS1_DETECT_DUPLICATE_QUERIES`)
 - Eager loads and fields that no test in the session reads (opt-in [corpus mode](user-guide/corpus-mode.md))
 
 Activates via:

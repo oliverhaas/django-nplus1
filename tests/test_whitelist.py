@@ -7,6 +7,10 @@ from django_nplus1 import DetectionContext, Profiler, nplus1_allow
 pytestmark = pytest.mark.django_db
 
 BRACKET_SQL = "SELECT name FROM testapp_user WHERE [id] = %s"
+LONG_SQL = (
+    "SELECT name AS a, name AS b, name AS c, name AS d, name AS e, name AS f, name AS g, name AS h, "
+    "name AS i, name AS j FROM testapp_user WHERE id = %s"
+)
 
 
 def occupation_users():
@@ -64,15 +68,20 @@ def test_whitelist_covers_deferred_field(objects):
 
 
 @pytest.mark.parametrize(
-    ("field", "expected"),
-    [(BRACKET_SQL, []), ("SELECT name FROM testapp_user *", []), ("SELECT id *", ["duplicate_query"])],
+    ("sql", "field", "expected"),
+    [
+        (BRACKET_SQL, BRACKET_SQL, []),
+        (BRACKET_SQL, "SELECT name FROM testapp_user *", []),
+        (BRACKET_SQL, "SELECT id *", ["duplicate_query"]),
+        (LONG_SQL, "* FROM testapp_user WHERE id = %s", []),
+    ],
 )
-def test_duplicate_query_whitelist_matches_sql(objects, detected, settings, field, expected):
+def test_duplicate_query_whitelist_matches_sql(objects, detected, settings, sql, field, expected):
     settings.NPLUS1_DETECT_DUPLICATE_QUERIES = True
     with DetectionContext(whitelist=[{"label": "duplicate_query", "field": field}]):
         for pk in User.objects.values_list("pk", flat=True):
             with connection.cursor() as cursor:
-                cursor.execute(BRACKET_SQL, [pk])
+                cursor.execute(sql, [pk])
     assert [m.label for m in detected] == expected
 
 

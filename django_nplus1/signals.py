@@ -1,4 +1,8 @@
+import asyncio
 import contextlib
+import contextvars
+import logging
+import threading
 from collections import defaultdict
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
@@ -9,9 +13,35 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Iterable
     from contextvars import Token
 
+logger = logging.getLogger("django_nplus1")
+
 # Django signal sent once per detection. Receivers get ``sender`` (the class of the
 # scope that detected it) and ``message`` (a Message instance).
 nplus1_detected = Signal()
+
+
+def _send_detected(sender: Any, message: Any) -> None:
+    try:
+        nplus1_detected.send_robust(sender=sender, message=message)
+    except Exception:
+        logger.exception("django-nplus1: nplus1_detected receivers not run")
+
+
+def send_detected(sender: Any, message: Any) -> None:
+    """Send ``nplus1_detected``. Django logs a receiver that raises, and detection goes on."""
+    if not nplus1_detected.has_listeners(sender):
+        return
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        _send_detected(sender, message)
+        return
+    # send_robust() runs async receivers with async_to_sync(), which refuses to run in
+    # a thread with an event loop, so hand it a thread of its own.
+    thread = threading.Thread(target=contextvars.copy_context().run, args=(_send_detected, sender, message))
+    thread.start()
+    thread.join()
+
 
 # Per-context listener registry
 _listeners: ContextVar[defaultdict[str, list[Callable[..., Any]]] | None] = ContextVar(

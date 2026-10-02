@@ -29,6 +29,8 @@ INSTALLED_APPS = [
 ]
 ```
 
+The app installs the ORM hooks that detection relies on. Without it, the middleware, Celery detection and every detection scope raise `ImproperlyConfigured` when they start.
+
 Then add the middleware to your **test settings** and enable raising on detection:
 
 ```python
@@ -63,7 +65,7 @@ The middleware can also be added to your base or development settings to log war
 The equivalent of the middleware for Celery tasks. Install the `celery` extra and enable the integration:
 
 ```bash
-pip install django-nplus1[celery]
+pip install "django-nplus1[celery]"
 ```
 
 ```python

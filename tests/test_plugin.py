@@ -202,6 +202,38 @@ def test_detection_caught_by_the_test_still_fails_it(django_pytester):
     result.stdout.fnmatch_lines(["*ERROR at teardown of test_fixture*", "E *NPlus1Error*Occupation.user*"])
 
 
+def test_settings_whitelist_names_models_by_label(django_pytester):
+    django_pytester.makepyfile(
+        DETECTING_TESTS
+        + textwrap.dedent(
+            """
+            @pytest.fixture
+            def class_name_pattern(settings):
+                settings.NPLUS1_WHITELIST = [{"model": "Occ*"}]
+
+
+            @pytest.fixture
+            def class_name(settings):
+                settings.NPLUS1_WHITELIST = [{"model": "Occupation"}]
+
+
+            @pytest.mark.nplus1
+            def test_pattern(class_name_pattern, occupations):
+                touch_users()
+
+
+            def test_name(class_name, occupations, nplus1):
+                pass
+            """,
+        ),
+    )
+    result = django_pytester.runpytest_subprocess()
+    result.assert_outcomes(failed=1, errors=1)
+    result.stdout.fnmatch_lines_random(
+        ["E *NPlus1Error*Occupation.user*", "E *NPlus1Error*Did you mean one of: testapp.Occupation*"],
+    )
+
+
 def test_marker_skips_test_database_setup(django_pytester):
     django_pytester.makeconftest(
         """

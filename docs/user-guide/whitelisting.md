@@ -22,7 +22,7 @@ Each whitelist entry is a dictionary with optional keys:
 | `field` | Field name pattern; for `duplicate_query`, a pattern for the query's SQL | `"profile"`, `"*"` |
 | `label` | Message type: `"n_plus_one"`, `"unused_eager_load"`, `"get_in_loop"`, `"duplicate_query"`, or `"unused_field_load"` | `"n_plus_one"` |
 
-A `duplicate_query` detection's field is the query with literals replaced by `?`, cut to 120 characters. Match it to suppress one query shape instead of every duplicate. In these patterns `[` matches a literal bracket:
+A `duplicate_query` detection's field is the whole query with literals replaced by `?`. The message shows only its first 120 characters, but patterns match against the whole query. Match it to suppress one query shape instead of every duplicate. In these patterns `[` matches a literal bracket:
 
 ```python
 NPLUS1_WHITELIST = [
@@ -40,7 +40,7 @@ Both `model` and `field` support `fnmatch` wildcards:
 
 An entry for a model also covers its proxy models and multi-table inheritance children.
 
-`NPLUS1_WHITELIST` is checked against your models when the middleware is created or Celery detection is set up. An unknown model raises `NPlus1Error` with suggestions. An unknown field only warns, because a `Prefetch(to_attr=...)` name is no model field. Column names such as `user_id` count as fields. Entries using wildcards aren't checked.
+`NPLUS1_WHITELIST` is checked against your models when the middleware is created, when Celery detection is set up, and when a test with the pytest marker or the `nplus1` fixture starts. An unknown model raises `NPlus1Error` with suggestions. An unknown field only warns, because a `Prefetch(to_attr=...)` name is no model field. Column names such as `user_id` count as fields. Entries using wildcards aren't checked.
 
 ## Local Suppression (`nplus1_allow`)
 
@@ -70,7 +70,7 @@ Uses the same whitelist format as `Profiler(whitelist=...)` and `@pytest.mark.np
 
 An unused eager load is reported when the scope ends, but it is suppressed when the query that loaded it ran inside the block.
 
-This is the recommended approach for incrementally adopting detection in existing projects: enable `NPLUS1_RAISE = True` in tests, then wrap known N+1 patterns with `nplus1_allow()` and fix them over time.
+Use it for code that is fine as it is, such as a loop over a few rows that a page never shows more of. To adopt detection in an existing project, list the known N+1 queries in `NPLUS1_WHITELIST` instead and remove the entries as you fix them.
 
 ## Inline Suppression (`# nplus1: ignore`)
 
@@ -104,6 +104,6 @@ with Profiler(whitelist=[{"model": "User", "field": "profile"}]):
     ...
 ```
 
-`Profiler`, `nplus1_allow()`, and the pytest marker match a `model` pattern against both the class name (`"User"`) and `"app_label.ModelName"` (`"auth.User"`), so patterns copied from `NPLUS1_WHITELIST` work unchanged. The pytest marker and `nplus1` fixture also apply `NPLUS1_WHITELIST` itself.
+`Profiler`, `DetectionContext`, `nplus1_allow()`, and the pytest marker's `whitelist` match a `model` pattern against both the class name (`"User"`) and `"app_label.ModelName"` (`"auth.User"`), so patterns copied from `NPLUS1_WHITELIST` work unchanged. `NPLUS1_WHITELIST` itself matches `"app_label.ModelName"` only, also where the pytest marker and the `nplus1` fixture apply it.
 
 A whitelist also covers the scopes nested inside its own. The marker's whitelist applies to views that the test requests through the test client, even though the middleware opens a scope of its own.

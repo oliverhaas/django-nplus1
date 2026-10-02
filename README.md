@@ -45,14 +45,14 @@ uv run pytest --nplus1-eager-corpus
 
 It also reports concrete fields that were loaded but never read across the suite, as `unused_field_load`. Suppress noisy models with `NPLUS1_FIELD_EXCLUDE = ["auth.User", "contenttypes.*"]`.
 
-See [docs](https://oliverhaas.github.io/django-nplus1/user-guide/corpus-mode/) for suppression markers and pytest-xdist support.
+See [docs](https://oliverhaas.github.io/django-nplus1/latest/user-guide/corpus-mode/) for suppression markers and pytest-xdist support.
 
 ## Celery Integration
 
 The equivalent of the middleware for Celery tasks. Each task execution gets its own detection scope.
 
 ```bash
-pip install django-nplus1[celery]
+pip install "django-nplus1[celery]"
 ```
 
 ```python
@@ -60,12 +60,13 @@ pip install django-nplus1[celery]
 NPLUS1_CELERY = True
 ```
 
-Lazy loads, `.get()`-in-a-loop, unused eager loads, and duplicate queries are all detected per-task, just as they are per-request. `nplus1_allow()` works inside tasks the same way it does in views.
+Lazy loads, `.get()`-in-a-loop and unused eager loads are detected per task, just as they are per request, and so are duplicate queries when `NPLUS1_DETECT_DUPLICATE_QUERIES` is on. `nplus1_allow()` works inside tasks the same way it does in views.
 
 **Limitations:**
 
 - `nplus1_allow()` context does not propagate across task boundaries. If a view calls `task.delay()` inside an `nplus1_allow()` block, the allow rules do not carry into the worker (ContextVars don't survive serialization).
 - A detection made when a task ends, such as an unused eager load, or one that the task catches, can't fail the task, because Celery has already recorded its result. It is logged at ERROR level on the `django_nplus1` logger instead. For a task run with `.apply()` inside another scope, such as a request or the `nplus1` test fixture, that scope reports the detection when it ends.
+- With `NPLUS1_RAISE`, a detection fails the task, and a task with `autoretry_for=(Exception,)` is retried for it.
 
 ## Credits
 

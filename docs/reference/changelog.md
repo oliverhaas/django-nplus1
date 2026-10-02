@@ -1,6 +1,39 @@
 # Changelog
 
-## 0.5.0
+## Unreleased
+
+### Breaking changes
+
+- The pytest marker and the `nplus1` fixture treat `NPLUS1_WHITELIST` as the middleware does. Its model patterns match `"app_label.ModelName"` only, so entries such as `{"model": "Occupation"}` or `{"model": "Occ*"}` no longer match there. An entry naming an unknown model raises `NPlus1Error`, which fails a test with the marker and errors a test with the fixture at setup. The marker's own `whitelist` still matches class names.
+- The middleware, `setup_celery_detection()` and every detection scope raise `ImproperlyConfigured` when `django_nplus1` is missing from `INSTALLED_APPS`. Without the app, detection found nothing and said nothing.
+
+### Detection
+
+- A foreign key column deferred with `.only()` or `.defer()` and read by `prefetch_related()`, which loads it one row at a time, is reported as an N+1. This covers the rows of the queryset, the rows of a `Prefetch()` queryset, and `.iterator()` chunks.
+- A relation read in a loop is reported even when its rows were each fetched on their own earlier in the scope, for example by `.get()` or an earlier lazy load, and then loaded again in one query.
+- `.get()` calls that raise `DoesNotExist` or `MultipleObjectsReturned` count toward `get_in_loop`.
+- Loops over `.aiterator()` are detected.
+- Async ORM calls such as `aget()` take the call site of the line in your coroutine that awaited them. `aget()` loops are reported as `get_in_loop` again, and separate `aget()` calls in an async view requested from sync code, such as the test client, are no longer reported as one loop.
+- Rows loaded in an enclosing scope count in nested scopes. Reading a relation row by row in an inner scope is reported, and reads split between the scopes add up.
+- `select_related()` on an `.iterator()` queryset is no longer reported as an unused eager load when the loop reads the relation on early rows only.
+- With Django 6.1's `FETCH_PEERS`, a deferred field or `GenericForeignKey` read in a loop loads every row in one query and is no longer reported as an N+1. With `FETCH_RAISE`, a blocked read of a deferred field no longer counts as a load.
+
+### Settings
+
+- New `NPLUS1_PROJECT_PACKAGES` names packages that count as your code even when they are installed in `site-packages`, as in some Docker images. Without it, such projects got no `.get()` loop or duplicate query detection, and N+1 messages had no file and line. See [Configuration](../user-guide/configuration.md#nplus1_project_packages).
+
+### Reporting
+
+- `nplus1_detected` is sent with `send_robust()`. A receiver that raises is logged on the `django.dispatch` logger instead of breaking the code that made the detection, and async receivers work in async views.
+- A scope whose block raises no longer reports unused eager loads, because the error can stop the block before it reads them. They used to be logged, warned about and sent with `nplus1_detected`, and only the raise was skipped.
+- A `duplicate_query` message keeps the whole query in `.field`, so whitelist patterns match all of it. The message text still shows the first 120 characters.
+
+### Celery
+
+- Two runs of the same task id in different threads at once no longer end each other's detection scope.
+- The `ImportError` raised without Celery quotes the install command, `pip install "django-nplus1[celery]"`, which zsh needs.
+
+## 0.5.0 (2026-10-02)
 
 - **Breaking:** A detection that code inside a scope catches, as Django's `{% if %}` tag does when a comparison raises, now fails the scope when it ends. This applies to `NPlus1Middleware` with `NPLUS1_RAISE`, `Profiler`, `DetectionContext`, `@pytest.mark.nplus1` and the `nplus1` fixture. The caught detection replaces an exception that the block raises later, but never a `BaseException` such as `KeyboardInterrupt`.
 - **Breaking:** With the marker or the fixture, a test fails on a detection even inside `pytest.raises(NPlus1Error)`. To check that code makes an N+1 query, use a `Profiler` in a test without them, as in [Asserting a Detection](../user-guide/pytest-plugin.md#asserting-a-detection).
@@ -10,7 +43,7 @@
 - When a test that uses the `nplus1` fixture fails or errors at setup, it no longer also errors at teardown on an unused eager load. The failure can stop the test before it reads the eager load.
 - With `NPLUS1_RAISE`, a Celery task that fails no longer logs an unused eager load found when it ends, for the same reason.
 
-## 0.4.0
+## 0.4.0 (2026-09-29)
 
 ### Breaking changes
 
@@ -88,29 +121,41 @@ These apply as soon as `django_nplus1` is installed, also outside detection scop
 
 - Supports Django 6.1.
 
-## 0.3.5
+## 0.3.5 (2026-05-20)
 
-- Detect deferred-field N+1 even when the row was also fetched as a singleton in the same scope. Previously, an incidental `.get()` or `refresh_from_db()` would silently suppress later `.only()`/`.defer()` detection on the same instances.
-- Suppress false positives from converging FK chains in `prefetch_related_objects(...)` (e.g. two lookups sharing a tail like `store__region` / `warehouse__region`).
-- Replace stale `from django.db.models import prefetch_related_objects` imports captured before `AppConfig.ready()` ran, so suppression still applies.
-- Widen the `sys.modules` walk's `except` clause to tolerate any `__getattr__` error from third-party modules.
+- A deferred field read in a loop is reported even when the same rows were also fetched one at a time in the scope, for example with `.get()` or `refresh_from_db()`. Such a fetch used to hide the N+1.
 
-## 0.3.1
+## 0.3.4 (2026-04-20)
+
+- Django no longer fails to start when an imported module's `__getattr__` raises an error such as `KeyError`, as ddtrace's does. The failure started in 0.3.3.
+
+## 0.3.3 (2026-04-18)
+
+- The 0.3.2 fix also applies in modules that import `prefetch_related_objects` from `django.db.models` before django-nplus1's `AppConfig.ready()` runs, such as `models.py` files.
+
+## 0.3.2 (2026-04-18)
+
+- `prefetch_related_objects()` with lookups that end on the same relation, such as `store__region` and `warehouse__region`, is no longer reported as an N+1. Calling it on one row at a time in a loop is still reported.
+
+## 0.3.1 (2026-04-16)
 
 - Fix forward M2M without an explicit `related_name`: detection now uses the correct field name instead of the auto-generated one.
 
-## 0.3.0
+## 0.3.0 (2026-04-14)
 
 - Inline `# nplus1: ignore` suppression. Add a trailing comment to the call site to suppress a detection, optionally scoped to labels (`# nplus1: ignore[n_plus_one, get_in_loop]`).
 - Fix false positive on `qs.prefetch_related(...).filter(pk=X)` where a queryset-level prefetch returning a single instance was flagged as N+1.
 
-## 0.2.0
+## 0.2.1 (2026-04-14)
 
-- Celery integration: per-task N+1 detection via `task_prerun`/`task_postrun` signals. Enable with `NPLUS1_CELERY = True` or `pip install django-nplus1[celery]`.
+- **Breaking:** Requires Python 3.14+ and Django 6+. Python 3.12, Python 3.13 and Django 5.2 are no longer supported.
+
+## 0.2.0 (2026-04-13)
+
+- Celery integration: per-task N+1 detection via `task_prerun`/`task_postrun` signals. Enable with `NPLUS1_CELERY = True` or by calling `django_nplus1.celery.setup_celery_detection()`. The `celery` extra (`pip install "django-nplus1[celery]"`) installs Celery.
 - Extract `DetectionContext` as a reusable public class for scoped detection.
-- Require Python 3.14+ and Django 6+.
 
-## 0.1.0
+## 0.1.0 (2026-04-12)
 
 Initial release.
 

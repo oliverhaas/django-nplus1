@@ -15,6 +15,7 @@ def with_hobby_list():
     ("queryset", "expected"),
     [
         pytest.param(lambda: Pet.objects.select_related("user"), ["Pet.user"], id="select-fk"),
+        pytest.param(lambda: Pet.objects.select_related("user").iterator(), ["Pet.user"], id="select-iterator"),
         pytest.param(lambda: User.objects.select_related("occupation"), ["User.occupation"], id="select-reverse-o2o"),
         pytest.param(
             lambda: Pet.objects.select_related("user__occupation"),
@@ -120,6 +121,12 @@ def read_one_row_of_the_group():
     list(users[0].hobbies.all())
 
 
+def read_first_row_while_iterating():
+    for index, pet in enumerate(Pet.objects.select_related("user").order_by("pk").iterator()):
+        if index == 0:
+            pet.user
+
+
 def load_no_rows():
     list(User.objects.filter(name="nobody").select_related("occupation").prefetch_related("hobbies"))
 
@@ -164,6 +171,7 @@ def read_filtered_relation():
         count_prefetched_hobbies,
         check_prefetched_addresses,
         read_one_row_of_the_group,
+        read_first_row_while_iterating,
         load_no_rows,
         read_user_of_proxy,
         read_owner_of_mti_child,

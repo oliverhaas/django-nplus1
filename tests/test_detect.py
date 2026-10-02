@@ -1,8 +1,11 @@
+import contextlib
 import copy
 import gc
+import importlib
 import pickle
 import sys
 import weakref
+from pathlib import Path
 
 import pytest
 from django.contrib.auth.models import User as AuthUser
@@ -27,6 +30,12 @@ def get_each_user():
     return [User.objects.get(pk=user.pk) for user in User.objects.all()]
 
 
+def get_missing_users():
+    for pk in (-1, -2):
+        with contextlib.suppress(User.DoesNotExist):
+            User.objects.get(pk=pk)
+
+
 def select_each_name(sql=NAME_SQL):
     for pk in User.objects.values_list("pk", flat=True):
         with connection.cursor() as cursor:
@@ -37,6 +46,11 @@ def prefetch_per_row():
     for user in User.objects.all():
         prefetch_related_objects([user], "hobbies")
         list(user.hobbies.all())
+
+
+def prefetch_pets_without_owner_column():
+    pets = Prefetch("pet_set", queryset=Pet.objects.only("id"))
+    return [list(user.pet_set.all()) for user in User.objects.prefetch_related(pets)]
 
 
 class ComposedSQL:
@@ -89,6 +103,19 @@ def execute_as_text(execute, sql, params, many, context):
         pytest.param(lambda: [user.name for user in User.objects.defer("name")], User, "name", id="defer"),
         pytest.param(lambda: [o.user for o in Occupation.objects.iterator()], Occupation, "user", id="iterator"),
         pytest.param(prefetch_per_row, User, "hobbies", id="prefetch-per-row"),
+        pytest.param(
+            lambda: [pet.user for pet in Pet.objects.only("id").prefetch_related("user")],
+            Pet,
+            "user",
+            id="prefetch-reads-deferred-fk",
+        ),
+        pytest.param(
+            lambda: [pet.user for pet in Pet.objects.only("id").prefetch_related("user").iterator(chunk_size=10)],
+            Pet,
+            "user",
+            id="iterator-prefetch-reads-deferred-fk",
+        ),
+        pytest.param(prefetch_pets_without_owner_column, Pet, "user", id="prefetch-queryset-defers-fk"),
     ],
 )
 def test_per_row_load_is_detected(objects, detected, load, model, field):
@@ -235,10 +262,18 @@ def test_rows_of_a_same_named_model_do_not_count(objects, detected):
     assert detected == []
 
 
-def test_get_in_loop_is_detected(objects, detected):
+@pytest.mark.parametrize("loop", [get_each_user, get_missing_users], ids=["found", "missing"])
+def test_get_in_loop_is_detected(objects, detected, loop):
     with DetectionContext():
-        get_each_user()
+        loop()
     assert [(m.label, m.model, m.field) for m in detected] == [("get_in_loop", User, "get()")]
+
+
+def test_rows_fetched_one_by_one_count_again_when_loaded_together(objects, detected):
+    with DetectionContext():
+        [pet.user for pet in Pet.objects.all()]
+        [user.occupation for user in User.objects.all()]
+    assert [(m.model, m.field) for m in detected] == [(Pet, "user"), (User, "occupation")]
 
 
 @pytest.mark.parametrize(
@@ -298,6 +333,38 @@ def test_detection_names_the_loading_line(objects):
         Profiler(),
     ):
         occupation_users()
+
+
+@pytest.fixture
+def installed_views(tmp_path, monkeypatch):
+    """A module of a project package that is installed into site-packages, as in a Docker image."""
+    package = tmp_path / "site-packages" / "installed_project"
+    package.mkdir(parents=True)
+    (package / "__init__.py").touch()
+    (package / "views.py").write_text(
+        "from testapp.models import Occupation\n\n\n"
+        "def occupation_users():\n"
+        "    return [occupation.user for occupation in Occupation.objects.all()]\n",
+    )
+    monkeypatch.syspath_prepend(package.parent)
+    yield importlib.import_module("installed_project.views")
+    for name in ("installed_project.views", "installed_project"):
+        sys.modules.pop(name, None)
+
+
+@pytest.mark.parametrize(("packages", "file"), [([], "test_detect.py"), (["installed_project"], "views.py")])
+def test_project_packages_are_project_code_in_site_packages(
+    objects,
+    detected,
+    settings,
+    installed_views,
+    packages,
+    file,
+):
+    settings.NPLUS1_PROJECT_PACKAGES = packages
+    with DetectionContext():
+        installed_views.occupation_users()
+    assert [Path(m.caller[0]).name for m in detected] == [file]
 
 
 @pytest.mark.parametrize(

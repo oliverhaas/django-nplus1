@@ -6,7 +6,7 @@ from django_nplus1.scope import DetectionContext
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from django_nplus1.detect import Message
+    from django_nplus1.detect import Message, Rule
     from django_nplus1.notifiers import Notifier
 
 
@@ -19,7 +19,7 @@ class Profiler(DetectionContext):
 
     def __init__(
         self,
-        whitelist: Sequence[dict[str, Any]] | None = None,
+        whitelist: Sequence[Rule | dict[str, Any]] | None = None,
         notifiers: Sequence[Notifier] | None = None,
     ) -> None:
         super().__init__(notifiers=notifiers, whitelist=whitelist)

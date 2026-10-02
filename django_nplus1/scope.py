@@ -1,7 +1,9 @@
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any, Self
 
-from django_nplus1 import signals
+from django.conf import settings
+
+from django_nplus1 import conf, signals
 from django_nplus1.detect import LISTENERS, Rule, is_allowed, is_inline_ignored
 
 if TYPE_CHECKING:
@@ -42,10 +44,13 @@ class DetectionContext:
         # A detection that code inside the block catches must still fail the scope.
         self._raised: Exception | None = None
         self._exiting = False
+        self.failed = False
 
     def __enter__(self) -> Self:
         if self._tokens is not None:
             raise RuntimeError(f"{type(self).__name__} is already active.")
+        conf.check_installed()
+        conf.project_packages(settings)
         self._outer = _active.get()
         self._tokens = (signals.setup_context(inherit=_FORWARDED), _active.set(self))
         try:
@@ -67,6 +72,7 @@ class DetectionContext:
         """End the scope and raise its detection, even one that the block caught."""
         # Detections made from here on are raised below, not inside the block.
         self._exiting = True
+        self.failed = exc_type is not None
         caught = self._raised
         outer = self._outer
         error: Exception | None = None
@@ -100,6 +106,7 @@ class DetectionContext:
         self._outer = None
         self._raised = None
         self._exiting = False
+        self.failed = False
 
     def _record(self, error: Exception) -> None:
         for scope in self._chain():
@@ -131,7 +138,7 @@ class DetectionContext:
         if self.suppresses(message):
             return
         sender = self._sender if self._sender is not None else type(self)
-        signals.nplus1_detected.send(sender=sender, message=message)
+        signals.send_detected(sender, message)
         error: Exception | None = None
         notified: list[Notifier] = []
         for scope in self._chain():

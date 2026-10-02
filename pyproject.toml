@@ -38,20 +38,20 @@ nplus1 = "django_nplus1.pytest_plugin"
 Homepage = "https://github.com/oliverhaas/django-nplus1"
 Documentation = "https://oliverhaas.github.io/django-nplus1/"
 Repository = "https://github.com/oliverhaas/django-nplus1.git"
-Changelog = "https://oliverhaas.github.io/django-nplus1/reference/changelog/"
+Changelog = "https://oliverhaas.github.io/django-nplus1/latest/reference/changelog/"
 
 [dependency-groups]
 dev = [
   "django-stubs==6.1.1",
-  "mypy==2.3.1",
+  "mypy==2.4.0",
   "pre-commit==4.6.2",
-  "ruff==0.16.9",
+  "ruff==0.16.10",
   "ty==0.0.84",
   { include-group = "test" },
 ]
 docs = ["mkdocs==1.6.1", "mkdocs-material==9.7.7", "mike==2.2.0"]
 test = [
-  "celery[redis]>=5.3",
+  "celery>=5.3",
   "coverage==7.16.2",
   "pytest-django==4.14.0",
   "pytest-mock==3.16.0",

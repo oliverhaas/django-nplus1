@@ -13,7 +13,9 @@ MIDDLEWARE = [
 ]
 ```
 
-It reads the `NPLUS1_*` settings when Django creates it, so invalid settings and whitelist entries naming unknown models fail at startup. With `NPLUS1_RAISE`, an exception raised by the view wins over a detection made at the end of the request. A detection that the view or a template catches, as the `{% if %}` tag does when a comparison raises, is raised again at the end of the request.
+It reads the `NPLUS1_*` settings when Django creates it, so invalid settings and whitelist entries naming unknown models fail at startup, as does a missing `django_nplus1` in `INSTALLED_APPS`. With `NPLUS1_RAISE`, an exception raised by the view wins over a detection made at the end of the request. A detection that the view or a template catches, as the `{% if %}` tag does when a comparison raises, is raised again at the end of the request.
+
+Detection ends when the view returns its response. Queries that run while the server iterates a `StreamingHttpResponse` or `FileResponse` body aren't checked.
 
 ## Profiler
 
@@ -53,7 +55,13 @@ with DetectionContext(notifiers=init(settings), whitelist=[{"model": "auth.User"
 - `whitelist`: Entries in the same format as `Profiler(whitelist=...)`.
 - `sender`: The `sender` of the `nplus1_detected` signal. Default: the scope's class.
 
-Scopes nest. A detection inside an inner scope goes to the notifiers of every enclosing scope, and notifiers built from the same settings report it once. A whitelist entry of any enclosing scope suppresses it. Entering a scope that is already active raises `RuntimeError`.
+Scopes nest. A detection inside an inner scope goes to the notifiers of every enclosing scope, and notifiers built from the same settings report it once. A whitelist entry of any enclosing scope suppresses it. Rows loaded in an enclosing scope count in the scopes inside it, so reading a relation row by row in an inner scope is an N+1 there too. Entering a scope that is already active raises `RuntimeError`.
+
+A scope keeps a key for every row loaded in it until it ends, about 160 bytes per row. A task that streams ten million rows with `.iterator()` inside one scope holds about 1.6 GB.
+
+Scopes follow the `contextvars` context. A thread started inside a scope isn't checked unless it runs in a copy of the context, as with `threading.Thread(context=contextvars.copy_context())`, `asyncio.to_thread()` or `sync_to_async()`. On free-threaded Python builds, new threads get a copy by default.
+
+Inside a scope, a `Prefetch(to_attr=...)` list is a `list` subclass that records reads, so `type(value) is list` is false for it. Copies and pickles of it are plain lists.
 
 A detection that a notifier raises fails the scope even if code in the block catches it: the scope raises it again on exit. It also replaces an exception the block raises afterwards, which is often a consequence of the caught detection. A `BaseException` such as `KeyboardInterrupt` is never replaced, and a block that fails drops the detections made at exit, such as unused eager loads.
 
@@ -117,20 +125,28 @@ nplus1_detected.connect(report_nplus1)
 **Arguments sent:**
 
 - `sender`: The class of the innermost scope that made the detection: `NPlus1Middleware` for requests, `Profiler` for `Profiler`, the pytest marker and the `nplus1` fixture, and `DetectionContext` for Celery tasks. A `DetectionContext` created with `sender=` sends that value.
-- `message`: A `Message` instance with `.model`, `.field`, `.label`, and `.message` attributes. `.caller` is the `(filename, lineno, funcname)` of the line that triggered the detection, or `None` when there is none, as for an unused eager load. With `NPLUS1_SHOW_ALL_CALLERS`, `.callers` holds a stack for each repeated access instead.
+- `message`: A `Message` instance with `.model`, `.field`, `.label`, and `.message` attributes. `.caller` is the `(filename, lineno, funcname)` of the line that triggered the detection, or `None` when there is none, as for an unused eager load. With `NPLUS1_SHOW_ALL_CALLERS`, `.callers` holds a stack for each repeated access instead. For a `duplicate_query`, `.model` is a placeholder class named `_SQL` and `.field` is the whole query with literals replaced by `?`, while `.message` shows its first 120 characters.
+
+The signal is sent with `send_robust()`, so a receiver that raises is logged on the `django.dispatch` logger and detection goes on. Async receivers work in sync and async views.
 
 ## Duplicate Query Detection
 
-The primary detection works at the ORM descriptor level. For raw SQL, `.raw()`, and other paths that bypass the ORM, enable SQL-level duplicate query detection:
+The other detectors work at the ORM descriptor level. For raw SQL, `.raw()`, and other paths that bypass the ORM descriptors, enable SQL-level duplicate query detection:
 
 ```python
 NPLUS1_DETECT_DUPLICATE_QUERIES = True
 NPLUS1_DUPLICATE_QUERY_THRESHOLD = 2  # default
 ```
 
-When enabled, every query on every database connection is fingerprinted (literals replaced with `?`), and repeated identical queries from the same call-site are flagged. This works in every detection scope.
+When enabled, every query on every database connection is fingerprinted (literals replaced with `?`), and repeated identical queries from the same call site are flagged. This works in every detection scope. ORM queries are fingerprinted too, so lazy-load and `.get()` loops are also reported as `duplicate_query`.
 
-The call site is the innermost frame of your code. Frames from the standard library, installed packages, and console-script launchers such as `bin/pytest` don't count. Queries with no frame of your code on the stack aren't counted, nor are queries Django runs while opening a connection (backend setup and `connection_created` receivers such as `django.contrib.postgres`' type lookups).
+Queries with no frame of your code on the stack aren't counted, nor are queries Django runs while opening a connection (backend setup and `connection_created` receivers such as `django.contrib.postgres`' type lookups).
+
+## Call Sites
+
+A detection's call site is the innermost frame of your code on the stack. `.get()` loops and duplicate queries are counted per call site. Frames from the standard library, installed packages, django-nplus1 itself and console-script launchers such as `bin/pytest` don't count. If your project is installed in `site-packages`, list its packages in [`NPLUS1_PROJECT_PACKAGES`](../user-guide/configuration.md#nplus1_project_packages).
+
+Async ORM calls such as `aget()` run in a worker thread. Their call site is the line in your coroutine that awaited them.
 
 ## Exceptions
 
@@ -147,7 +163,7 @@ from django_nplus1 import NPlus1Error
 Per-task N+1 detection for Celery workers. Each task run gets its own detection scope, like a request under the middleware.
 
 ```bash
-pip install django-nplus1[celery]
+pip install "django-nplus1[celery]"
 ```
 
 ```python
@@ -172,12 +188,13 @@ setup_celery_detection()
 - A detection made when a task ends, such as an unused eager load, or one that the task catches, can't fail the task, because Celery has already recorded its result. It is logged at ERROR level on the `django_nplus1` logger instead. For a task run with `.apply()` inside another scope, such as a request or the `nplus1` test fixture, that scope reports the detection when it ends.
 - When detection can't start for a task, the task runs without it and the error is logged at ERROR level.
 - `nplus1_allow()` doesn't reach tasks sent to a worker, because context variables don't travel with the task message. A task run with `.apply()` inside another task or a request nests in that scope, so an enclosing `nplus1_allow()` covers it.
+- With `NPLUS1_RAISE`, a detection fails the task, and a task with `autoretry_for=(Exception,)` is retried for it. Raise only in test settings.
 
 ## pytest Plugin
 
 ### Fixtures
 
-- `nplus1`: Yields a `Profiler` instance, active from the fixture's setup to its teardown. Test fails on N+1 detection, even one the test catches. Applies `NPLUS1_WHITELIST`.
+- `nplus1`: Yields a `Profiler` instance, active from the fixture's setup to its teardown. Test fails on N+1 detection. A detection the test catches, or an unused eager load, makes it error at teardown. Applies `NPLUS1_WHITELIST`.
 
 ### Markers
 

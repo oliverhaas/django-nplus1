@@ -1,6 +1,7 @@
 """Readers for the ``NPLUS1_*`` settings that reject values detection can't use."""
 
 import logging
+import sys
 from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
@@ -21,6 +22,21 @@ def threshold(config: Any, name: str) -> int:
 def check_thresholds(config: Any) -> None:
     for name in THRESHOLD_SETTINGS:
         threshold(config, name)
+
+
+def check_installed() -> None:
+    """Raise unless the app's ``ready()`` has installed the ORM hooks that detection relies on."""
+    if "django_nplus1.patch" not in sys.modules:
+        raise ImproperlyConfigured(
+            "Add 'django_nplus1' to INSTALLED_APPS. Without it, django-nplus1 detects nothing.",
+        )
+
+
+def project_packages(config: Any) -> tuple[str, ...]:
+    value = getattr(config, "NPLUS1_PROJECT_PACKAGES", ())
+    if not isinstance(value, (list, tuple)) or not all(isinstance(name, str) and name for name in value):
+        raise ImproperlyConfigured(f"NPLUS1_PROJECT_PACKAGES must be a list of module names, got {value!r}.")
+    return tuple(value)
 
 
 def logger(config: Any) -> Any:

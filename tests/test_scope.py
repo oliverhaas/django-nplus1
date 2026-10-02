@@ -1,6 +1,8 @@
 import contextlib
+import sys
 
 import pytest
+from django.core.exceptions import ImproperlyConfigured
 from testapp.models import Occupation, User
 
 from django_nplus1 import DetectionContext, NPlus1Error, Profiler
@@ -51,6 +53,18 @@ def test_inner_scope_reads_rows_of_enclosing_scope(objects):
                 list(user.hobbies.all())
 
 
+@pytest.mark.parametrize("outer_reads", [0, 1], ids=["inner-only", "split"])
+def test_inner_scope_counts_per_row_reads_of_rows_loaded_outside(objects, detected, outer_reads):
+    with DetectionContext():
+        occupations = list(Occupation.objects.all())
+        for occupation in occupations[:outer_reads]:
+            occupation.user
+        with DetectionContext():
+            for occupation in occupations[outer_reads:]:
+                occupation.user
+    assert [(m.model, m.field) for m in detected] == [(Occupation, "user")]
+
+
 def test_reentering_an_active_scope_raises(objects, detected):
     scope = DetectionContext()
     with scope:
@@ -64,6 +78,15 @@ def test_body_exception_wins_over_detection_at_exit(objects):
     with pytest.raises(RuntimeError, match="body failed"), Profiler():
         list(User.objects.select_related("occupation"))
         raise RuntimeError("body failed")
+
+
+def test_failed_block_reports_no_unused_eager_load(objects, detected):
+    notifier = RecordingNotifier()
+    with pytest.raises(RuntimeError, match="body failed"), DetectionContext(notifiers=[notifier]):
+        list(User.objects.select_related("occupation"))
+        raise RuntimeError("body failed")
+    assert notifier.messages == []
+    assert detected == []
 
 
 def test_detection_at_exit_still_ends_the_scope(objects, settings):
@@ -107,4 +130,10 @@ def test_reentered_scope_forgets_the_detection_of_its_last_run(objects):
     with pytest.raises(NPlus1Error), profiler, contextlib.suppress(NPlus1Error):
         occupation_users()
     with profiler:
+        pass
+
+
+def test_scope_needs_the_app_installed(monkeypatch):
+    monkeypatch.delitem(sys.modules, "django_nplus1.patch")
+    with pytest.raises(ImproperlyConfigured, match="INSTALLED_APPS"), DetectionContext():
         pass

@@ -1,4 +1,5 @@
 import logging
+import sys
 from pathlib import Path
 
 import pytest
@@ -102,12 +103,20 @@ def test_prefetching_view_passes(objects, client, settings):
         ("NPLUS1_LOGGER", 42),
         ("NPLUS1_ERROR", "builtins.NoSuchError"),
         ("NPLUS1_ERROR", "builtins.len"),
+        ("NPLUS1_PROJECT_PACKAGES", "myproject"),
+        ("NPLUS1_PROJECT_PACKAGES", [""]),
     ],
 )
 def test_invalid_setting_fails_at_startup(settings, name, value):
     settings.NPLUS1_RAISE = True
     setattr(settings, name, value)
     with pytest.raises(ImproperlyConfigured, match=name):
+        build_middleware()
+
+
+def test_middleware_needs_the_app_installed(monkeypatch):
+    monkeypatch.delitem(sys.modules, "django_nplus1.patch")
+    with pytest.raises(ImproperlyConfigured, match="INSTALLED_APPS"):
         build_middleware()
 
 

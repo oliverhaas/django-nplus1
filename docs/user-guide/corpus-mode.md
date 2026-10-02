@@ -26,7 +26,7 @@ Off by default.
 
 - Per-request `unused_eager_load` detection is off for the whole session.
 - Every detection scope opened during the run (by `NPlus1Middleware`, the Celery integration, `Profiler`, the pytest marker and fixture, or a manual `with DetectionContext():`) records its eager loads, field loads and reads in a session-wide tracker.
-- Django's `DeferredAttribute` becomes a data descriptor, so every read of a loaded field goes through it and counts as a read. Field values stay in the instance `__dict__`, so models behave as they do without corpus mode.
+- Django's `DeferredAttribute` becomes a data descriptor, so every read of a loaded field goes through it and counts as a read. Field values stay in the instance `__dict__`, so models behave as they do without corpus mode. Reads get slower: about 0.2 µs per read outside a scope and 1.5 µs inside one, against 0.02 µs without corpus mode.
 - ORM calls outside a scope (test setup, factories, direct queryset assertions) are ignored.
 - At the end of the session the findings are printed in a "django-nplus1 corpus" section of the terminal summary, and the run fails.
 
@@ -112,7 +112,7 @@ Corpus mode works with pytest-xdist. Each worker hands its tracker to the contro
 
 ## For plugin authors
 
-Listeners connected with `django_nplus1.signals.connect()` receive each payload as the `args` tuple. Rows are identified by keys of the form `"app_label.ModelName:pk"`, and call sites are `(filename, lineno, funcname)` tuples.
+Connect a listener with `django_nplus1.signals.connect()` inside a detection scope. It receives signals until that scope ends. Outside a scope, `connect()` does nothing. Listeners receive each payload as the `args` tuple. Rows are identified by keys of the form `"app_label.ModelName:pk"`, and call sites are `(filename, lineno, funcname)` tuples.
 
 - `EAGER_LOAD` carries `(model, field, keys, group, call_site)`. `group` numbers the query that loaded the rows. `call_site` is the line that declared the eager load. It is resolved in corpus mode only and is `None` otherwise.
 - `FIELD_LOAD` carries `(model, attname, keys, call_site)`, once for each loaded concrete field other than the primary key. `call_site` is the line that started the queryset.

@@ -1,6 +1,6 @@
 # Configuration
 
-All settings are optional and configured in your Django settings module. Invalid values raise `ImproperlyConfigured` when the middleware is created or Celery detection is set up. The thresholds must be integers of at least 1, and every `Profiler` or `DetectionContext` checks them when it starts, including the ones the pytest marker and fixture create.
+All settings are optional and configured in your Django settings module. The middleware checks them when Django creates it, and the Celery integration when it is set up, so an invalid value raises `ImproperlyConfigured` at startup. Only the settings in use are checked: `NPLUS1_LOGGER` and `NPLUS1_LOG_LEVEL` while `NPLUS1_LOG` is on, and `NPLUS1_ERROR` while `NPLUS1_RAISE` is on. A whitelist entry that names an unknown model raises `NPlus1Error` instead, see [Whitelisting](whitelisting.md). Every `Profiler` or `DetectionContext` also checks `NPLUS1_PROJECT_PACKAGES` and the thresholds it uses when it starts, including the ones the pytest marker and fixture create.
 
 ## Settings Reference
 
@@ -80,13 +80,25 @@ When enabled, messages include labeled `CALL 1:`, `CALL 2:` sections with full s
 NPLUS1_SHOW_ALL_CALLERS = True
 ```
 
+### `NPLUS1_PROJECT_PACKAGES`
+
+Packages that count as your code even when they are installed in `site-packages`. Default: `[]`.
+
+A detection points at the innermost frame of your code on the call stack, and `.get()` loops and duplicate queries are counted per such call site. Frames from the standard library, installed packages and django-nplus1 itself are skipped. If your project is installed as a package, as in some Docker images, none of its frames count either: `.get()` loops and duplicate queries go undetected, N+1 messages lose their file and line, and `# nplus1: ignore` comments have no effect. List your project's top-level packages here. Their submodules count too.
+
+```python
+NPLUS1_PROJECT_PACKAGES = ["myproject"]
+```
+
+The value must be a list or tuple of module names.
+
 ### `NPLUS1_DETECT_DUPLICATE_QUERIES`
 
 Enable SQL-level duplicate query detection. Default: `False`.
 
-The primary detection works at the ORM descriptor level, which provides exact model/field identification but only catches queries going through the ORM. This setting enables a secondary detector that fingerprints raw SQL queries and flags repeated identical queries from the same call-site.
+The other detectors work at the ORM descriptor level, which names the exact model and field but only sees queries that go through the descriptors. This setting adds a detector that fingerprints every SQL query, with literals replaced by `?`, and flags the same fingerprint run repeatedly from the same call site.
 
-This catches N+1 patterns from `cursor.execute()`, `QuerySet.raw()`, and any other path that bypasses the ORM descriptors.
+This catches N+1 patterns from `cursor.execute()`, `QuerySet.raw()`, and any other path that bypasses the ORM descriptors. ORM queries are fingerprinted too, so a lazy-load or `.get()` loop is also reported as `duplicate_query`.
 
 ```python
 NPLUS1_DETECT_DUPLICATE_QUERIES = True
@@ -104,7 +116,7 @@ NPLUS1_DUPLICATE_QUERY_THRESHOLD = 3
 
 ### `NPLUS1_WHITELIST`
 
-List of patterns to ignore. Applied by the middleware, the Celery integration, corpus mode, and the pytest marker and `nplus1` fixture. See [Whitelisting](whitelisting.md) for details.
+List of patterns to ignore. Applied by the middleware, the Celery integration, corpus mode, and the pytest marker and `nplus1` fixture. A `model` pattern matches `"app_label.ModelName"`, not the bare class name. See [Whitelisting](whitelisting.md) for details.
 
 ```python
 NPLUS1_WHITELIST = [
@@ -115,7 +127,7 @@ NPLUS1_WHITELIST = [
 
 ### `NPLUS1_CELERY`
 
-Enable per-task N+1 detection inside Celery workers. Default: `False`. Requires the `celery` extra (`pip install django-nplus1[celery]`). See [Celery integration](../reference/api.md#celery-integration) for details.
+Enable per-task N+1 detection inside Celery workers. Default: `False`. Requires the `celery` extra (`pip install "django-nplus1[celery]"`). See [Celery integration](../reference/api.md#celery-integration) for details.
 
 ```python
 NPLUS1_CELERY = True

@@ -84,17 +84,23 @@ class DjangoRule(Rule):
 _validated_whitelist: list[dict[str, Any]] | None = None
 
 
-def load_config() -> tuple[list[notifiers.Notifier], list[DjangoRule]]:
-    """Read the notifiers and the whitelist from settings. Invalid settings raise."""
+def whitelist_rules() -> list[DjangoRule]:
+    """Read ``NPLUS1_WHITELIST``. An entry naming an unknown model raises ``NPlus1Error``."""
     global _validated_whitelist  # noqa: PLW0603
-    nots = notifiers.init(settings)
-    conf.check_thresholds(settings)
     whitelist = list(getattr(settings, "NPLUS1_WHITELIST", []))
     # A copy, so entries added to the settings list in place get validated too.
     if whitelist != _validated_whitelist:
         validate_whitelist(whitelist)
         _validated_whitelist = copy.deepcopy(whitelist)
-    return nots, [DjangoRule(**item) for item in whitelist]
+    return [DjangoRule(**item) for item in whitelist]
+
+
+def load_config() -> tuple[list[notifiers.Notifier], list[DjangoRule]]:
+    """Read the notifiers and the whitelist from settings. Invalid settings raise."""
+    nots = notifiers.init(settings)
+    conf.check_thresholds(settings)
+    conf.project_packages(settings)
+    return nots, whitelist_rules()
 
 
 _VIEW_EXCEPTION = "_nplus1_view_exception"
@@ -109,6 +115,7 @@ class NPlus1Middleware:
     def __init__(self, get_response: Callable[[HttpRequest], Any]) -> None:
         self.get_response = get_response
         # Invalid settings fail at startup instead of on the first request.
+        conf.check_installed()
         load_config()
         if iscoroutinefunction(get_response):
             markcoroutinefunction(self)

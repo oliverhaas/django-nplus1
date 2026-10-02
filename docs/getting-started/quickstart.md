@@ -107,4 +107,4 @@ The equivalent of the middleware for Celery tasks:
 NPLUS1_CELERY = True
 ```
 
-Each task gets its own detection scope, so N+1 queries in tasks run by a worker or with `task.apply()` are reported the same way as in HTTP requests. One difference: an unused eager load is only found when the task ends, too late to fail it, so it is logged at ERROR level even with `NPLUS1_RAISE`.
+Each task gets its own detection scope, so N+1 queries in tasks run by a worker or with `task.apply()` are reported the same way as in HTTP requests. One difference: an unused eager load is only found when the task ends, too late to fail it, so it is logged at ERROR level even with `NPLUS1_RAISE`. For a task run with `task.apply()` inside a request or the `nplus1` fixture, the request or fixture raises it.

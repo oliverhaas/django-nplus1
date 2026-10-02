@@ -17,6 +17,24 @@ async def async_lazy_loop(request):
     return HttpResponse(await sync_to_async(occupation_users)())
 
 
+async def async_get_loop(request):
+    names = []
+    async for pk in models.User.objects.order_by("pk").values_list("pk", flat=True):
+        user = await models.User.objects.aget(pk=pk)
+        names.append(user.name)
+    return HttpResponse(names)
+
+
+async def async_two_users(request):
+    alice = await models.User.objects.aget(name="alice")
+    bob = await models.User.objects.aget(name="bob")
+    return HttpResponse([alice.name, bob.name])
+
+
+async def async_unused_select(request):
+    return HttpResponse(len([user async for user in models.User.objects.select_related("occupation")]))
+
+
 def lazy_loop_caught_by_template(request):
     template = engines["django"].from_string(
         '{% for occupation in occupations %}{% if occupation.user.name != "" %}{{ occupation.pk }}{% endif %}{% endfor %}',

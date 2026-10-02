@@ -39,7 +39,7 @@ def test_with_whitelist(client):
 
 ## Asserting a Detection
 
-The marker and the fixture fail a test on a detection even when something catches it: the code under test, as Django's `{% if %}` tag does when a comparison raises, or a `pytest.raises(NPlus1Error)` in the test. To check that code makes an N+1 query, use a `Profiler` in a test without the marker or the fixture:
+The marker and the fixture report a detection even when something catches it: the code under test, as Django's `{% if %}` tag does when a comparison raises, or a `pytest.raises(NPlus1Error)` in the test. With the marker the test fails. With the fixture it errors at teardown, as it does on an unused eager load. To check that code makes an N+1 query, use a `Profiler` in a test without the marker or the fixture:
 
 ```python
 import pytest
@@ -54,7 +54,7 @@ def test_my_view_makes_an_n_plus_1(client):
 
 ## Whitelisting
 
-The marker and the `nplus1` fixture apply `NPLUS1_WHITELIST` from your settings, plus the marker's own `whitelist`. See [Whitelisting](whitelisting.md) for the pattern format.
+The marker and the `nplus1` fixture apply `NPLUS1_WHITELIST` from your settings, plus the marker's own `whitelist`. `NPLUS1_WHITELIST` entries match models by `"app_label.ModelName"` only, as they do in the middleware, while the marker's entries also match the class name. An `NPLUS1_WHITELIST` entry that names an unknown model raises `NPlus1Error`, which fails a test with the marker and errors one with the fixture at setup. See [Whitelisting](whitelisting.md) for the pattern format.
 
 ## Corpus Mode
 
