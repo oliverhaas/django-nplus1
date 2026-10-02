@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
 
 - **Breaking:** A detection that code inside a scope catches, as Django's `{% if %}` tag does when a comparison raises, now fails the scope when it ends. This applies to `NPlus1Middleware` with `NPLUS1_RAISE`, `Profiler`, `DetectionContext`, `@pytest.mark.nplus1` and the `nplus1` fixture. The caught detection replaces an exception that the block raises later, but never a `BaseException` such as `KeyboardInterrupt`.
 - **Breaking:** With the marker or the fixture, a test fails on a detection even inside `pytest.raises(NPlus1Error)`. To check that code makes an N+1 query, use a `Profiler` in a test without them, as in [Asserting a Detection](../user-guide/pytest-plugin.md#asserting-a-detection).
