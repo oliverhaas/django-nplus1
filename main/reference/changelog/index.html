@@ -721,6 +721,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#unreleased" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unreleased
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#040" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -945,6 +956,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#unreleased" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unreleased
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#040" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1147,6 +1169,15 @@
 
 
 <h1 id="changelog">Changelog<a class="headerlink" href="#changelog" title="Permanent link">&para;</a></h1>
+<h2 id="unreleased">Unreleased<a class="headerlink" href="#unreleased" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Breaking:</strong> A detection that code inside a scope catches, as Django's <code>{% if %}</code> tag does when a comparison raises, now fails the scope when it ends. This applies to <code>NPlus1Middleware</code> with <code>NPLUS1_RAISE</code>, <code>Profiler</code>, <code>DetectionContext</code>, <code>@pytest.mark.nplus1</code> and the <code>nplus1</code> fixture. The caught detection replaces an exception that the block raises later, but never a <code>BaseException</code> such as <code>KeyboardInterrupt</code>.</li>
+<li><strong>Breaking:</strong> With the marker or the fixture, a test fails on a detection even inside <code>pytest.raises(NPlus1Error)</code>. To check that code makes an N+1 query, use a <code>Profiler</code> in a test without them, as in <a href="../../user-guide/pytest-plugin/#asserting-a-detection">Asserting a Detection</a>.</li>
+<li>A fixture of your own that yields inside <code>with Profiler():</code> can't see the test's exception, so a detection that fails the test fails its teardown too. Have it request the <code>nplus1</code> fixture instead.</li>
+<li>A detection that a Celery task catches is logged at ERROR level when the task ends. The log message reads <code>detection not raised by task &lt;id&gt;</code> instead of <code>detection at the end of task &lt;id&gt; raised</code>.</li>
+<li>When a test that uses the <code>nplus1</code> fixture fails, it no longer also errors at teardown on an unused eager load. The failure can stop the test before it reads the eager load.</li>
+<li>With <code>NPLUS1_RAISE</code>, a Celery task that fails no longer logs an unused eager load found when it ends, for the same reason.</li>
+</ul>
 <h2 id="040">0.4.0<a class="headerlink" href="#040" title="Permanent link">&para;</a></h2>
 <h3 id="breaking-changes">Breaking changes<a class="headerlink" href="#breaking-changes" title="Permanent link">&para;</a></h3>
 <ul>

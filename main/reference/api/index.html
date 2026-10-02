@@ -1239,7 +1239,7 @@
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="s2">"django_nplus1.NPlus1Middleware"</span><span class="p">,</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="p">]</span>
 </span></code></pre></div>
-<p>It reads the <code>NPLUS1_*</code> settings when Django creates it, so invalid settings and whitelist entries naming unknown models fail at startup. With <code>NPLUS1_RAISE</code>, an exception raised by the view wins over a detection made at the end of the request.</p>
+<p>It reads the <code>NPLUS1_*</code> settings when Django creates it, so invalid settings and whitelist entries naming unknown models fail at startup. With <code>NPLUS1_RAISE</code>, an exception raised by the view wins over a detection made at the end of the request. A detection that the view or a template catches, as the <code>{% if %}</code> tag does when a comparison raises, is raised again at the end of the request.</p>
 <h2 id="profiler">Profiler<a class="headerlink" href="#profiler" title="Permanent link">&para;</a></h2>
 <h3 id="profiler_1"><code>Profiler</code><a class="headerlink" href="#profiler_1" title="Permanent link">&para;</a></h3>
 <p>Context manager for manual N+1 detection. It raises <code>NPlus1Error</code> on the first detection.</p>
@@ -1270,6 +1270,7 @@
 <li><code>sender</code>: The <code>sender</code> of the <code>nplus1_detected</code> signal. Default: the scope's class.</li>
 </ul>
 <p>Scopes nest. A detection inside an inner scope goes to the notifiers of every enclosing scope, and notifiers built from the same settings report it once. A whitelist entry of any enclosing scope suppresses it. Entering a scope that is already active raises <code>RuntimeError</code>.</p>
+<p>A detection that a notifier raises fails the scope even if code in the block catches it: the scope raises it again on exit. It also replaces an exception the block raises afterwards, which is often a consequence of the caught detection. A <code>BaseException</code> such as <code>KeyboardInterrupt</code> is never replaced, and a block that fails drops the detections made at exit, such as unused eager loads.</p>
 <h2 id="nplus1_allow"><code>nplus1_allow</code><a class="headerlink" href="#nplus1_allow" title="Permanent link">&para;</a></h2>
 <p>Context manager to locally suppress N+1 detection for specific code blocks. Useful for incrementally adopting detection in existing projects.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_nplus1</span><span class="w"> </span><span class="kn">import</span> <span class="n">nplus1_allow</span>
@@ -1344,14 +1345,14 @@
 <p><code>teardown_celery_detection()</code> disconnects them. Call it only while no task runs.</p>
 <p><strong>Limitations:</strong></p>
 <ul>
-<li>A detection made when a task ends, such as an unused eager load, can't fail the task, because Celery has already recorded its result. It is logged at ERROR level on the <code>django_nplus1</code> logger instead.</li>
+<li>A detection made when a task ends, such as an unused eager load, or one that the task catches, can't fail the task, because Celery has already recorded its result. It is logged at ERROR level on the <code>django_nplus1</code> logger instead. For a task run with <code>.apply()</code> inside another scope, such as a request or the <code>nplus1</code> test fixture, that scope reports the detection when it ends.</li>
 <li>When detection can't start for a task, the task runs without it and the error is logged at ERROR level.</li>
 <li><code>nplus1_allow()</code> doesn't reach tasks sent to a worker, because context variables don't travel with the task message. A task run with <code>.apply()</code> inside another task or a request nests in that scope, so an enclosing <code>nplus1_allow()</code> covers it.</li>
 </ul>
 <h2 id="pytest-plugin">pytest Plugin<a class="headerlink" href="#pytest-plugin" title="Permanent link">&para;</a></h2>
 <h3 id="fixtures">Fixtures<a class="headerlink" href="#fixtures" title="Permanent link">&para;</a></h3>
 <ul>
-<li><code>nplus1</code>: Yields a <code>Profiler</code> instance, active from the fixture's setup to its teardown. Test fails on N+1 detection. Applies <code>NPLUS1_WHITELIST</code>.</li>
+<li><code>nplus1</code>: Yields a <code>Profiler</code> instance, active from the fixture's setup to its teardown. Test fails on N+1 detection, even one the test catches. Applies <code>NPLUS1_WHITELIST</code>.</li>
 </ul>
 <h3 id="markers">Markers<a class="headerlink" href="#markers" title="Permanent link">&para;</a></h3>
 <ul>
