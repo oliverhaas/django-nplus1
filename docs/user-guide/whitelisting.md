@@ -26,7 +26,7 @@ A `duplicate_query` detection's field is the whole query with literals replaced 
 
 ```python
 NPLUS1_WHITELIST = [
-    {"label": "duplicate_query", "field": '*FROM "django_content_type"*'},
+    {"label": "duplicate_query", "field": '*FROM "myapp_setting"*'},
 ]
 ```
 
@@ -41,6 +41,18 @@ Both `model` and `field` support `fnmatch` wildcards:
 An entry for a model also covers its proxy models and multi-table inheritance children.
 
 `NPLUS1_WHITELIST` is checked against your models when the middleware is created, when Celery detection is set up, and when a test with the pytest marker or the `nplus1` fixture starts. An unknown model raises `NPlus1Error` with suggestions. An unknown field only warns, because a `Prefetch(to_attr=...)` name is no model field. Column names such as `user_id` count as fields. Entries using wildcards aren't checked.
+
+### Rows Created on First Use
+
+Some libraries create a row the first time they need it. Wagtail runs `get_or_create()` for an image rendition the first time a page needs that rendition, so a page that needs several new renditions is reported as `get_in_loop`. Later requests find the renditions without `.get()`. Tests start without renditions, so each test that renders such a page reports the loop. Whitelist the model for that label:
+
+```python
+NPLUS1_WHITELIST = [
+    {"label": "get_in_loop", "model": "wagtailimages.Rendition"},
+]
+```
+
+With a custom rendition model, list that model instead. Django's content type lookups, such as `ContentType.objects.get_for_model()`, fill a cache and need no entry.
 
 ## Local Suppression (`nplus1_allow`)
 

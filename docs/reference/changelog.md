@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Detection
+
+- `.get()` loops are also counted per line in each function of your code that leads to the call site. Calling a helper that runs `.get()` once from each of two lines is no longer reported as `get_in_loop`. A helper called in a loop and a `.get()` in a recursive function are still reported.
+- Queries from the `ContentType` manager methods that fill Django's content type cache, `get_for_model()`, `get_for_models()`, `get_for_id()` and `get_by_natural_key()`, count toward neither `get_in_loop` nor `duplicate_query`. A `prefetch_related()` of a `GenericForeignKey` on a cold cache, as after a `TransactionTestCase` flush, is no longer reported.
+
 ## 0.6.1 (2026-10-02)
 
 ### Detection

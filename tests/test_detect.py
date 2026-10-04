@@ -9,11 +9,12 @@ from pathlib import Path
 
 import pytest
 from django.contrib.auth.models import User as AuthUser
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ImproperlyConfigured
 from django.db import connection
 from django.db.models import Prefetch, prefetch_related_objects
-from django.template import engines
-from testapp.models import Allergy, Company, Hobby, Occupation, Pet, Tag, User
+from django.template import Context, Engine, engines
+from testapp.models import Allergy, Company, Hobby, Node, Occupation, Pet, Tag, User
 
 from django_nplus1 import DetectionContext, NPlus1Error, Profiler, signals
 
@@ -335,6 +336,123 @@ def test_library_fallback_lookups_are_a_get_loop_only_when_called_in_a_loop(
     with DetectionContext():
         lookup(installed_lookups)
     assert [(m.label, m.model, m.field) for m in detected] == expected
+
+
+def find_user(name):
+    return User.objects.get(name=name)
+
+
+def find_users_on_two_lines():
+    find_user("alice")
+    find_user("bob")
+
+
+def find_users_in_a_loop():
+    for name in ("alice", "bob"):
+        find_user(name)
+
+
+@pytest.mark.parametrize(
+    ("lookup", "expected"),
+    [
+        pytest.param(find_users_on_two_lines, [], id="two-lines"),
+        pytest.param(find_users_in_a_loop, [("get_in_loop", User, "get()")], id="in-a-loop"),
+    ],
+)
+def test_helper_gets_are_a_get_loop_only_when_called_in_a_loop(objects, detected, lookup, expected):
+    with DetectionContext():
+        lookup()
+    assert [(m.label, m.model, m.field) for m in detected] == expected
+
+
+def ancestors(node):
+    if node.parent_id is None:
+        return []
+    parent = Node.objects.get(pk=node.parent_id)
+    return [parent, *ancestors(parent)]
+
+
+def test_get_in_a_recursive_function_is_a_get_loop(detected):
+    leaf = Node.objects.create(parent=Node.objects.create(parent=Node.objects.create()))
+    with DetectionContext():
+        ancestors(leaf)
+    assert [(m.label, m.model, m.field) for m in detected] == [("get_in_loop", Node, "get()")]
+
+
+TAGS = """\
+from django import template
+from testapp.models import User
+
+register = template.Library()
+
+
+@register.simple_tag
+def user_name(name):
+    return User.objects.get(name=name).name
+"""
+
+
+@pytest.fixture
+def installed_tags(tmp_path, monkeypatch):
+    """A third-party template tag library."""
+    directory = tmp_path / "site-packages"
+    directory.mkdir()
+    (directory / "installed_tags.py").write_text(TAGS)
+    monkeypatch.syspath_prepend(directory)
+    yield
+    sys.modules.pop("installed_tags", None)
+
+
+@pytest.mark.parametrize(
+    ("source", "names", "expected"),
+    [
+        pytest.param(
+            "{% if 1 %}{% user_name 'alice' %}{% endif %}{% if 1 %}{% if 1 %}{% user_name 'bob' %}{% endif %}{% endif %}",
+            [],
+            [],
+            id="two-depths",
+        ),
+        pytest.param(
+            "{% for name in names %}{% user_name name %}{% endfor %}",
+            ["alice", "bob"],
+            [("get_in_loop", User, "get()")],
+            id="in-a-loop",
+        ),
+    ],
+)
+def test_library_tag_gets_are_a_get_loop_only_when_the_template_loops(
+    objects,
+    detected,
+    installed_tags,
+    source,
+    names,
+    expected,
+):
+    template = Engine(libraries={"tags": "installed_tags"}).from_string("{% load tags %}" + source)
+    with DetectionContext():
+        template.render(Context({"names": names}))
+    assert [(m.label, m.model, m.field) for m in detected] == expected
+
+
+@pytest.mark.parametrize(
+    "fill",
+    [
+        pytest.param(read_prefetched_generic_fk, id="get_for_id"),
+        pytest.param(lambda: [ContentType.objects.get_for_model(model) for model in (User, Pet)], id="get_for_model"),
+        pytest.param(lambda: [ContentType.objects.get_for_models(model) for model in (User, Pet)], id="get_for_models"),
+        pytest.param(
+            lambda: [ContentType.objects.get_by_natural_key("testapp", name) for name in ("user", "pet")],
+            id="get_by_natural_key",
+        ),
+    ],
+)
+def test_content_type_cache_fills_are_not_reported(objects, detected, settings, fill):
+    settings.NPLUS1_DETECT_DUPLICATE_QUERIES = True
+    Tag.objects.create(content_object=Pet.objects.first())
+    ContentType.objects.clear_cache()
+    with DetectionContext():
+        fill()
+    assert detected == []
 
 
 def test_rows_fetched_one_by_one_count_again_when_loaded_together(objects, detected):

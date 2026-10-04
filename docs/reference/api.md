@@ -144,7 +144,11 @@ Queries with no frame of your code on the stack aren't counted, nor are queries 
 
 ## Call Sites
 
-A detection's call site is the innermost frame of your code on the stack. Duplicate queries are counted per call site, and `.get()` loops per call site and the calls that lead from it to `.get()`. Frames from the standard library, installed packages, django-nplus1 itself and console-script launchers such as `bin/pytest` don't count. If your project is installed in `site-packages`, list its packages in [`NPLUS1_PROJECT_PACKAGES`](../user-guide/configuration.md#nplus1_project_packages).
+A detection's call site is the innermost frame of your code on the stack. Frames from the standard library, installed packages, django-nplus1 itself and console-script launchers such as `bin/pytest` don't count. If your project is installed in `site-packages`, list its packages in [`NPLUS1_PROJECT_PACKAGES`](../user-guide/configuration.md#nplus1_project_packages).
+
+Duplicate queries are counted per call site. `.get()` loops are counted per call site and chain of calls: the calls that lead from the call site to `.get()`, and the line in each function of your code that leads to the call site. A helper that runs `.get()` is a loop when one line calls it repeatedly, and not when two lines call it once each. All levels of a recursive function share one chain of calls, so a `.get()` in a recursive function is a loop too.
+
+The `ContentType` manager methods `get_for_model()`, `get_for_models()`, `get_for_id()` and `get_by_natural_key()` fill Django's content type cache. Their queries count toward neither `get_in_loop` nor `duplicate_query`.
 
 Async ORM calls such as `aget()` run in a worker thread. Their call site is the line in your coroutine that awaited them.
 

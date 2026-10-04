@@ -64,7 +64,7 @@ NPLUS1_THRESHOLD = 2
 
 ### `NPLUS1_GET_THRESHOLD`
 
-Number of `.get()` calls from the same call site, through the same chain of calls, before detection fires. Default: `2`.
+Number of `.get()` calls from the same call site, through the same [chain of calls](../reference/api.md#call-sites), before detection fires. Default: `2`.
 
 ```python
 NPLUS1_GET_THRESHOLD = 2

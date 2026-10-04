@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 from django.conf import settings
 
 from django_nplus1 import conf, signals
-from django_nplus1.util import get_caller, get_stack
+from django_nplus1.util import get_caller, get_query_caller, get_stack
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Sequence
@@ -406,8 +406,9 @@ class DuplicateQueryListener(Listener):
 
     def handle_query(self, args: Any, kwargs: Any, context: Any, ret: Any, parser: Any) -> None:
         sql, query_context = parser(args, kwargs, context)
-        # Without a project frame there is no call site to count per.
-        caller = get_caller()
+        # Without a project frame there is no call site to count per, and a cache fill
+        # runs once per key.
+        caller = get_query_caller()
         if caller is None:
             return
         fingerprint = _fingerprint_sql(_sql_text(sql, query_context))
